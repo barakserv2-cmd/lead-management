@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { LEAD_STATUSES } from "@/lib/constants";
+import { LeadsPerDayChart, LeadsBySourceChart } from "./charts";
 
 export default async function DashboardPage() {
   const supabase = await createClient();
@@ -28,6 +29,45 @@ export default async function DashboardPage() {
     .select("*", { count: "exact", head: true })
     .eq("status", LEAD_STATUSES.PLACED);
 
+  // Leads per day — last 7 days
+  const sevenDaysAgo = new Date();
+  sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 6);
+  const since = sevenDaysAgo.toISOString().split("T")[0];
+
+  const { data: recentLeads } = await supabase
+    .from("leads")
+    .select("created_at")
+    .gte("created_at", since);
+
+  const dayCountsMap: Record<string, number> = {};
+  for (let i = 0; i < 7; i++) {
+    const d = new Date();
+    d.setDate(d.getDate() - (6 - i));
+    dayCountsMap[d.toISOString().split("T")[0]] = 0;
+  }
+  for (const lead of recentLeads ?? []) {
+    const day = lead.created_at.split("T")[0];
+    if (day in dayCountsMap) dayCountsMap[day]++;
+  }
+  const leadsPerDay = Object.entries(dayCountsMap).map(([date, count]) => ({
+    day: new Date(date).toLocaleDateString("he-IL", { weekday: "short", day: "numeric", month: "numeric" }),
+    count,
+  }));
+
+  // Leads by source
+  const { data: allLeads } = await supabase
+    .from("leads")
+    .select("source");
+
+  const sourceMap: Record<string, number> = {};
+  for (const lead of allLeads ?? []) {
+    const src = lead.source || "אחר";
+    sourceMap[src] = (sourceMap[src] || 0) + 1;
+  }
+  const leadsBySource = Object.entries(sourceMap)
+    .map(([source, count]) => ({ source, count }))
+    .sort((a, b) => b.count - a.count);
+
   const cards = [
     { label: "סה״כ לידים", value: totalCount ?? 0, color: "bg-purple-50 text-purple-700" },
     { label: "לידים חדשים", value: newCount ?? 0, color: "bg-blue-50 text-blue-700" },
@@ -49,6 +89,11 @@ export default async function DashboardPage() {
             <p className="text-3xl font-bold mt-2">{card.value}</p>
           </div>
         ))}
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mt-6">
+        <LeadsPerDayChart data={leadsPerDay} />
+        <LeadsBySourceChart data={leadsBySource} />
       </div>
     </div>
   );

@@ -1,4 +1,10 @@
-import type { LeadStatus, LeadSource } from "@/lib/constants";
+import type {
+  LeadStatus,
+  LeadSource,
+  FinancialStatus,
+  ClientType,
+  RecruitmentStatus,
+} from "@/lib/constants";
 
 export interface Lead {
   id: string;
@@ -18,6 +24,12 @@ export interface Lead {
   original_email_id: string | null;
   original_email_body: string | null;
   ai_confidence: number | null;
+  financial_status: FinancialStatus;
+  client_type: ClientType | null;
+  active_jobs_count: number;
+  active_employees_count: number;
+  recruitment_status: RecruitmentStatus;
+  preferences: Record<string, unknown> | null;
 }
 
 export interface StatusChange {

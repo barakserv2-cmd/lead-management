@@ -43,3 +43,34 @@ export const LEAD_SOURCES = [
 ] as const;
 
 export type LeadSource = (typeof LEAD_SOURCES)[number];
+
+// --- CRM enums ---
+
+export const FINANCIAL_STATUSES = {
+  BALANCED: "balanced",
+  DELAYED_PAYMENT: "delayed_payment",
+  DEBT: "debt",
+  BAD_DEBT: "bad_debt",
+} as const;
+
+export type FinancialStatus =
+  (typeof FINANCIAL_STATUSES)[keyof typeof FINANCIAL_STATUSES];
+
+export const CLIENT_TYPES = {
+  HOTEL: "hotel",
+  RESTAURANT: "restaurant",
+  CONSTRUCTION: "construction",
+  OFFICE: "office",
+  OTHER: "other",
+} as const;
+
+export type ClientType = (typeof CLIENT_TYPES)[keyof typeof CLIENT_TYPES];
+
+export const RECRUITMENT_STATUSES = {
+  ACTIVE: "active",
+  FROZEN: "frozen",
+  ON_HOLD: "on_hold",
+} as const;
+
+export type RecruitmentStatus =
+  (typeof RECRUITMENT_STATUSES)[keyof typeof RECRUITMENT_STATUSES];
