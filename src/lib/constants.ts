@@ -74,3 +74,23 @@ export const RECRUITMENT_STATUSES = {
 
 export type RecruitmentStatus =
   (typeof RECRUITMENT_STATUSES)[keyof typeof RECRUITMENT_STATUSES];
+
+// ── Conversation Mode enums ─────────────────────────────────
+
+export const INTERACTION_TYPES = {
+  call_in: "שיחה נכנסת",
+  call_out: "שיחה יוצאת",
+  whatsapp: "וואטסאפ",
+} as const;
+
+export const INTERACTION_OUTCOMES = {
+  request: "בקשה",
+  complaint: "תלונה",
+  update: "עדכון",
+  other: "אחר",
+} as const;
+
+export const REMINDER_PRIORITIES = {
+  high: "דחוף",
+  normal: "רגיל",
+} as const;

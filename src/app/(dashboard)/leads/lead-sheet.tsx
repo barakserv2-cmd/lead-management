@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import {
   Sheet,
@@ -9,9 +10,18 @@ import {
   SheetTitle,
   SheetDescription,
 } from "@/components/ui/sheet";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { getLeadNotes, updateLeadNotes } from "./actions";
+import { getLeadNotes, updateLeadNotes, updateLeadDetails } from "./actions";
 
 export interface SheetLead {
   id: string;
@@ -63,6 +73,14 @@ function formatPhone(phone: string | null): string | null {
   return phone.replace(/[\s\-()]/g, "").replace(/^0/, "972");
 }
 
+function PencilIcon({ className = "w-4 h-4" }: { className?: string }) {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+      <path d="M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z" />
+    </svg>
+  );
+}
+
 export function LeadSheet({
   lead,
   onClose,
@@ -70,9 +88,42 @@ export function LeadSheet({
   lead: SheetLead | null;
   onClose: () => void;
 }) {
+  const router = useRouter();
   const [notes, setNotes] = useState("");
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(false);
+
+  // Edit dialog state
+  const [editOpen, setEditOpen] = useState(false);
+  const [editName, setEditName] = useState("");
+  const [editPhone, setEditPhone] = useState("");
+  const [editEmail, setEditEmail] = useState("");
+  const [editJobTitle, setEditJobTitle] = useState("");
+  const [editLocation, setEditLocation] = useState("");
+  const [editExperience, setEditExperience] = useState("");
+  const [editAge, setEditAge] = useState("");
+  const [savingEdit, setSavingEdit] = useState(false);
+
+  // Local display state (updates immediately on save)
+  const [displayName, setDisplayName] = useState("");
+  const [displayPhone, setDisplayPhone] = useState<string | null>(null);
+  const [displayEmail, setDisplayEmail] = useState<string | null>(null);
+  const [displayJobTitle, setDisplayJobTitle] = useState<string | null>(null);
+  const [displayLocation, setDisplayLocation] = useState<string | null>(null);
+  const [displayExperience, setDisplayExperience] = useState<string | null>(null);
+  const [displayAge, setDisplayAge] = useState<number | null>(null);
+
+  // Sync display state when lead changes
+  useEffect(() => {
+    if (!lead) return;
+    setDisplayName(lead.name);
+    setDisplayPhone(lead.phone);
+    setDisplayEmail(lead.email);
+    setDisplayJobTitle(lead.job_title);
+    setDisplayLocation(lead.location);
+    setDisplayExperience(lead.experience);
+    setDisplayAge(lead.age);
+  }, [lead]);
 
   // Fetch fresh notes from DB when sheet opens
   useEffect(() => {
@@ -89,7 +140,7 @@ export function LeadSheet({
 
   if (!lead) return null;
 
-  const intlPhone = formatPhone(lead.phone);
+  const intlPhone = formatPhone(displayPhone);
   const statusColor = STATUS_COLORS[lead.status] ?? "bg-gray-100 text-gray-800";
   const sourceColor = SOURCE_COLORS[lead.source] ?? "bg-gray-100 text-gray-600";
 
@@ -104,13 +155,57 @@ export function LeadSheet({
     }
   }
 
+  function openEditDialog() {
+    setEditName(displayName);
+    setEditPhone(displayPhone ?? "");
+    setEditEmail(displayEmail ?? "");
+    setEditJobTitle(displayJobTitle ?? "");
+    setEditLocation(displayLocation ?? "");
+    setEditExperience(displayExperience ?? "");
+    setEditAge(displayAge?.toString() ?? "");
+    setEditOpen(true);
+  }
+
+  async function handleSaveDetails() {
+    if (!editName.trim()) {
+      toast.error("שם הוא שדה חובה");
+      return;
+    }
+    setSavingEdit(true);
+    const result = await updateLeadDetails(lead!.id, {
+      name: editName.trim(),
+      phone: editPhone.trim(),
+      email: editEmail.trim(),
+      job_title: editJobTitle.trim(),
+      location: editLocation.trim(),
+      experience: editExperience.trim(),
+      age: editAge.trim(),
+    });
+    setSavingEdit(false);
+    if (result.error) {
+      toast.error("שגיאה בעדכון הפרטים");
+    } else {
+      setDisplayName(editName.trim());
+      setDisplayPhone(editPhone.trim() || null);
+      setDisplayEmail(editEmail.trim() || null);
+      setDisplayJobTitle(editJobTitle.trim() || null);
+      setDisplayLocation(editLocation.trim() || null);
+      setDisplayExperience(editExperience.trim() || null);
+      const ageNum = editAge.trim() ? parseInt(editAge.trim(), 10) : null;
+      setDisplayAge(ageNum && ageNum > 0 && ageNum < 120 ? ageNum : null);
+      setEditOpen(false);
+      toast.success("הפרטים עודכנו!");
+      router.refresh();
+    }
+  }
+
   const fields = [
-    { label: "טלפון", value: lead.phone, dir: "ltr" as const },
-    { label: "אימייל", value: lead.email, dir: "ltr" as const },
-    { label: "מיקום", value: lead.location },
-    { label: "תפקיד", value: lead.job_title },
-    { label: "ניסיון", value: lead.experience },
-    { label: "גיל", value: lead.age?.toString() },
+    { label: "טלפון", value: displayPhone, dir: "ltr" as const },
+    { label: "אימייל", value: displayEmail, dir: "ltr" as const },
+    { label: "מיקום", value: displayLocation },
+    { label: "תפקיד", value: displayJobTitle },
+    { label: "ניסיון", value: displayExperience },
+    { label: "גיל", value: displayAge?.toString() },
     { label: "תאריך", value: new Date(lead.created_at).toLocaleDateString("he-IL") },
   ];
 
@@ -121,10 +216,22 @@ export function LeadSheet({
         <SheetHeader className="border-b px-6 py-4">
           <div className="flex items-center gap-3">
             <span className="w-10 h-10 rounded-full bg-blue-600 text-white flex items-center justify-center text-sm font-bold flex-shrink-0">
-              {getInitials(lead.name)}
+              {getInitials(displayName)}
             </span>
-            <div>
-              <SheetTitle className="text-lg">{lead.name}</SheetTitle>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-1.5">
+                <SheetTitle className="text-lg">{displayName}</SheetTitle>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={openEditDialog}
+                  className="text-gray-400 hover:text-blue-600 hover:bg-blue-50 gap-1 h-7 px-2"
+                  title="ערוך פרטים"
+                >
+                  <PencilIcon className="w-3.5 h-3.5" />
+                  <span className="text-[11px]">עריכה</span>
+                </Button>
+              </div>
               <SheetDescription className="flex items-center gap-2 mt-1">
                 <span className={"inline-block px-2 py-0.5 rounded-full text-[10px] font-semibold " + statusColor}>
                   {lead.status}
@@ -205,6 +312,103 @@ export function LeadSheet({
           )}
         </div>
       </SheetContent>
+
+      {/* Edit Details Dialog */}
+      <Dialog open={editOpen} onOpenChange={setEditOpen}>
+        <DialogContent className="sm:max-w-md" dir="rtl">
+          <DialogHeader>
+            <DialogTitle>עריכת פרטי ליד</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-2">
+              <Label htmlFor="sheet-edit-name">שם מלא *</Label>
+              <Input
+                id="sheet-edit-name"
+                value={editName}
+                onChange={(e) => setEditName(e.target.value)}
+                placeholder="שם מלא"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="sheet-edit-phone">טלפון</Label>
+              <Input
+                id="sheet-edit-phone"
+                value={editPhone}
+                onChange={(e) => setEditPhone(e.target.value)}
+                placeholder="050-1234567"
+                dir="ltr"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="sheet-edit-email">אימייל</Label>
+              <Input
+                id="sheet-edit-email"
+                type="email"
+                value={editEmail}
+                onChange={(e) => setEditEmail(e.target.value)}
+                placeholder="email@example.com"
+                dir="ltr"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="sheet-edit-job-title">תפקיד</Label>
+              <Input
+                id="sheet-edit-job-title"
+                value={editJobTitle}
+                onChange={(e) => setEditJobTitle(e.target.value)}
+                placeholder="תפקיד נוכחי"
+              />
+            </div>
+            <div className="grid grid-cols-3 gap-3">
+              <div className="col-span-2 space-y-2">
+                <Label htmlFor="sheet-edit-location">מיקום</Label>
+                <Input
+                  id="sheet-edit-location"
+                  value={editLocation}
+                  onChange={(e) => setEditLocation(e.target.value)}
+                  placeholder="עיר / אזור"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="sheet-edit-age">גיל</Label>
+                <Input
+                  id="sheet-edit-age"
+                  type="number"
+                  min={1}
+                  max={119}
+                  value={editAge}
+                  onChange={(e) => setEditAge(e.target.value)}
+                  placeholder="גיל"
+                />
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="sheet-edit-experience">ניסיון</Label>
+              <Input
+                id="sheet-edit-experience"
+                value={editExperience}
+                onChange={(e) => setEditExperience(e.target.value)}
+                placeholder="שנות ניסיון / תיאור"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setEditOpen(false)}
+              disabled={savingEdit}
+            >
+              ביטול
+            </Button>
+            <Button
+              onClick={handleSaveDetails}
+              disabled={savingEdit || !editName.trim()}
+            >
+              {savingEdit ? "שומר..." : "שמור שינויים"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </Sheet>
   );
 }

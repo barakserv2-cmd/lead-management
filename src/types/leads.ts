@@ -54,6 +54,31 @@ export interface AIParseResult {
   confidence: number;
 }
 
+// ── Conversation Mode types ─────────────────────────────────
+
+export type InteractionType = "call_in" | "call_out" | "whatsapp";
+export type InteractionOutcome = "request" | "complaint" | "update" | "other";
+export type ReminderPriority = "high" | "normal";
+
+export interface InteractionLog {
+  id: string;
+  lead_id: string;
+  type: InteractionType;
+  outcome: InteractionOutcome;
+  notes: string | null;
+  created_at: string;
+}
+
+export interface Reminder {
+  id: string;
+  lead_id: string;
+  title: string;
+  due_date: string;
+  is_completed: boolean;
+  priority: ReminderPriority;
+  created_at: string;
+}
+
 export interface CommunicationLog {
   id: string;
   lead_id: string;
