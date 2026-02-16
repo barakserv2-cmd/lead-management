@@ -13,7 +13,14 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import type { Lead, InteractionLog, Reminder, InteractionType, InteractionOutcome, ReminderPriority } from "@/types/leads";
+import type {
+  Lead,
+  InteractionLog,
+  Reminder,
+  InteractionType,
+  InteractionOutcome,
+  ReminderPriority,
+} from "@/types/leads";
 import {
   INTERACTION_TYPES,
   INTERACTION_OUTCOMES,
@@ -33,19 +40,46 @@ function formatDate(iso: string) {
   return new Date(iso).toLocaleDateString("he-IL", {
     day: "numeric",
     month: "short",
-    year: "numeric",
     hour: "2-digit",
     minute: "2-digit",
   });
 }
 
 function formatDueDate(iso: string) {
-  return new Date(iso).toLocaleDateString("he-IL", {
+  const d = new Date(iso);
+  const now = new Date();
+  const diffMs = d.getTime() - now.getTime();
+  const diffDays = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
+
+  const dateStr = d.toLocaleDateString("he-IL", {
     day: "numeric",
     month: "short",
-    year: "numeric",
   });
+
+  if (diffDays < 0) return `${dateStr} (באיחור)`;
+  if (diffDays === 0) return `${dateStr} (היום)`;
+  if (diffDays === 1) return `${dateStr} (מחר)`;
+  return dateStr;
 }
+
+function isDueUrgent(iso: string) {
+  const diffMs = new Date(iso).getTime() - Date.now();
+  return diffMs < 1000 * 60 * 60 * 24; // less than 24h or overdue
+}
+
+// ── Status Maps ──────────────────────────────────────────────
+
+const RECRUITMENT_LABELS: Record<string, string> = {
+  active: "פעיל",
+  frozen: "מוקפא",
+  on_hold: "בהמתנה",
+};
+
+const RECRUITMENT_COLORS: Record<string, string> = {
+  active: "bg-emerald-500 text-white",
+  frozen: "bg-blue-100 text-blue-800",
+  on_hold: "bg-amber-100 text-amber-800",
+};
 
 const CLIENT_TYPE_LABELS: Record<string, string> = {
   hotel: "מלון",
@@ -67,6 +101,11 @@ const FINANCIAL_COLORS: Record<string, string> = {
   delayed_payment: "bg-amber-100 text-amber-800",
   debt: "bg-red-100 text-red-800",
   bad_debt: "bg-red-200 text-red-900",
+};
+
+const PREF_LABELS: Record<string, string> = {
+  client_preferences: "העדפות לקוח",
+  past_issues: "בעיות קודמות",
 };
 
 // ── Icons ────────────────────────────────────────────────────
@@ -127,6 +166,8 @@ interface ConversationSheetProps {
   mode: "call" | "whatsapp";
 }
 
+type ActiveForm = null | "log" | "reminder";
+
 export function ConversationSheet({
   open,
   onOpenChange,
@@ -139,8 +180,10 @@ export function ConversationSheet({
   const [loadingLogs, setLoadingLogs] = useState(false);
   const [loadingReminders, setLoadingReminders] = useState(false);
 
-  // Log form state
-  const [showLogForm, setShowLogForm] = useState(false);
+  // Active form state — only one form visible at a time
+  const [activeForm, setActiveForm] = useState<ActiveForm>(null);
+
+  // Log micro-form state
   const defaultType: InteractionType = mode === "whatsapp" ? "whatsapp" : "call_out";
   const [logType, setLogType] = useState<InteractionType>(defaultType);
   const [logOutcome, setLogOutcome] = useState<InteractionOutcome>("other");
@@ -148,7 +191,6 @@ export function ConversationSheet({
   const [savingLog, setSavingLog] = useState(false);
 
   // Reminder form state
-  const [showReminderForm, setShowReminderForm] = useState(false);
   const [reminderTitle, setReminderTitle] = useState("");
   const [reminderDate, setReminderDate] = useState("");
   const [reminderPriority, setReminderPriority] = useState<ReminderPriority>("normal");
@@ -165,8 +207,7 @@ export function ConversationSheet({
     fetchLogs();
     fetchReminders();
     // Reset forms on open
-    setShowLogForm(false);
-    setShowReminderForm(false);
+    setActiveForm(null);
     setLogNotes("");
     setLogOutcome("other");
     setLogType(mode === "whatsapp" ? "whatsapp" : "call_out");
@@ -197,7 +238,7 @@ export function ConversationSheet({
       toast.error("שגיאה בשמירת האינטראקציה");
     } else {
       toast.success("אינטראקציה נשמרה!");
-      setShowLogForm(false);
+      setActiveForm(null);
       setLogNotes("");
       setLogOutcome("other");
       fetchLogs();
@@ -216,7 +257,7 @@ export function ConversationSheet({
       toast.error("שגיאה בשמירת התזכורת");
     } else {
       toast.success("תזכורת נשמרה!");
-      setShowReminderForm(false);
+      setActiveForm(null);
       setReminderTitle("");
       setReminderDate("");
       setReminderPriority("normal");
@@ -233,65 +274,151 @@ export function ConversationSheet({
     }
   }
 
+  // Derived values
+  const isDebt = lead.financial_status === "debt" || lead.financial_status === "bad_debt";
+  const isDelayed = lead.financial_status === "delayed_payment";
+  const recruitLabel = RECRUITMENT_LABELS[lead.recruitment_status] ?? lead.recruitment_status;
+  const recruitColor = RECRUITMENT_COLORS[lead.recruitment_status] ?? "bg-gray-100 text-gray-700";
   const clientLabel = lead.client_type ? CLIENT_TYPE_LABELS[lead.client_type] ?? lead.client_type : null;
   const financialLabel = FINANCIAL_LABELS[lead.financial_status] ?? lead.financial_status;
   const financialColor = FINANCIAL_COLORS[lead.financial_status] ?? "bg-gray-100 text-gray-700";
-
   const prefs = (lead.preferences ?? {}) as Record<string, string>;
   const prefEntries = Object.entries(prefs).filter(([, v]) => v);
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent side="right" className="w-full sm:max-w-md flex flex-col overflow-hidden p-0" dir="rtl">
-        {/* ── Header ──────────────────────────────────────── */}
-        <SheetHeader className="px-5 pt-5 pb-4 border-b flex-shrink-0">
-          <SheetTitle className="text-lg">{lead.name}</SheetTitle>
-          <SheetDescription className="text-sm">
-            {mode === "call" ? "מצב שיחה" : "מצב וואטסאפ"}
-          </SheetDescription>
-          <div className="flex flex-wrap gap-1.5 mt-2">
-            {clientLabel && (
-              <Badge variant="secondary" className="text-[11px]">
-                {clientLabel}
-              </Badge>
-            )}
-            <Badge className={`text-[11px] ${financialColor}`}>
-              {financialLabel}
-            </Badge>
+      <SheetContent side="right" className="w-full sm:max-w-lg flex flex-col overflow-hidden p-0" dir="rtl">
+
+        {/* ═══ 1. HEADER ═══════════════════════════════════════ */}
+        <SheetHeader className="px-5 pt-5 pb-4 border-b flex-shrink-0 space-y-3">
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <SheetTitle className="text-xl font-bold truncate">{lead.name}</SheetTitle>
+              <SheetDescription className="sr-only">כרטיס שיחה</SheetDescription>
+            </div>
+            {/* Live Interaction Indicator */}
+            <div className="flex items-center gap-1.5 flex-shrink-0 rounded-full bg-green-50 border border-green-200 px-2.5 py-1">
+              <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
+              <span className="text-[11px] font-semibold text-green-700">
+                {mode === "call" ? "בשיחה" : "וואטסאפ"}
+              </span>
+            </div>
           </div>
+
+          {/* Status badges row */}
+          <div className="flex flex-wrap gap-1.5">
+            <Badge className={`text-[11px] ${recruitColor}`}>{recruitLabel}</Badge>
+            {clientLabel && (
+              <Badge variant="secondary" className="text-[11px]">{clientLabel}</Badge>
+            )}
+            <Badge className={`text-[11px] ${financialColor}`}>{financialLabel}</Badge>
+          </div>
+
+          {/* Debt / Payment alert banner */}
+          {(isDebt || isDelayed) && (
+            <div className={`flex items-center gap-2 rounded-lg px-3 py-2 text-xs font-medium ${
+              isDebt
+                ? "bg-red-50 border border-red-300 text-red-800"
+                : "bg-amber-50 border border-amber-300 text-amber-800"
+            }`}>
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4 flex-shrink-0">
+                <path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3" />
+                <path d="M12 9v4" /><path d="M12 17h.01" />
+              </svg>
+              {isDebt ? "לקוח עם חוב — יש לטפל לפני המשך שיבוצים" : "עיכוב תשלום — שים לב בעת שיחה"}
+            </div>
+          )}
         </SheetHeader>
 
-        {/* ── Scrollable content ──────────────────────────── */}
-        <div className="flex-1 overflow-y-auto px-5 py-4 space-y-6">
-          {/* History Section */}
-          <section>
-            <h3 className="text-sm font-semibold text-gray-700 mb-3">היסטוריית אינטראקציות</h3>
+        {/* ═══ 2–4. SCROLLABLE CONTENT ═════════════════════════ */}
+        <div className="flex-1 overflow-y-auto">
+
+          {/* ── 2. Recent Interactions ─────────────────────── */}
+          <section className="px-5 py-4 border-b">
+            <h3 className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-3">היסטוריית אינטראקציות</h3>
             {loadingLogs ? (
               <div className="flex justify-center py-6">
                 <LoadingSpinner className="w-5 h-5 text-gray-400" />
               </div>
             ) : logs.length === 0 ? (
-              <p className="text-sm text-gray-400 text-center py-4">אין היסטוריית אינטראקציות</p>
+              <div className="text-center py-6">
+                <div className="w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center mx-auto mb-2">
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="w-5 h-5 text-gray-300">
+                    <rect width="8" height="4" x="8" y="2" rx="1" ry="1" />
+                    <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2" />
+                  </svg>
+                </div>
+                <p className="text-xs text-gray-400">אין היסטוריית אינטראקציות</p>
+              </div>
             ) : (
-              <div className="space-y-3">
+              <div className="space-y-2">
                 {logs.map((log) => {
                   const Icon = TYPE_ICONS[log.type];
                   return (
-                    <div key={log.id} className="rounded-lg border bg-gray-50 p-3">
-                      <div className="flex items-center gap-2 mb-1">
-                        <Icon className="w-4 h-4 text-gray-500 flex-shrink-0" />
-                        <span className="text-xs font-medium text-gray-700">
-                          {INTERACTION_TYPES[log.type]}
-                        </span>
-                        <Badge className={`text-[10px] px-1.5 py-0 ${OUTCOME_COLORS[log.outcome]}`}>
-                          {INTERACTION_OUTCOMES[log.outcome]}
-                        </Badge>
-                        <span className="text-[10px] text-gray-400 mr-auto" dir="ltr">
-                          {formatDate(log.created_at)}
-                        </span>
+                    <div key={log.id} className="flex items-start gap-2.5 py-2 border-b border-gray-100 last:border-0">
+                      <div className="flex-shrink-0 w-7 h-7 rounded-full bg-gray-100 flex items-center justify-center mt-0.5">
+                        <Icon className="w-3.5 h-3.5 text-gray-500" />
                       </div>
-                      {log.notes && (
-                        <p className="text-xs text-gray-600 mt-1 leading-relaxed">{log.notes}</p>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-medium text-gray-800">
+                            {INTERACTION_TYPES[log.type]}
+                          </span>
+                          <Badge className={`text-[10px] px-1.5 py-0 leading-4 ${OUTCOME_COLORS[log.outcome]}`}>
+                            {INTERACTION_OUTCOMES[log.outcome]}
+                          </Badge>
+                        </div>
+                        {log.notes && (
+                          <p className="text-[11px] text-gray-500 mt-0.5 leading-relaxed line-clamp-2">{log.notes}</p>
+                        )}
+                      </div>
+                      <span className="text-[10px] text-gray-400 flex-shrink-0 mt-0.5 tabular-nums" dir="ltr">
+                        {formatDate(log.created_at)}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </section>
+
+          {/* ── 3. Active Reminders ────────────────────────── */}
+          <section className="px-5 py-4 border-b">
+            <h3 className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-3">תזכורות פעילות</h3>
+            {loadingReminders ? (
+              <div className="flex justify-center py-6">
+                <LoadingSpinner className="w-5 h-5 text-gray-400" />
+              </div>
+            ) : reminders.length === 0 ? (
+              <p className="text-xs text-gray-400 text-center py-4">אין תזכורות ממתינות</p>
+            ) : (
+              <div className="space-y-2">
+                {reminders.map((r) => {
+                  const urgent = r.priority === "high" || isDueUrgent(r.due_date);
+                  return (
+                    <div
+                      key={r.id}
+                      className={`flex items-start gap-2.5 rounded-lg p-2.5 ${
+                        urgent ? "bg-red-50 border border-red-200" : "bg-gray-50 border border-gray-200"
+                      }`}
+                    >
+                      <input
+                        type="checkbox"
+                        className="mt-1 rounded border-gray-300 accent-blue-600"
+                        onChange={() => handleCompleteReminder(r.id)}
+                      />
+                      <div className="flex-1 min-w-0">
+                        <p className={`text-xs font-medium ${urgent ? "text-red-800" : "text-gray-800"}`}>
+                          {r.title}
+                        </p>
+                        <p className={`text-[11px] mt-0.5 ${urgent ? "text-red-600 font-medium" : "text-gray-400"}`}>
+                          {formatDueDate(r.due_date)}
+                        </p>
+                      </div>
+                      {r.priority === "high" && (
+                        <Badge className="bg-red-600 text-white text-[10px] px-1.5 py-0 flex-shrink-0">
+                          {REMINDER_PRIORITIES.high}
+                        </Badge>
                       )}
                     </div>
                   );
@@ -300,50 +427,19 @@ export function ConversationSheet({
             )}
           </section>
 
-          {/* Active Reminders */}
-          <section>
-            <h3 className="text-sm font-semibold text-gray-700 mb-3">תזכורות פעילות</h3>
-            {loadingReminders ? (
-              <div className="flex justify-center py-6">
-                <LoadingSpinner className="w-5 h-5 text-gray-400" />
-              </div>
-            ) : reminders.length === 0 ? (
-              <p className="text-sm text-gray-400 text-center py-4">אין תזכורות ממתינות</p>
-            ) : (
-              <div className="space-y-2">
-                {reminders.map((r) => (
-                  <div key={r.id} className="flex items-start gap-2 rounded-lg border bg-gray-50 p-3">
-                    <input
-                      type="checkbox"
-                      className="mt-0.5 rounded"
-                      onChange={() => handleCompleteReminder(r.id)}
-                    />
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-gray-800">{r.title}</p>
-                      <p className="text-[11px] text-gray-400">{formatDueDate(r.due_date)}</p>
-                    </div>
-                    {r.priority === "high" && (
-                      <Badge className="bg-red-100 text-red-700 text-[10px] px-1.5 py-0 flex-shrink-0">
-                        {REMINDER_PRIORITIES.high}
-                      </Badge>
-                    )}
-                  </div>
-                ))}
-              </div>
-            )}
-          </section>
-
-          {/* Operational Notes (Preferences) */}
-          <section>
-            <h3 className="text-sm font-semibold text-gray-700 mb-3">הערות תפעוליות</h3>
+          {/* ── 4. Operational Notes ───────────────────────── */}
+          <section className="px-5 py-4">
+            <h3 className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-3">הערות תפעוליות</h3>
             {prefEntries.length === 0 ? (
-              <p className="text-sm text-gray-400 text-center py-4">אין העדפות מוגדרות</p>
+              <p className="text-xs text-gray-400 text-center py-4">אין הערות תפעוליות</p>
             ) : (
               <div className="space-y-2">
                 {prefEntries.map(([key, value]) => (
-                  <div key={key} className="rounded-lg border bg-gray-50 p-3">
-                    <p className="text-[11px] text-gray-400 font-medium mb-0.5">{key}</p>
-                    <p className="text-xs text-gray-700">{value}</p>
+                  <div key={key} className="rounded-lg bg-blue-50 border border-blue-100 p-3">
+                    <p className="text-[10px] font-bold text-blue-500 uppercase tracking-wide mb-0.5">
+                      {PREF_LABELS[key] ?? key}
+                    </p>
+                    <p className="text-xs text-gray-700 leading-relaxed">{value}</p>
                   </div>
                 ))}
               </div>
@@ -351,79 +447,90 @@ export function ConversationSheet({
           </section>
         </div>
 
-        {/* ── Quick Actions (sticky bottom) ───────────────── */}
-        <div className="flex-shrink-0 border-t bg-white px-5 py-4 space-y-3">
-          {/* Log Interaction */}
-          {!showLogForm ? (
-            <div className="flex gap-2">
-              <Button
-                size="sm"
-                className="flex-1"
-                onClick={() => { setShowLogForm(true); setShowReminderForm(false); }}
-              >
-                תיעוד אינטראקציה
-              </Button>
-              <Button
-                size="sm"
-                variant="outline"
-                className="flex-1"
-                onClick={() => { setShowReminderForm(true); setShowLogForm(false); }}
-              >
-                הגדר תזכורת
-              </Button>
-              <Button size="sm" variant="outline" disabled className="flex-1 opacity-50">
-                משרה חדשה
-              </Button>
-            </div>
-          ) : (
-            <div className="space-y-3 rounded-lg border bg-gray-50 p-3">
+        {/* ═══ 5. QUICK ACTIONS + FORMS (sticky bottom) ═══════ */}
+        <div className="flex-shrink-0 border-t bg-gray-50">
+
+          {/* ── Expanded: Log Micro-Form ──────────────────── */}
+          {activeForm === "log" && (
+            <div className="px-4 pt-3 pb-4 border-b bg-white space-y-2.5">
+              <div className="flex items-center justify-between mb-1">
+                <span className="text-xs font-bold text-gray-700">תיעוד מהיר</span>
+                <button type="button" onClick={() => setActiveForm(null)} className="text-gray-400 hover:text-gray-600">
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4">
+                    <path d="M18 6 6 18" /><path d="m6 6 12 12" />
+                  </svg>
+                </button>
+              </div>
+              {/* Row 1: Type + Outcome side-by-side (fast selection) */}
               <div className="flex gap-2">
                 <div className="flex-1">
-                  <label className="text-[11px] font-medium text-gray-500 block mb-1">סוג</label>
-                  <select
-                    value={logType}
-                    onChange={(e) => setLogType(e.target.value as InteractionType)}
-                    className="w-full rounded-md border border-gray-300 bg-white px-2 py-1.5 text-xs"
-                  >
-                    {Object.entries(INTERACTION_TYPES).map(([k, v]) => (
-                      <option key={k} value={k}>{v}</option>
+                  <div className="flex gap-1">
+                    {(Object.entries(INTERACTION_TYPES) as [InteractionType, string][]).map(([k, v]) => (
+                      <button
+                        key={k}
+                        type="button"
+                        onClick={() => setLogType(k)}
+                        className={`flex-1 text-[11px] rounded-md border px-1 py-1.5 font-medium transition-colors ${
+                          logType === k
+                            ? "bg-blue-600 text-white border-blue-600"
+                            : "bg-white text-gray-600 border-gray-200 hover:border-gray-300"
+                        }`}
+                      >
+                        {v}
+                      </button>
                     ))}
-                  </select>
-                </div>
-                <div className="flex-1">
-                  <label className="text-[11px] font-medium text-gray-500 block mb-1">תוצאה</label>
-                  <select
-                    value={logOutcome}
-                    onChange={(e) => setLogOutcome(e.target.value as InteractionOutcome)}
-                    className="w-full rounded-md border border-gray-300 bg-white px-2 py-1.5 text-xs"
-                  >
-                    {Object.entries(INTERACTION_OUTCOMES).map(([k, v]) => (
-                      <option key={k} value={k}>{v}</option>
-                    ))}
-                  </select>
+                  </div>
                 </div>
               </div>
+              {/* Row 2: Outcome chips */}
+              <div className="flex gap-1">
+                {(Object.entries(INTERACTION_OUTCOMES) as [InteractionOutcome, string][]).map(([k, v]) => (
+                  <button
+                    key={k}
+                    type="button"
+                    onClick={() => setLogOutcome(k)}
+                    className={`flex-1 text-[11px] rounded-md border px-1 py-1.5 font-medium transition-colors ${
+                      logOutcome === k
+                        ? k === "complaint"
+                          ? "bg-red-600 text-white border-red-600"
+                          : "bg-blue-600 text-white border-blue-600"
+                        : "bg-white text-gray-600 border-gray-200 hover:border-gray-300"
+                    }`}
+                  >
+                    {v}
+                  </button>
+                ))}
+              </div>
+              {/* Row 3: Notes (optional) + Save */}
               <Textarea
                 value={logNotes}
                 onChange={(e) => setLogNotes(e.target.value)}
                 rows={2}
                 className="resize-none text-xs"
-                placeholder="הערות..."
+                placeholder="הערות קצרות (אופציונלי)..."
               />
-              <div className="flex gap-2">
-                <Button size="sm" onClick={handleSaveLog} disabled={savingLog} className="flex-1">
-                  {savingLog ? "שומר..." : "שמור"}
-                </Button>
-                <Button size="sm" variant="outline" onClick={() => setShowLogForm(false)} className="flex-1">
-                  ביטול
-                </Button>
-              </div>
+              <Button
+                size="sm"
+                onClick={handleSaveLog}
+                disabled={savingLog}
+                className="w-full"
+              >
+                {savingLog ? "שומר..." : "שמור אינטראקציה"}
+              </Button>
             </div>
           )}
 
-          {/* Set Reminder */}
-          {showReminderForm && !showLogForm && (
-            <div className="space-y-3 rounded-lg border bg-gray-50 p-3">
+          {/* ── Expanded: Reminder Form ───────────────────── */}
+          {activeForm === "reminder" && (
+            <div className="px-4 pt-3 pb-4 border-b bg-white space-y-2.5">
+              <div className="flex items-center justify-between mb-1">
+                <span className="text-xs font-bold text-gray-700">תזכורת חדשה</span>
+                <button type="button" onClick={() => setActiveForm(null)} className="text-gray-400 hover:text-gray-600">
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4">
+                    <path d="M18 6 6 18" /><path d="m6 6 12 12" />
+                  </svg>
+                </button>
+              </div>
               <Input
                 value={reminderTitle}
                 onChange={(e) => setReminderTitle(e.target.value)}
@@ -431,55 +538,130 @@ export function ConversationSheet({
                 className="text-xs"
               />
               <div className="flex gap-2">
-                <div className="flex-1">
-                  <label className="text-[11px] font-medium text-gray-500 block mb-1">תאריך</label>
-                  <Input
-                    type="date"
-                    value={reminderDate}
-                    onChange={(e) => setReminderDate(e.target.value)}
-                    className="text-xs"
-                    dir="ltr"
-                  />
-                </div>
-                <div className="flex-1">
-                  <label className="text-[11px] font-medium text-gray-500 block mb-1">עדיפות</label>
-                  <div className="flex gap-1">
-                    <button
-                      type="button"
-                      onClick={() => setReminderPriority("normal")}
-                      className={`flex-1 text-xs rounded-md border px-2 py-1.5 ${
-                        reminderPriority === "normal"
-                          ? "bg-blue-600 text-white border-blue-600"
-                          : "bg-white text-gray-600 border-gray-300"
-                      }`}
-                    >
-                      {REMINDER_PRIORITIES.normal}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setReminderPriority("high")}
-                      className={`flex-1 text-xs rounded-md border px-2 py-1.5 ${
-                        reminderPriority === "high"
-                          ? "bg-red-600 text-white border-red-600"
-                          : "bg-white text-gray-600 border-gray-300"
-                      }`}
-                    >
-                      {REMINDER_PRIORITIES.high}
-                    </button>
-                  </div>
+                <Input
+                  type="date"
+                  value={reminderDate}
+                  onChange={(e) => setReminderDate(e.target.value)}
+                  className="text-xs flex-1"
+                  dir="ltr"
+                />
+                <div className="flex gap-1">
+                  <button
+                    type="button"
+                    onClick={() => setReminderPriority("normal")}
+                    className={`text-[11px] rounded-md border px-3 py-1.5 font-medium transition-colors ${
+                      reminderPriority === "normal"
+                        ? "bg-blue-600 text-white border-blue-600"
+                        : "bg-white text-gray-600 border-gray-200"
+                    }`}
+                  >
+                    {REMINDER_PRIORITIES.normal}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setReminderPriority("high")}
+                    className={`text-[11px] rounded-md border px-3 py-1.5 font-medium transition-colors ${
+                      reminderPriority === "high"
+                        ? "bg-red-600 text-white border-red-600"
+                        : "bg-white text-gray-600 border-gray-200"
+                    }`}
+                  >
+                    {REMINDER_PRIORITIES.high}
+                  </button>
                 </div>
               </div>
-              <div className="flex gap-2">
-                <Button size="sm" onClick={handleSaveReminder} disabled={savingReminder} className="flex-1">
-                  {savingReminder ? "שומר..." : "שמור"}
-                </Button>
-                <Button size="sm" variant="outline" onClick={() => setShowReminderForm(false)} className="flex-1">
-                  ביטול
-                </Button>
-              </div>
+              <Button
+                size="sm"
+                onClick={handleSaveReminder}
+                disabled={savingReminder}
+                className="w-full"
+              >
+                {savingReminder ? "שומר..." : "שמור תזכורת"}
+              </Button>
             </div>
           )}
+
+          {/* ── 5. Quick Action Button Grid ───────────────── */}
+          <div className="grid grid-cols-3 gap-2 px-4 py-3">
+            {/* Log Interaction */}
+            <button
+              type="button"
+              onClick={() => setActiveForm(activeForm === "log" ? null : "log")}
+              className={`flex flex-col items-center gap-1.5 rounded-lg border p-3 text-xs font-medium transition-colors ${
+                activeForm === "log"
+                  ? "bg-blue-600 text-white border-blue-600"
+                  : "bg-white text-gray-700 border-gray-200 hover:bg-blue-50 hover:border-blue-200"
+              }`}
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5">
+                <rect width="8" height="4" x="8" y="2" rx="1" ry="1" />
+                <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2" />
+                <path d="M9 14h6" /><path d="M12 11v6" />
+              </svg>
+              תיעוד
+            </button>
+
+            {/* Set Reminder */}
+            <button
+              type="button"
+              onClick={() => setActiveForm(activeForm === "reminder" ? null : "reminder")}
+              className={`flex flex-col items-center gap-1.5 rounded-lg border p-3 text-xs font-medium transition-colors ${
+                activeForm === "reminder"
+                  ? "bg-blue-600 text-white border-blue-600"
+                  : "bg-white text-gray-700 border-gray-200 hover:bg-blue-50 hover:border-blue-200"
+              }`}
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5">
+                <path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9" />
+                <path d="M10.3 21a1.94 1.94 0 0 0 3.4 0" />
+              </svg>
+              תזכורת
+            </button>
+
+            {/* New Job */}
+            <button
+              type="button"
+              disabled
+              className="flex flex-col items-center gap-1.5 rounded-lg border p-3 text-xs font-medium bg-white text-gray-400 border-gray-200 opacity-60 cursor-not-allowed"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5">
+                <path d="M16 20V4a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16" />
+                <rect width="20" height="14" x="2" y="6" rx="2" />
+              </svg>
+              משרה
+            </button>
+
+            {/* Send Candidates */}
+            <button
+              type="button"
+              disabled
+              className="flex flex-col items-center gap-1.5 rounded-lg border p-3 text-xs font-medium bg-white text-gray-400 border-gray-200 opacity-60 cursor-not-allowed"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5">
+                <path d="M18 21a8 8 0 0 0-16 0" /><circle cx="10" cy="8" r="5" />
+                <path d="M22 20c0-3.37-2-6.5-4-8a5 5 0 0 0-.45-8.3" />
+              </svg>
+              שלח מועמדים
+            </button>
+
+            {/* Flag Issue — Red */}
+            <button
+              type="button"
+              onClick={() => {
+                setActiveForm("log");
+                setLogOutcome("complaint");
+              }}
+              className="flex flex-col items-center gap-1.5 rounded-lg border p-3 text-xs font-medium bg-white text-red-600 border-red-200 hover:bg-red-50 transition-colors col-span-2"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5">
+                <path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z" />
+                <line x1="4" x2="4" y1="22" y2="15" />
+              </svg>
+              דיווח תקלה
+            </button>
+          </div>
         </div>
+
       </SheetContent>
     </Sheet>
   );
