@@ -380,7 +380,9 @@ export function LeadDetail({ lead }: { lead: Lead }) {
             onClick={() => {
               setSheetMode("whatsapp");
               setSheetOpen(true);
-              window.open("https://api.whatsapp.com/send?phone=" + intlPhone, "_blank");
+              setTimeout(() => {
+                window.open("https://api.whatsapp.com/send?phone=" + intlPhone, "_blank", "noopener,noreferrer");
+              }, 300);
             }}
           >
             <WhatsAppIcon className="w-5 h-5 ml-2" />
@@ -401,7 +403,11 @@ export function LeadDetail({ lead }: { lead: Lead }) {
             onClick={() => {
               setSheetMode("call");
               setSheetOpen(true);
-              window.open("tel:" + lead.phone, "_self");
+              setTimeout(() => {
+                const a = document.createElement("a");
+                a.href = "tel:" + lead.phone;
+                a.click();
+              }, 300);
             }}
           >
             <PhoneIcon className="w-5 h-5 ml-2" />
