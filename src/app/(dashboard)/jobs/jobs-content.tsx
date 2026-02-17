@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { MapPin, Users, Clock, CheckCircle } from "lucide-react";
+import { MapPin, Users, Clock, CheckCircle, Pencil } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -17,7 +17,7 @@ import {
 } from "@/components/ui/dialog";
 import type { JobWithClient } from "@/types/jobs";
 import type { Client } from "@/types/clients";
-import { createJob } from "./actions";
+import { createJob, updateJob } from "./actions";
 
 // ── Status helpers ───────────────────────────────────────────
 
@@ -136,9 +136,10 @@ export function JobsContent({
 }) {
   const router = useRouter();
   const [search, setSearch] = useState("");
-  const [addOpen, setAddOpen] = useState(false);
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [editingJob, setEditingJob] = useState<JobWithClient | null>(null);
 
-  // Add form state
+  // Form state
   const [formClientId, setFormClientId] = useState("");
   const [formTitle, setFormTitle] = useState("");
   const [formNeeded, setFormNeeded] = useState("1");
@@ -166,6 +167,7 @@ export function JobsContent({
   }, [initialJobs, search]);
 
   function openAddDialog() {
+    setEditingJob(null);
     setFormClientId(clients[0]?.id ?? "");
     setFormTitle("");
     setFormNeeded("1");
@@ -173,12 +175,28 @@ export function JobsContent({
     setFormLocation("");
     setFormUrgent(false);
     setFormError("");
-    setAddOpen(true);
+    setDialogOpen(true);
   }
 
-  async function handleAdd() {
-    if (!formClientId || !formTitle.trim()) {
-      setFormError("לקוח וכותרת הם שדות חובה");
+  function openEditDialog(job: JobWithClient) {
+    setEditingJob(job);
+    setFormClientId(job.client_id);
+    setFormTitle(job.title);
+    setFormNeeded(String(job.needed_count));
+    setFormPayRate(job.pay_rate ?? "");
+    setFormLocation(job.location ?? "");
+    setFormUrgent(job.urgent);
+    setFormError("");
+    setDialogOpen(true);
+  }
+
+  async function handleSave() {
+    if (!formTitle.trim()) {
+      setFormError("כותרת היא שדה חובה");
+      return;
+    }
+    if (!editingJob && !formClientId) {
+      setFormError("לקוח הוא שדה חובה");
       return;
     }
     const neededNum = parseInt(formNeeded, 10);
@@ -188,20 +206,26 @@ export function JobsContent({
     }
     setFormError("");
     setSaving(true);
-    const result = await createJob({
-      client_id: formClientId,
+
+    const payload = {
       title: formTitle.trim(),
       needed_count: neededNum,
       pay_rate: formPayRate.trim(),
       location: formLocation.trim(),
       urgent: formUrgent,
-    });
+    };
+
+    const result = editingJob
+      ? await updateJob(editingJob.id, payload)
+      : await createJob({ ...payload, client_id: formClientId });
+
     setSaving(false);
     if (result.error) {
       setFormError(result.error);
     } else {
-      toast.success("משרה נוספה בהצלחה!");
-      setAddOpen(false);
+      toast.success(editingJob ? "משרה עודכנה בהצלחה!" : "משרה נוספה בהצלחה!");
+      setDialogOpen(false);
+      setEditingJob(null);
       router.refresh();
     }
   }
@@ -246,32 +270,34 @@ export function JobsContent({
       ) : (
         <div className="space-y-4">
           {sorted.map((job) => (
-            <JobCard key={job.id} job={job} />
+            <JobCard key={job.id} job={job} onEdit={openEditDialog} />
           ))}
         </div>
       )}
 
-      {/* ═══ ADD JOB DIALOG ═══════════════════════════════════ */}
-      <Dialog open={addOpen} onOpenChange={setAddOpen}>
+      {/* ═══ ADD / EDIT JOB DIALOG ═════════════════════════════ */}
+      <Dialog open={dialogOpen} onOpenChange={(open) => { setDialogOpen(open); if (!open) setEditingJob(null); }}>
         <DialogContent className="sm:max-w-md" dir="rtl">
           <DialogHeader>
-            <DialogTitle>הוספת משרה חדשה</DialogTitle>
+            <DialogTitle>{editingJob ? "עריכת משרה" : "הוספת משרה חדשה"}</DialogTitle>
           </DialogHeader>
           <div className="space-y-4 py-2">
-            <div className="space-y-2">
-              <Label htmlFor="job-client">לקוח *</Label>
-              <select
-                id="job-client"
-                value={formClientId}
-                onChange={(e) => setFormClientId(e.target.value)}
-                className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm"
-              >
-                <option value="" disabled>בחר לקוח...</option>
-                {clients.map((c) => (
-                  <option key={c.id} value={c.id}>{c.name}</option>
-                ))}
-              </select>
-            </div>
+            {!editingJob && (
+              <div className="space-y-2">
+                <Label htmlFor="job-client">לקוח *</Label>
+                <select
+                  id="job-client"
+                  value={formClientId}
+                  onChange={(e) => setFormClientId(e.target.value)}
+                  className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm"
+                >
+                  <option value="" disabled>בחר לקוח...</option>
+                  {clients.map((c) => (
+                    <option key={c.id} value={c.id}>{c.name}</option>
+                  ))}
+                </select>
+              </div>
+            )}
             <div className="space-y-2">
               <Label htmlFor="job-title">כותרת המשרה *</Label>
               <Input
@@ -337,14 +363,14 @@ export function JobsContent({
             )}
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setAddOpen(false)} disabled={saving}>
+            <Button variant="outline" onClick={() => { setDialogOpen(false); setEditingJob(null); }} disabled={saving}>
               ביטול
             </Button>
             <Button
-              onClick={handleAdd}
-              disabled={saving || !formClientId || !formTitle.trim()}
+              onClick={handleSave}
+              disabled={saving || (!editingJob && !formClientId) || !formTitle.trim()}
             >
-              {saving ? "שומר..." : "הוסף משרה"}
+              {saving ? "שומר..." : editingJob ? "שמור שינויים" : "הוסף משרה"}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -355,7 +381,7 @@ export function JobsContent({
 
 // ── Job Card (Operational Decision Card) ─────────────────────
 
-function JobCard({ job }: { job: JobWithClient }) {
+function JobCard({ job, onEdit }: { job: JobWithClient; onEdit: (job: JobWithClient) => void }) {
   const clientPhone = formatPhone(job.clients.phone);
 
   const isCritical = job.assigned_count === 0;
@@ -389,8 +415,18 @@ function JobCard({ job }: { job: JobWithClient }) {
   }
 
   return (
-    <div className={`bg-white rounded-lg shadow-sm hover:shadow-md transition-all p-4 mb-3 ${statusColor} ${statusBg}`}>
-      <div className="flex justify-between items-start">
+    <div className={`relative bg-white rounded-lg shadow-sm hover:shadow-md transition-all p-4 mb-3 ${statusColor} ${statusBg}`}>
+      {/* Edit button - top left */}
+      <button
+        type="button"
+        onClick={(e) => { e.stopPropagation(); onEdit(job); }}
+        className="absolute top-3 left-3 p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-full transition-colors"
+        title="ערוך משרה"
+      >
+        <Pencil size={16} />
+      </button>
+
+      <div className="flex justify-between items-start pl-8">
 
         {/* Right side - Job details */}
         <div className="flex-1">

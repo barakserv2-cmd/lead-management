@@ -49,3 +49,34 @@ export async function createJob(job: {
   revalidatePath("/jobs");
   return { job: data, error: null };
 }
+
+export async function updateJob(
+  id: string,
+  job: {
+    title: string;
+    needed_count: number;
+    pay_rate: string;
+    location: string;
+    urgent: boolean;
+  }
+) {
+  const { data, error } = await getSupabase()
+    .from("jobs")
+    .update({
+      title: job.title,
+      needed_count: job.needed_count,
+      pay_rate: job.pay_rate || null,
+      location: job.location || null,
+      urgent: job.urgent,
+    })
+    .eq("id", id)
+    .select("*, clients(name, phone)")
+    .single();
+
+  if (error) {
+    return { job: null, error: error.message };
+  }
+
+  revalidatePath("/jobs");
+  return { job: data, error: null };
+}
