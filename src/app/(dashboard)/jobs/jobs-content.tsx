@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
+import { MapPin, Users, Clock, CheckCircle } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -18,15 +19,49 @@ import type { JobWithClient } from "@/types/jobs";
 import type { Client } from "@/types/clients";
 import { createJob } from "./actions";
 
-// ── Constants ────────────────────────────────────────────────
+// ── Status helpers ───────────────────────────────────────────
 
-type FilterKey = "all" | "unstaffed" | "urgent";
+type StaffingStatus = "critical" | "partial" | "full";
 
-const FILTER_TABS: { key: FilterKey; label: string }[] = [
-  { key: "all", label: "הכל" },
-  { key: "unstaffed", label: "ללא איוש" },
-  { key: "urgent", label: "דחוף" },
-];
+function getStaffingStatus(assigned: number, needed: number): StaffingStatus {
+  if (assigned === 0) return "critical";
+  if (assigned < needed) return "partial";
+  return "full";
+}
+
+const STATUS_CONFIG: Record<StaffingStatus, {
+  label: string;
+  border: string;
+  badgeBg: string;
+  badgeText: string;
+  actionLabel: string;
+  actionStyle: string;
+}> = {
+  critical: {
+    label: "ללא איוש",
+    border: "border-r-4 border-r-red-500",
+    badgeBg: "bg-red-100",
+    badgeText: "text-red-700 font-bold",
+    actionLabel: "מצא עובדים",
+    actionStyle: "bg-red-600 text-white hover:bg-red-700",
+  },
+  partial: {
+    label: "איוש חלקי",
+    border: "border-r-4 border-r-orange-400",
+    badgeBg: "bg-orange-100",
+    badgeText: "text-orange-700 font-bold",
+    actionLabel: "השלם איוש",
+    actionStyle: "bg-orange-500 text-white hover:bg-orange-600",
+  },
+  full: {
+    label: "מאויש",
+    border: "border-r-4 border-r-emerald-500",
+    badgeBg: "bg-emerald-100",
+    badgeText: "text-emerald-700 font-bold",
+    actionLabel: "צפה בעובדים",
+    actionStyle: "border border-gray-300 bg-white text-gray-700 hover:bg-gray-50",
+  },
+};
 
 // ── Helpers ──────────────────────────────────────────────────
 
@@ -35,10 +70,16 @@ function formatPhone(phone: string | null): string | null {
   return phone.replace(/[\s\-()]/g, "").replace(/^0/, "972");
 }
 
-function getStaffingColor(assigned: number, needed: number): string {
-  if (assigned === 0) return "bg-red-500 text-white";
-  if (assigned < needed) return "bg-yellow-500 text-white";
-  return "bg-emerald-500 text-white";
+function sortByPriority(jobs: JobWithClient[]): JobWithClient[] {
+  const order: Record<StaffingStatus, number> = { critical: 0, partial: 1, full: 2 };
+  return [...jobs].sort((a, b) => {
+    const sa = getStaffingStatus(a.assigned_count, a.needed_count);
+    const sb = getStaffingStatus(b.assigned_count, b.needed_count);
+    if (order[sa] !== order[sb]) return order[sa] - order[sb];
+    // Within same status, urgent first
+    if (a.urgent !== b.urgent) return a.urgent ? -1 : 1;
+    return 0;
+  });
 }
 
 // ── Icons ────────────────────────────────────────────────────
@@ -59,6 +100,31 @@ function PlusIcon({ className = "w-4 h-4" }: { className?: string }) {
   );
 }
 
+// ── Summary Bar ─────────────────────────────────────────────
+
+function JobSummaryBar({ jobs }: { jobs: JobWithClient[] }) {
+  const critical = jobs.filter(j => j.assigned_count === 0).length;
+  const partial = jobs.filter(j => j.assigned_count > 0 && j.assigned_count < j.needed_count).length;
+  const stable = jobs.filter(j => j.assigned_count >= j.needed_count).length;
+
+  return (
+    <div className="grid grid-cols-3 gap-4 mb-6">
+      <div className="bg-red-50 border-l-4 border-red-500 p-4 rounded shadow-sm">
+        <div className="text-red-800 text-sm font-bold uppercase tracking-wider">קריטי (לא מאויש)</div>
+        <div className="text-3xl font-bold text-red-900">{critical}</div>
+      </div>
+      <div className="bg-orange-50 border-l-4 border-orange-500 p-4 rounded shadow-sm">
+        <div className="text-orange-800 text-sm font-bold uppercase tracking-wider">דורש תשומת לב</div>
+        <div className="text-3xl font-bold text-orange-900">{partial}</div>
+      </div>
+      <div className="bg-green-50 border-l-4 border-green-500 p-4 rounded shadow-sm">
+        <div className="text-green-800 text-sm font-bold uppercase tracking-wider">יציב (מאויש מלא)</div>
+        <div className="text-3xl font-bold text-green-900">{stable}</div>
+      </div>
+    </div>
+  );
+}
+
 // ── Component ────────────────────────────────────────────────
 
 export function JobsContent({
@@ -70,7 +136,6 @@ export function JobsContent({
 }) {
   const router = useRouter();
   const [search, setSearch] = useState("");
-  const [activeFilter, setActiveFilter] = useState<FilterKey>("all");
   const [addOpen, setAddOpen] = useState(false);
 
   // Add form state
@@ -83,15 +148,9 @@ export function JobsContent({
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState("");
 
-  // Filter + search
-  const filtered = useMemo(() => {
-    let result = initialJobs;
-
-    if (activeFilter === "unstaffed") {
-      result = result.filter((j) => j.assigned_count === 0);
-    } else if (activeFilter === "urgent") {
-      result = result.filter((j) => j.urgent);
-    }
+  // Sort by priority + search filter
+  const sorted = useMemo(() => {
+    let result = sortByPriority(initialJobs);
 
     if (search.trim()) {
       const q = search.trim().toLowerCase();
@@ -104,7 +163,7 @@ export function JobsContent({
     }
 
     return result;
-  }, [initialJobs, activeFilter, search]);
+  }, [initialJobs, search]);
 
   function openAddDialog() {
     setFormClientId(clients[0]?.id ?? "");
@@ -151,13 +210,13 @@ export function JobsContent({
     <div>
       {/* ═══ HEADER ═══════════════════════════════════════════ */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
-        <h1 className="text-2xl font-bold">משרות</h1>
+        <h1 className="text-2xl font-bold text-gray-800">לוח בקרה - משרות ושיבוצים</h1>
         <div className="flex items-center gap-3">
           <Input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="חיפוש כותרת / מיקום..."
-            className="w-64 text-sm"
+            placeholder="חיפוש כותרת / מיקום / לקוח..."
+            className="w-72 text-sm"
           />
           <Button onClick={openAddDialog} className="gap-1.5">
             <PlusIcon className="w-4 h-4" />
@@ -166,50 +225,27 @@ export function JobsContent({
         </div>
       </div>
 
-      {/* ═══ FILTER TABS ══════════════════════════════════════ */}
-      <div className="flex gap-1 mb-6 bg-gray-100 rounded-lg p-1 w-fit">
-        {FILTER_TABS.map((tab) => (
-          <button
-            key={tab.key}
-            type="button"
-            onClick={() => setActiveFilter(tab.key)}
-            className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
-              activeFilter === tab.key
-                ? "bg-white text-gray-900 shadow-sm"
-                : "text-gray-500 hover:text-gray-700"
-            }`}
-          >
-            {tab.label}
-            {tab.key !== "all" && (
-              <span className="mr-1.5 text-xs text-gray-400">
-                ({tab.key === "unstaffed"
-                  ? initialJobs.filter((j) => j.assigned_count === 0).length
-                  : initialJobs.filter((j) => j.urgent).length})
-              </span>
-            )}
-          </button>
-        ))}
-      </div>
+      {/* ═══ SUMMARY BAR ══════════════════════════════════════ */}
+      {initialJobs.length > 0 && <JobSummaryBar jobs={initialJobs} />}
 
-      {/* ═══ CARD GRID ════════════════════════════════════════ */}
-      {filtered.length === 0 ? (
-        <div className="text-center py-16">
-          <div className="w-16 h-16 rounded-full bg-gray-100 flex items-center justify-center mx-auto mb-4">
-            <span className="text-2xl">📋</span>
-          </div>
-          <p className="text-gray-500 font-medium">
-            {search ? "לא נמצאו תוצאות" : "אין משרות עדיין"}
-          </p>
-          {!search && (
-            <Button onClick={openAddDialog} variant="outline" className="mt-4 gap-1.5">
-              <PlusIcon className="w-4 h-4" />
-              הוסף משרה ראשונה
-            </Button>
+      {/* ═══ CARD GRID (Sorted by priority) ═══════════════════ */}
+      {sorted.length === 0 ? (
+        <div className="text-center py-12 text-gray-500">
+          {search ? (
+            <p className="font-medium">לא נמצאו תוצאות</p>
+          ) : (
+            <>
+              <p className="font-medium">אין משרות פתוחות כרגע. הכל רגוע :)</p>
+              <Button onClick={openAddDialog} variant="outline" className="mt-4 gap-1.5">
+                <PlusIcon className="w-4 h-4" />
+                הוסף משרה ראשונה
+              </Button>
+            </>
           )}
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {filtered.map((job) => (
+        <div className="space-y-4">
+          {sorted.map((job) => (
             <JobCard key={job.id} job={job} />
           ))}
         </div>
@@ -317,101 +353,112 @@ export function JobsContent({
   );
 }
 
-// ── Job Card ────────────────────────────────────────────────
+// ── Job Card (Operational Decision Card) ─────────────────────
 
 function JobCard({ job }: { job: JobWithClient }) {
   const clientPhone = formatPhone(job.clients.phone);
-  const staffingColor = getStaffingColor(job.assigned_count, job.needed_count);
+
+  const isCritical = job.assigned_count === 0;
+  const isStable = job.assigned_count >= job.needed_count;
+  const isPartial = !isCritical && !isStable;
+
+  let statusColor = "border-gray-200";
+  let statusBg = "bg-white";
+  let statusText = "text-gray-500";
+  let buttonStyle = "bg-gray-100 text-gray-700 hover:bg-gray-200";
+  let buttonLabel = "צפה בפרטים";
+
+  if (isCritical) {
+    statusColor = "border-l-4 border-l-red-500";
+    statusBg = "bg-red-50/10";
+    statusText = "text-red-600 font-bold";
+    buttonStyle = "bg-red-600 text-white hover:bg-red-700 shadow-md";
+    buttonLabel = "מצא עובדים דחוף";
+  } else if (isPartial) {
+    statusColor = "border-l-4 border-l-orange-500";
+    statusBg = "bg-orange-50/10";
+    statusText = "text-orange-600 font-bold";
+    buttonStyle = "bg-orange-500 text-white hover:bg-orange-600 shadow-sm";
+    buttonLabel = "השלם איוש";
+  } else if (isStable) {
+    statusColor = "border-l-4 border-l-green-500";
+    statusBg = "bg-green-50/10";
+    statusText = "text-green-600 font-bold";
+    buttonStyle = "border border-green-600 text-green-600 hover:bg-green-50";
+    buttonLabel = "צפה בצוות";
+  }
 
   return (
-    <div className="bg-white rounded-xl border shadow-sm hover:shadow-md transition-shadow">
-      {/* Header: Title + Client Name */}
-      <div className="p-4 pb-3">
-        <div className="flex items-start justify-between gap-2">
-          <div className="min-w-0">
-            <h3 className="text-base font-bold text-gray-900 truncate">
-              {job.title}
-            </h3>
-            <p className="text-xs text-gray-500 mt-0.5">
-              {job.clients.name}
-            </p>
-          </div>
-          <div className="flex items-center gap-1.5 flex-shrink-0">
+    <div className={`bg-white rounded-lg shadow-sm hover:shadow-md transition-all p-4 mb-3 ${statusColor} ${statusBg}`}>
+      <div className="flex justify-between items-start">
+
+        {/* Right side - Job details */}
+        <div className="flex-1">
+          <div className="flex items-center gap-2">
+            <h3 className="text-lg font-bold text-gray-900 mb-1">{job.title}</h3>
             {job.urgent && (
-              <Badge className="bg-red-100 text-red-700 text-[11px]">
-                דחוף
-              </Badge>
+              <Badge className="bg-red-100 text-red-700 text-[11px]">דחוף</Badge>
             )}
-            <Badge className={`text-[11px] ${staffingColor}`}>
-              {job.assigned_count} / {job.needed_count} עובדים
-            </Badge>
           </div>
+
+          <div className="flex items-center text-sm text-gray-500 mb-2 space-x-3 space-x-reverse">
+            <span className="font-medium text-gray-700">{job.clients.name}</span>
+            <span>•</span>
+            <span className="flex items-center"><MapPin className="w-3 h-3 ml-1" /> {job.location || "אילת"}</span>
+            <span>•</span>
+            <span className="flex items-center"><Clock className="w-3 h-3 ml-1" /> {job.pay_rate ? `₪${job.pay_rate}/שעה` : "שכר לא צוין"}</span>
+          </div>
+
+          {/* Requirements tags */}
+          {job.requirements.length > 0 && (
+            <div className="flex flex-wrap gap-2 mt-2">
+              {job.requirements.map((req, idx) => (
+                <span key={idx} className="px-2 py-0.5 bg-gray-100 text-gray-600 text-xs rounded-full">
+                  {req}
+                </span>
+              ))}
+            </div>
+          )}
         </div>
 
-        {/* Details: Location · Pay Rate */}
-        <div className="flex items-center gap-2 mt-2 flex-wrap">
-          {job.location && (
-            <span className="text-xs text-gray-400">{job.location}</span>
-          )}
-          {job.location && job.pay_rate && (
-            <span className="text-gray-200">·</span>
-          )}
-          {job.pay_rate && (
-            <span className="text-xs text-gray-400">{job.pay_rate}</span>
-          )}
-        </div>
-
-        {/* Requirements Tags */}
-        {job.requirements.length > 0 && (
-          <div className="flex flex-wrap gap-1 mt-2">
-            {job.requirements.map((req, i) => (
-              <span
-                key={i}
-                className="px-2 py-0.5 bg-gray-100 text-gray-600 text-[11px] rounded-full"
-              >
-                {req}
-              </span>
-            ))}
+        {/* Left side - Status & Action */}
+        <div className="flex flex-col items-end gap-3 min-w-[140px]">
+          {/* Staffing status */}
+          <div className={`flex items-center gap-1.5 ${statusText}`}>
+            {isStable ? <CheckCircle className="w-4 h-4" /> : <Users className="w-4 h-4" />}
+            <span className="text-sm">
+              {job.assigned_count} / {job.needed_count} מאוישים
+            </span>
           </div>
-        )}
-      </div>
 
-      {/* Actions Row */}
-      <div className="px-4 py-3 border-t border-gray-100 flex gap-2">
-        <button
-          type="button"
-          disabled
-          className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg bg-blue-50 text-blue-400 text-xs font-medium cursor-not-allowed"
-          title="בקרוב - התאמת עובדים"
-        >
-          התאם עובדים
-        </button>
-        <button
-          type="button"
-          disabled
-          className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg bg-gray-50 text-gray-400 text-xs font-medium cursor-not-allowed"
-          title="בקרוב - שיבוץ"
-        >
-          שבץ
-        </button>
-        {clientPhone && (
+          {/* Primary action button */}
           <button
             type="button"
-            onClick={() => {
-              setTimeout(() => {
-                window.open(
-                  "https://api.whatsapp.com/send?phone=" + clientPhone,
-                  "_blank",
-                  "noopener,noreferrer"
-                );
-              }, 100);
-            }}
-            className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg bg-green-50 text-green-700 text-xs font-medium hover:bg-green-100 transition-colors"
+            className={`w-full py-2 px-3 rounded text-sm font-medium transition-colors ${buttonStyle}`}
           >
-            <WhatsAppIcon className="w-3.5 h-3.5" />
-            WhatsApp
+            {buttonLabel}
           </button>
-        )}
+
+          {/* WhatsApp client */}
+          {clientPhone && (
+            <button
+              type="button"
+              onClick={() => {
+                setTimeout(() => {
+                  window.open(
+                    "https://api.whatsapp.com/send?phone=" + clientPhone,
+                    "_blank",
+                    "noopener,noreferrer"
+                  );
+                }, 100);
+              }}
+              className="w-full flex items-center justify-center gap-1.5 py-1.5 px-3 rounded bg-green-50 text-green-700 text-xs font-medium hover:bg-green-100 transition-colors"
+            >
+              <WhatsAppIcon className="w-3.5 h-3.5" />
+              WhatsApp ללקוח
+            </button>
+          )}
+        </div>
       </div>
     </div>
   );

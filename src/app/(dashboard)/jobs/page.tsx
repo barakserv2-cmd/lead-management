@@ -10,6 +10,7 @@ export default async function JobsPage() {
     supabase
       .from("jobs")
       .select("*, clients(name, phone)")
+      .eq("status", "Open")
       .order("created_at", { ascending: false })
       .limit(100),
     supabase
