@@ -15,7 +15,7 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import type { Client, ClientStatus } from "@/types/clients";
-import { createClient } from "./actions";
+import { createClient, updateClient } from "./actions";
 
 // ── Constants ────────────────────────────────────────────────
 
@@ -71,15 +71,24 @@ function PlusIcon({ className = "w-4 h-4" }: { className?: string }) {
   );
 }
 
+function PencilIcon({ className = "w-4 h-4" }: { className?: string }) {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+      <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" /><path d="m15 5 4 4" />
+    </svg>
+  );
+}
+
 // ── Component ────────────────────────────────────────────────
 
 export function ClientsContent({ clients: initialClients }: { clients: Client[] }) {
   const router = useRouter();
   const [search, setSearch] = useState("");
   const [activeFilter, setActiveFilter] = useState("all");
-  const [addOpen, setAddOpen] = useState(false);
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [editingClient, setEditingClient] = useState<Client | null>(null);
 
-  // Add form state
+  // Form state
   const [formName, setFormName] = useState("");
   const [formContact, setFormContact] = useState("");
   const [formPhone, setFormPhone] = useState("");
@@ -111,6 +120,7 @@ export function ClientsContent({ clients: initialClients }: { clients: Client[] 
   }, [initialClients, activeFilter, search]);
 
   function openAddDialog() {
+    setEditingClient(null);
     setFormName("");
     setFormContact("");
     setFormPhone("");
@@ -118,30 +128,48 @@ export function ClientsContent({ clients: initialClients }: { clients: Client[] 
     setFormType("Other");
     setFormCity("");
     setFormError("");
-    setAddOpen(true);
+    setDialogOpen(true);
   }
 
-  async function handleAdd() {
+  function openEditDialog(client: Client) {
+    setEditingClient(client);
+    setFormName(client.name);
+    setFormContact(client.contact_person ?? "");
+    setFormPhone(client.phone);
+    setFormEmail(client.email ?? "");
+    setFormType(client.type);
+    setFormCity(client.city ?? "");
+    setFormError("");
+    setDialogOpen(true);
+  }
+
+  async function handleSave() {
     if (!formName.trim() || !formPhone.trim()) {
       setFormError("שם וטלפון הם שדות חובה");
       return;
     }
     setFormError("");
     setSaving(true);
-    const result = await createClient({
+
+    const payload = {
       name: formName.trim(),
       contact_person: formContact.trim(),
       phone: formPhone.trim(),
       email: formEmail.trim(),
       type: formType,
       city: formCity.trim(),
-    });
+    };
+
+    const result = editingClient
+      ? await updateClient(editingClient.id, payload)
+      : await createClient(payload);
+
     setSaving(false);
     if (result.error) {
       setFormError(result.error);
     } else {
-      toast.success("לקוח נוסף בהצלחה!");
-      setAddOpen(false);
+      toast.success(editingClient ? "לקוח עודכן בהצלחה!" : "לקוח נוסף בהצלחה!");
+      setDialogOpen(false);
       router.refresh();
     }
   }
@@ -207,16 +235,16 @@ export function ClientsContent({ clients: initialClients }: { clients: Client[] 
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {filtered.map((client) => (
-            <ClientCard key={client.id} client={client} />
+            <ClientCard key={client.id} client={client} onEdit={openEditDialog} />
           ))}
         </div>
       )}
 
-      {/* ═══ ADD CLIENT DIALOG ════════════════════════════════ */}
-      <Dialog open={addOpen} onOpenChange={setAddOpen}>
+      {/* ═══ ADD / EDIT CLIENT DIALOG ═════════════════════════ */}
+      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent className="sm:max-w-md" dir="rtl">
           <DialogHeader>
-            <DialogTitle>הוספת לקוח חדש</DialogTitle>
+            <DialogTitle>{editingClient ? "עריכת לקוח" : "הוספת לקוח חדש"}</DialogTitle>
           </DialogHeader>
           <div className="space-y-4 py-2">
             <div className="space-y-2">
@@ -290,11 +318,11 @@ export function ClientsContent({ clients: initialClients }: { clients: Client[] 
             )}
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setAddOpen(false)} disabled={saving}>
+            <Button variant="outline" onClick={() => setDialogOpen(false)} disabled={saving}>
               ביטול
             </Button>
-            <Button onClick={handleAdd} disabled={saving || !formName.trim() || !formPhone.trim()}>
-              {saving ? "שומר..." : "הוסף לקוח"}
+            <Button onClick={handleSave} disabled={saving || !formName.trim() || !formPhone.trim()}>
+              {saving ? "שומר..." : editingClient ? "שמור שינויים" : "הוסף לקוח"}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -305,7 +333,7 @@ export function ClientsContent({ clients: initialClients }: { clients: Client[] 
 
 // ── Client Card ──────────────────────────────────────────────
 
-function ClientCard({ client }: { client: Client }) {
+function ClientCard({ client, onEdit }: { client: Client; onEdit: (client: Client) => void }) {
   const intlPhone = formatPhone(client.phone);
   const statusCfg = STATUS_CONFIG[client.status] ?? STATUS_CONFIG.Active;
   const typeLabel = TYPE_LABELS[client.type] ?? client.type;
@@ -386,10 +414,11 @@ function ClientCard({ client }: { client: Client }) {
         )}
         <button
           type="button"
-          disabled
-          className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg bg-gray-50 text-gray-400 text-xs font-medium cursor-not-allowed"
+          onClick={() => onEdit(client)}
+          className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg bg-gray-50 text-gray-700 text-xs font-medium hover:bg-gray-100 transition-colors"
         >
-          פתח
+          <PencilIcon className="w-3.5 h-3.5" />
+          עריכה
         </button>
       </div>
     </div>

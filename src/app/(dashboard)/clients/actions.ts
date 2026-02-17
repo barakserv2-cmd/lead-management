@@ -61,3 +61,39 @@ export async function createClient(client: {
   revalidatePath("/clients");
   return { client: data, error: null };
 }
+
+export async function updateClient(
+  id: string,
+  client: {
+    name: string;
+    contact_person: string;
+    phone: string;
+    email: string;
+    type: string;
+    city: string;
+  }
+) {
+  const { data, error } = await getSupabase()
+    .from("clients")
+    .update({
+      name: client.name,
+      contact_person: client.contact_person || null,
+      phone: client.phone,
+      email: client.email || null,
+      type: client.type || "Other",
+      city: client.city || null,
+    })
+    .eq("id", id)
+    .select()
+    .single();
+
+  if (error) {
+    if (error.code === "23505") {
+      return { client: null, error: "מספר טלפון זה כבר קיים במערכת" };
+    }
+    return { client: null, error: error.message };
+  }
+
+  revalidatePath("/clients");
+  return { client: data, error: null };
+}
