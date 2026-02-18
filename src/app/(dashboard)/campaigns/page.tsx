@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { createClient } from '@/lib/supabase/client';
-import { Calendar, PlusCircle, X, Pencil, Trash2, Search, UserPlus, CheckCircle, Clock, AlertTriangle, MapPin, Upload, FileSpreadsheet, User } from 'lucide-react';
+import { Calendar, PlusCircle, X, Search, UserPlus, CheckCircle, Clock, AlertTriangle, MapPin, FileSpreadsheet, Trash2 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 
 export default function ExtrasPage() {
@@ -41,35 +41,39 @@ export default function ExtrasPage() {
     const searchAll = async () => {
       if (workerSearchTerm.length < 2) { setSearchResults([]); return; }
 
-      // 1. חיפוש עובדים קיימים
+      // 1. חיפוש עובדים קיימים (Workers)
       const { data: workers } = await supabase
         .from('workers')
         .select('id, full_name, phone')
         .ilike('full_name', `%${workerSearchTerm}%`)
         .limit(5);
 
-      // 2. חיפוש לידים/מועמדים
-      const { data: candidates } = await supabase
-        .from('candidates')
-        .select('id, name, phone') // שים לב: בטבלה השם הוא 'name'
+      // 2. חיפוש לידים (Leads) - התיקון הוא כאן: שינוי מ-candidates ל-leads
+      const { data: leads } = await supabase
+        .from('leads')
+        .select('id, name, phone') // שים לב: בטבלת לידים השם הוא בדרך כלל 'name'
         .ilike('name', `%${workerSearchTerm}%`)
         .limit(5);
 
       // 3. איחוד התוצאות
       const formattedWorkers = (workers || []).map(w => ({ ...w, type: 'Worker' }));
 
-      const formattedCandidates = (candidates || []).map(c => ({
-        id: c.id,
-        full_name: c.name, // נרמול השם שיהיה אחיד
-        phone: c.phone,
-        type: 'Candidate' // תווית מזהה
+      const formattedLeads = (leads || []).map(l => ({
+        id: l.id,
+        full_name: l.name, // נרמול השם שיהיה אחיד לממשק
+        phone: l.phone,
+        type: 'Lead' // תווית מזהה חדשה
       }));
 
-      // סינון כפילויות (אם ליד כבר הפך לעובד, נציג רק את העובד)
+      // סינון כפילויות (אם ליד כבר קיים כעובד עם אותו טלפון, נציג רק את העובד)
       const combined = [...formattedWorkers];
-      formattedCandidates.forEach(c => {
-        if (!combined.find(w => w.phone === c.phone)) {
-          combined.push(c);
+      formattedLeads.forEach(lead => {
+        // מנקה את הטלפון להשוואה
+        const cleanLeadPhone = lead.phone?.replace(/\D/g, '');
+        const exists = combined.some(w => w.phone?.replace(/\D/g, '') === cleanLeadPhone);
+
+        if (!exists) {
+          combined.push(lead);
         }
       });
 
@@ -111,60 +115,66 @@ export default function ExtrasPage() {
     if (data) setAssignedWorkers(data);
   }
 
-  // --- שיבוץ חכם (כולל המרת ליד לעובד) ---
+  // --- שיבוץ חכם (המרה מליד לעובד) ---
   const handleAssignPerson = async (person: any) => {
     let unitId = editingCell.id;
     if (!unitId) unitId = await handleSaveUnitSettings();
 
     let workerId = person.id;
 
-    // אם זה ליד (Candidate), קודם כל ניצור אותו כעובד
-    if (person.type === 'Candidate') {
-      // בדיקה אם הוא כבר קיים כעובד (לפי טלפון) כדי למנוע כפילות
+    // אם בחרנו "ליד", צריך להפוך אותו ל"עובד" לפני השיבוץ
+    if (person.type === 'Lead') {
+      console.log("Converting Lead to Worker:", person.full_name);
+
+      // 1. בדיקה אם כבר קיים כעובד (לפי טלפון)
       const { data: existing } = await supabase.from('workers').select('id').eq('phone', person.phone).single();
 
       if (existing) {
         workerId = existing.id;
       } else {
-        // יצירת עובד חדש מהליד
+        // 2. יצירת עובד חדש בטבלת workers
         const { data: newWorker, error: createError } = await supabase
           .from('workers')
           .insert([{ full_name: person.full_name, phone: person.phone, status: 'Active' }])
           .select()
           .single();
 
-        if (createError) { alert('שגיאה ביצירת עובד: ' + createError.message); return; }
+        if (createError) {
+            alert('שגיאה ביצירת עובד: ' + createError.message);
+            return;
+        }
         workerId = newWorker.id;
 
-        // אופציונלי: עדכון סטטוס הליד ל-"Hired"
-        await supabase.from('candidates').update({ status: 'Hired' }).eq('id', person.id);
+        // 3. (אופציונלי) עדכון הליד לסטטוס "התקבל" כדי שלא יופיע כחדש
+        await supabase.from('leads').update({ status: 'Hired' }).eq('id', person.id);
       }
     }
 
-    // בדיקה אם כבר משובץ
-    if (assignedWorkers.find(a => a.worker_id === workerId)) { alert('העובד כבר משובץ למשמרת זו'); return; }
+    // בדיקה אם כבר משובץ למשמרת הזו
+    if (assignedWorkers.find(a => a.worker_id === workerId)) {
+        alert('העובד כבר משובץ למשמרת זו');
+        return;
+    }
 
-    // שיבוץ
+    // ביצוע השיבוץ
     const { error } = await supabase.from('campaign_assignments').insert([{
       demand_unit_id: unitId, worker_id: workerId, status: 'Matched'
     }]);
 
     if (!error) {
-      setWorkerSearchTerm('');
-      fetchAssignedWorkers(unitId);
+      setWorkerSearchTerm(''); // ניקוי שורת החיפוש
+      fetchAssignedWorkers(unitId); // רענון הרשימה
     } else {
       alert('שגיאה בשיבוץ: ' + error.message);
     }
   };
 
-  // --- אקסל ---
+  // --- קוד אקסל וניהול המודאל (ללא שינוי מהותי) ---
   const handleExcelUpload = async (e: any) => {
     const file = e.target.files[0];
     if (!file) return;
-
     setImporting(true);
     const reader = new FileReader();
-
     reader.onload = async (evt: any) => {
       try {
         const bstr = evt.target.result;
@@ -178,28 +188,28 @@ export default function ExtrasPage() {
         let successCount = 0;
 
         for (let i = 1; i < data.length; i++) {
-          const row = data[i];
-          if (!row || row.length === 0) continue;
-          const name = row[0];
-          let phone = row[1];
-          if (!name || !phone) continue;
+            const row = data[i];
+            if (!row || row.length === 0) continue;
+            const name = row[0];
+            let phone = row[1];
+            if (!name || !phone) continue;
 
-          phone = phone.toString().replace(/[^0-9]/g, '');
-          if (phone.startsWith('972')) phone = '0' + phone.slice(3);
-          if (!phone.startsWith('0')) phone = '0' + phone;
+            phone = phone.toString().replace(/[^0-9]/g, '');
+            if (phone.startsWith('972')) phone = '0' + phone.slice(3);
+            if (!phone.startsWith('0')) phone = '0' + phone;
 
-          let { data: existingWorker } = await supabase.from('workers').select('id').eq('phone', phone).single();
-          let workerId = existingWorker?.id;
+            let { data: existingWorker } = await supabase.from('workers').select('id').eq('phone', phone).single();
+            let workerId = existingWorker?.id;
 
-          if (!workerId) {
-            const { data: newWorker } = await supabase.from('workers').insert([{ full_name: name, phone: phone, status: 'Active' }]).select().single();
-            if (newWorker) workerId = newWorker.id;
-          }
+            if (!workerId) {
+                const { data: newWorker } = await supabase.from('workers').insert([{ full_name: name, phone: phone, status: 'Active' }]).select().single();
+                if (newWorker) workerId = newWorker.id;
+            }
 
-          if (workerId) {
-            const { error: assignError } = await supabase.from('campaign_assignments').insert([{ demand_unit_id: unitId, worker_id: workerId, status: 'Matched' }]);
-            if (!assignError) successCount++;
-          }
+            if (workerId) {
+                const { error: assignError } = await supabase.from('campaign_assignments').insert([{ demand_unit_id: unitId, worker_id: workerId, status: 'Matched' }]);
+                if (!assignError) successCount++;
+            }
         }
         alert(`הפעולה הסתיימה! ${successCount} עובדים נקלטו.`);
         fetchAssignedWorkers(unitId);
@@ -383,8 +393,8 @@ export default function ExtrasPage() {
                       <div>
                         <div className="flex items-center gap-2">
                            <div className="font-bold text-sm">{person.full_name}</div>
-                           {/* תווית אם זה ליד */}
-                           {person.type === 'Candidate' && <span className="text-[10px] bg-blue-100 text-blue-600 px-1.5 rounded font-bold">מועמד</span>}
+                           {/* תווית כחולה אם זה ליד */}
+                           {person.type === 'Lead' && <span className="text-[10px] bg-blue-100 text-blue-600 px-1.5 rounded font-bold">ליד</span>}
                         </div>
                         <div className="text-xs text-gray-500">{person.phone}</div>
                       </div>
@@ -425,9 +435,10 @@ export default function ExtrasPage() {
         </div>
       )}
 
+      {/* Campaign Modal */}
       {isCampModalOpen && (
          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-             <div className="bg-white p-6 rounded-lg w-full max-w-md">
+            <div className="bg-white p-6 rounded-lg w-full max-w-md">
                 <h3 className="text-lg font-bold mb-4">ניהול פרויקט</h3>
                 <input className="w-full border p-2 mb-2 rounded" placeholder="שם" value={campFormData.name} onChange={e => setCampFormData({...campFormData, name: e.target.value})} />
                 <div className="flex gap-2 mb-4">
