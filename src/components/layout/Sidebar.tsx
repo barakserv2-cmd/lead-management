@@ -8,7 +8,7 @@ const NAV_ITEMS = [
   { href: "/clients", label: "לקוחות", icon: "🏢" },
   { href: "/jobs", label: "משרות", icon: "📋" },
   { href: "/leads", label: "לידים", icon: "👥" },
-  { href: "/campaigns", label: "קמפיינים", icon: "📣" },
+  { href: "/campaigns", label: "אקסטרות", icon: "📅" },
   { href: "/settings", label: "הגדרות", icon: "⚙️" },
 ];
 
