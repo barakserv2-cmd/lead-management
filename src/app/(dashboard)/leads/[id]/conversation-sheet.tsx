@@ -10,16 +10,13 @@ import {
   SheetDescription,
 } from "@/components/ui/sheet";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
+import QuickActionsPanel from "@/components/ui/quick-actions-panel";
 import type {
   Lead,
   InteractionLog,
   Reminder,
   InteractionType,
   InteractionOutcome,
-  ReminderPriority,
 } from "@/types/leads";
 import {
   INTERACTION_TYPES,
@@ -28,9 +25,7 @@ import {
 } from "@/lib/constants";
 import {
   getInteractionLogs,
-  createInteractionLog,
   getActiveReminders,
-  createReminder,
   completeReminder,
 } from "../actions";
 
@@ -166,8 +161,6 @@ interface ConversationSheetProps {
   mode: "call" | "whatsapp";
 }
 
-type ActiveForm = null | "log" | "reminder";
-
 export function ConversationSheet({
   open,
   onOpenChange,
@@ -180,41 +173,12 @@ export function ConversationSheet({
   const [loadingLogs, setLoadingLogs] = useState(false);
   const [loadingReminders, setLoadingReminders] = useState(false);
 
-  // Active form state — only one form visible at a time
-  const [activeForm, setActiveForm] = useState<ActiveForm>(null);
-
-  // Log micro-form state
-  const defaultType: InteractionType = mode === "whatsapp" ? "whatsapp" : "call_out";
-  const [logType, setLogType] = useState<InteractionType>(defaultType);
-  const [logOutcome, setLogOutcome] = useState<InteractionOutcome>("other");
-  const [logNotes, setLogNotes] = useState("");
-  const [savingLog, setSavingLog] = useState(false);
-
-  // Reminder form state
-  const [reminderTitle, setReminderTitle] = useState("");
-  const [reminderDate, setReminderDate] = useState("");
-  const [reminderPriority, setReminderPriority] = useState<ReminderPriority>("normal");
-  const [savingReminder, setSavingReminder] = useState(false);
-
-  // Reset form defaults when mode changes
-  useEffect(() => {
-    setLogType(mode === "whatsapp" ? "whatsapp" : "call_out");
-  }, [mode]);
-
   // Fetch data when sheet opens
   useEffect(() => {
     if (!open) return;
     fetchLogs();
     fetchReminders();
-    // Reset forms on open
-    setActiveForm(null);
-    setLogNotes("");
-    setLogOutcome("other");
-    setLogType(mode === "whatsapp" ? "whatsapp" : "call_out");
-    setReminderTitle("");
-    setReminderDate("");
-    setReminderPriority("normal");
-  }, [open, lead.id, mode]);
+  }, [open, lead.id]);
 
   async function fetchLogs() {
     setLoadingLogs(true);
@@ -230,41 +194,6 @@ export function ConversationSheet({
     setLoadingReminders(false);
   }
 
-  async function handleSaveLog() {
-    setSavingLog(true);
-    const result = await createInteractionLog(lead.id, logType, logOutcome, logNotes);
-    setSavingLog(false);
-    if (result.error) {
-      toast.error("שגיאה בשמירת האינטראקציה");
-    } else {
-      toast.success("אינטראקציה נשמרה!");
-      setActiveForm(null);
-      setLogNotes("");
-      setLogOutcome("other");
-      fetchLogs();
-    }
-  }
-
-  async function handleSaveReminder() {
-    if (!reminderTitle.trim() || !reminderDate) {
-      toast.error("נא למלא כותרת ותאריך");
-      return;
-    }
-    setSavingReminder(true);
-    const result = await createReminder(lead.id, reminderTitle.trim(), reminderDate, reminderPriority);
-    setSavingReminder(false);
-    if (result.error) {
-      toast.error("שגיאה בשמירת התזכורת");
-    } else {
-      toast.success("תזכורת נשמרה!");
-      setActiveForm(null);
-      setReminderTitle("");
-      setReminderDate("");
-      setReminderPriority("normal");
-      fetchReminders();
-    }
-  }
-
   async function handleCompleteReminder(id: string) {
     const result = await completeReminder(id);
     if (result.error) {
@@ -272,6 +201,11 @@ export function ConversationSheet({
     } else {
       fetchReminders();
     }
+  }
+
+  function handleActionComplete() {
+    fetchLogs();
+    fetchReminders();
   }
 
   // Derived values
@@ -447,220 +381,8 @@ export function ConversationSheet({
           </section>
         </div>
 
-        {/* ═══ 5. QUICK ACTIONS + FORMS (sticky bottom) ═══════ */}
-        <div className="flex-shrink-0 border-t bg-gray-50">
-
-          {/* ── Expanded: Log Micro-Form ──────────────────── */}
-          {activeForm === "log" && (
-            <div className="px-4 pt-3 pb-4 border-b bg-white space-y-2.5">
-              <div className="flex items-center justify-between mb-1">
-                <span className="text-xs font-bold text-gray-700">תיעוד מהיר</span>
-                <button type="button" onClick={() => setActiveForm(null)} className="text-gray-400 hover:text-gray-600">
-                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4">
-                    <path d="M18 6 6 18" /><path d="m6 6 12 12" />
-                  </svg>
-                </button>
-              </div>
-              {/* Row 1: Type + Outcome side-by-side (fast selection) */}
-              <div className="flex gap-2">
-                <div className="flex-1">
-                  <div className="flex gap-1">
-                    {(Object.entries(INTERACTION_TYPES) as [InteractionType, string][]).map(([k, v]) => (
-                      <button
-                        key={k}
-                        type="button"
-                        onClick={() => setLogType(k)}
-                        className={`flex-1 text-[11px] rounded-md border px-1 py-1.5 font-medium transition-colors ${
-                          logType === k
-                            ? "bg-blue-600 text-white border-blue-600"
-                            : "bg-white text-gray-600 border-gray-200 hover:border-gray-300"
-                        }`}
-                      >
-                        {v}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              </div>
-              {/* Row 2: Outcome chips */}
-              <div className="flex gap-1">
-                {(Object.entries(INTERACTION_OUTCOMES) as [InteractionOutcome, string][]).map(([k, v]) => (
-                  <button
-                    key={k}
-                    type="button"
-                    onClick={() => setLogOutcome(k)}
-                    className={`flex-1 text-[11px] rounded-md border px-1 py-1.5 font-medium transition-colors ${
-                      logOutcome === k
-                        ? k === "complaint"
-                          ? "bg-red-600 text-white border-red-600"
-                          : "bg-blue-600 text-white border-blue-600"
-                        : "bg-white text-gray-600 border-gray-200 hover:border-gray-300"
-                    }`}
-                  >
-                    {v}
-                  </button>
-                ))}
-              </div>
-              {/* Row 3: Notes (optional) + Save */}
-              <Textarea
-                value={logNotes}
-                onChange={(e) => setLogNotes(e.target.value)}
-                rows={2}
-                className="resize-none text-xs"
-                placeholder="הערות קצרות (אופציונלי)..."
-              />
-              <Button
-                size="sm"
-                onClick={handleSaveLog}
-                disabled={savingLog}
-                className="w-full"
-              >
-                {savingLog ? "שומר..." : "שמור אינטראקציה"}
-              </Button>
-            </div>
-          )}
-
-          {/* ── Expanded: Reminder Form ───────────────────── */}
-          {activeForm === "reminder" && (
-            <div className="px-4 pt-3 pb-4 border-b bg-white space-y-2.5">
-              <div className="flex items-center justify-between mb-1">
-                <span className="text-xs font-bold text-gray-700">תזכורת חדשה</span>
-                <button type="button" onClick={() => setActiveForm(null)} className="text-gray-400 hover:text-gray-600">
-                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4">
-                    <path d="M18 6 6 18" /><path d="m6 6 12 12" />
-                  </svg>
-                </button>
-              </div>
-              <Input
-                value={reminderTitle}
-                onChange={(e) => setReminderTitle(e.target.value)}
-                placeholder="כותרת תזכורת..."
-                className="text-xs"
-              />
-              <div className="flex gap-2">
-                <Input
-                  type="date"
-                  value={reminderDate}
-                  onChange={(e) => setReminderDate(e.target.value)}
-                  className="text-xs flex-1"
-                  dir="ltr"
-                />
-                <div className="flex gap-1">
-                  <button
-                    type="button"
-                    onClick={() => setReminderPriority("normal")}
-                    className={`text-[11px] rounded-md border px-3 py-1.5 font-medium transition-colors ${
-                      reminderPriority === "normal"
-                        ? "bg-blue-600 text-white border-blue-600"
-                        : "bg-white text-gray-600 border-gray-200"
-                    }`}
-                  >
-                    {REMINDER_PRIORITIES.normal}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setReminderPriority("high")}
-                    className={`text-[11px] rounded-md border px-3 py-1.5 font-medium transition-colors ${
-                      reminderPriority === "high"
-                        ? "bg-red-600 text-white border-red-600"
-                        : "bg-white text-gray-600 border-gray-200"
-                    }`}
-                  >
-                    {REMINDER_PRIORITIES.high}
-                  </button>
-                </div>
-              </div>
-              <Button
-                size="sm"
-                onClick={handleSaveReminder}
-                disabled={savingReminder}
-                className="w-full"
-              >
-                {savingReminder ? "שומר..." : "שמור תזכורת"}
-              </Button>
-            </div>
-          )}
-
-          {/* ── 5. Quick Action Button Grid ───────────────── */}
-          <div className="grid grid-cols-3 gap-2 px-4 py-3">
-            {/* Log Interaction */}
-            <button
-              type="button"
-              onClick={() => setActiveForm(activeForm === "log" ? null : "log")}
-              className={`flex flex-col items-center gap-1.5 rounded-lg border p-3 text-xs font-medium transition-colors ${
-                activeForm === "log"
-                  ? "bg-blue-600 text-white border-blue-600"
-                  : "bg-white text-gray-700 border-gray-200 hover:bg-blue-50 hover:border-blue-200"
-              }`}
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5">
-                <rect width="8" height="4" x="8" y="2" rx="1" ry="1" />
-                <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2" />
-                <path d="M9 14h6" /><path d="M12 11v6" />
-              </svg>
-              תיעוד
-            </button>
-
-            {/* Set Reminder */}
-            <button
-              type="button"
-              onClick={() => setActiveForm(activeForm === "reminder" ? null : "reminder")}
-              className={`flex flex-col items-center gap-1.5 rounded-lg border p-3 text-xs font-medium transition-colors ${
-                activeForm === "reminder"
-                  ? "bg-blue-600 text-white border-blue-600"
-                  : "bg-white text-gray-700 border-gray-200 hover:bg-blue-50 hover:border-blue-200"
-              }`}
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5">
-                <path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9" />
-                <path d="M10.3 21a1.94 1.94 0 0 0 3.4 0" />
-              </svg>
-              תזכורת
-            </button>
-
-            {/* New Job */}
-            <button
-              type="button"
-              disabled
-              className="flex flex-col items-center gap-1.5 rounded-lg border p-3 text-xs font-medium bg-white text-gray-400 border-gray-200 opacity-60 cursor-not-allowed"
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5">
-                <path d="M16 20V4a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16" />
-                <rect width="20" height="14" x="2" y="6" rx="2" />
-              </svg>
-              משרה
-            </button>
-
-            {/* Send Candidates */}
-            <button
-              type="button"
-              disabled
-              className="flex flex-col items-center gap-1.5 rounded-lg border p-3 text-xs font-medium bg-white text-gray-400 border-gray-200 opacity-60 cursor-not-allowed"
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5">
-                <path d="M18 21a8 8 0 0 0-16 0" /><circle cx="10" cy="8" r="5" />
-                <path d="M22 20c0-3.37-2-6.5-4-8a5 5 0 0 0-.45-8.3" />
-              </svg>
-              שלח מועמדים
-            </button>
-
-            {/* Flag Issue — Red */}
-            <button
-              type="button"
-              onClick={() => {
-                setActiveForm("log");
-                setLogOutcome("complaint");
-              }}
-              className="flex flex-col items-center gap-1.5 rounded-lg border p-3 text-xs font-medium bg-white text-red-600 border-red-200 hover:bg-red-50 transition-colors col-span-2"
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5">
-                <path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z" />
-                <line x1="4" x2="4" y1="22" y2="15" />
-              </svg>
-              דיווח תקלה
-            </button>
-          </div>
-        </div>
+        {/* ═══ 5. QUICK ACTIONS PANEL (sticky bottom) ═════════ */}
+        <QuickActionsPanel clientId={lead.id} onActionComplete={handleActionComplete} />
 
       </SheetContent>
     </Sheet>
