@@ -2,8 +2,8 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { createClient } from '@/lib/supabase/client';
-import { Calendar, PlusCircle, X, Pencil, Trash2, Search, UserPlus, CheckCircle, Clock, AlertTriangle, MapPin, Upload, FileSpreadsheet } from 'lucide-react';
-import * as XLSX from 'xlsx'; // ספריית האקסל
+import { Calendar, PlusCircle, X, Pencil, Trash2, Search, UserPlus, CheckCircle, Clock, AlertTriangle, MapPin, Upload, FileSpreadsheet, User } from 'lucide-react';
+import * as XLSX from 'xlsx';
 
 export default function ExtrasPage() {
   const supabase = createClient();
@@ -30,24 +30,53 @@ export default function ExtrasPage() {
   const [campFormData, setCampFormData] = useState({ name: '', start_date: '', end_date: '' });
 
   const [loading, setLoading] = useState(false);
-  const [importing, setImporting] = useState(false); // סטייט לטעינת אקסל
+  const [importing, setImporting] = useState(false);
 
   // --- Init ---
   useEffect(() => { fetchCampaignsAndClients(); }, []);
   useEffect(() => { if (selectedCampaign) fetchMatrix(); }, [selectedCampaign]);
 
-  // --- Search Logic ---
+  // --- לוגיקת חיפוש משולבת (עובדים + לידים) ---
   useEffect(() => {
-    const searchWorkers = async () => {
+    const searchAll = async () => {
       if (workerSearchTerm.length < 2) { setSearchResults([]); return; }
-      const { data } = await supabase
+
+      // 1. חיפוש עובדים קיימים
+      const { data: workers } = await supabase
         .from('workers')
-        .select('*')
+        .select('id, full_name, phone')
         .ilike('full_name', `%${workerSearchTerm}%`)
         .limit(5);
-      if (data) setSearchResults(data);
+
+      // 2. חיפוש לידים/מועמדים
+      const { data: candidates } = await supabase
+        .from('candidates')
+        .select('id, name, phone') // שים לב: בטבלה השם הוא 'name'
+        .ilike('name', `%${workerSearchTerm}%`)
+        .limit(5);
+
+      // 3. איחוד התוצאות
+      const formattedWorkers = (workers || []).map(w => ({ ...w, type: 'Worker' }));
+
+      const formattedCandidates = (candidates || []).map(c => ({
+        id: c.id,
+        full_name: c.name, // נרמול השם שיהיה אחיד
+        phone: c.phone,
+        type: 'Candidate' // תווית מזהה
+      }));
+
+      // סינון כפילויות (אם ליד כבר הפך לעובד, נציג רק את העובד)
+      const combined = [...formattedWorkers];
+      formattedCandidates.forEach(c => {
+        if (!combined.find(w => w.phone === c.phone)) {
+          combined.push(c);
+        }
+      });
+
+      setSearchResults(combined);
     };
-    const timeoutId = setTimeout(searchWorkers, 300);
+
+    const timeoutId = setTimeout(searchAll, 300);
     return () => clearTimeout(timeoutId);
   }, [workerSearchTerm]);
 
@@ -82,7 +111,53 @@ export default function ExtrasPage() {
     if (data) setAssignedWorkers(data);
   }
 
-  // --- לוגיקת האקסל ---
+  // --- שיבוץ חכם (כולל המרת ליד לעובד) ---
+  const handleAssignPerson = async (person: any) => {
+    let unitId = editingCell.id;
+    if (!unitId) unitId = await handleSaveUnitSettings();
+
+    let workerId = person.id;
+
+    // אם זה ליד (Candidate), קודם כל ניצור אותו כעובד
+    if (person.type === 'Candidate') {
+      // בדיקה אם הוא כבר קיים כעובד (לפי טלפון) כדי למנוע כפילות
+      const { data: existing } = await supabase.from('workers').select('id').eq('phone', person.phone).single();
+
+      if (existing) {
+        workerId = existing.id;
+      } else {
+        // יצירת עובד חדש מהליד
+        const { data: newWorker, error: createError } = await supabase
+          .from('workers')
+          .insert([{ full_name: person.full_name, phone: person.phone, status: 'Active' }])
+          .select()
+          .single();
+
+        if (createError) { alert('שגיאה ביצירת עובד: ' + createError.message); return; }
+        workerId = newWorker.id;
+
+        // אופציונלי: עדכון סטטוס הליד ל-"Hired"
+        await supabase.from('candidates').update({ status: 'Hired' }).eq('id', person.id);
+      }
+    }
+
+    // בדיקה אם כבר משובץ
+    if (assignedWorkers.find(a => a.worker_id === workerId)) { alert('העובד כבר משובץ למשמרת זו'); return; }
+
+    // שיבוץ
+    const { error } = await supabase.from('campaign_assignments').insert([{
+      demand_unit_id: unitId, worker_id: workerId, status: 'Matched'
+    }]);
+
+    if (!error) {
+      setWorkerSearchTerm('');
+      fetchAssignedWorkers(unitId);
+    } else {
+      alert('שגיאה בשיבוץ: ' + error.message);
+    }
+  };
+
+  // --- אקסל ---
   const handleExcelUpload = async (e: any) => {
     const file = e.target.files[0];
     if (!file) return;
@@ -96,94 +171,44 @@ export default function ExtrasPage() {
         const wb = XLSX.read(bstr, { type: 'binary' });
         const wsname = wb.SheetNames[0];
         const ws = wb.Sheets[wsname];
-
-        // המרה למערך של שורות
         const data: any[][] = XLSX.utils.sheet_to_json(ws, { header: 1 });
-
-        console.log("Raw Excel Data:", data); // נראה מה המחשב רואה ב-F12
 
         let unitId = editingCell.id;
         if (!unitId) unitId = await handleSaveUnitSettings();
-
         let successCount = 0;
 
-        // שינוי: מתחילים מ-1 (מדלגים על כותרת).
-        // אם אין לך כותרות באקסל, שנה את זה ל: let i = 0
         for (let i = 1; i < data.length; i++) {
           const row = data[i];
-          if (!row || row.length === 0) continue; // דילוג על שורות ריקות
+          if (!row || row.length === 0) continue;
+          const name = row[0];
+          let phone = row[1];
+          if (!name || !phone) continue;
 
-          const name = row[0]; // עמודה A
-          let phone = row[1];  // עמודה B
+          phone = phone.toString().replace(/[^0-9]/g, '');
+          if (phone.startsWith('972')) phone = '0' + phone.slice(3);
+          if (!phone.startsWith('0')) phone = '0' + phone;
 
-          // בדיקה אם השורה ריקה
-          if (!name || !phone) {
-             console.log(`Skipping row ${i}: Missing name or phone`, row);
-             continue;
-          }
-
-          // ניקוי ופירמוט טלפון (קריטי באקסל!)
-          phone = phone.toString().replace(/[^0-9]/g, ''); // משאיר רק מספרים
-          if (phone.startsWith('972')) phone = '0' + phone.slice(3); // תיקון קידומת בינ"ל
-          if (!phone.startsWith('0')) phone = '0' + phone; // הוספת 0 אם חסר
-
-          console.log(`Processing: ${name} - ${phone}`);
-
-          // 1. מציאת/יצירת עובד
-          let { data: existingWorker } = await supabase
-            .from('workers')
-            .select('id')
-            .eq('phone', phone)
-            .single();
-
+          let { data: existingWorker } = await supabase.from('workers').select('id').eq('phone', phone).single();
           let workerId = existingWorker?.id;
 
           if (!workerId) {
-            const { data: newWorker, error: createError } = await supabase
-              .from('workers')
-              .insert([{ full_name: name, phone: phone, status: 'Active' }])
-              .select()
-              .single();
-
-            if (createError) {
-              console.error("Error creating worker:", createError);
-              continue;
-            }
-            workerId = newWorker.id;
+            const { data: newWorker } = await supabase.from('workers').insert([{ full_name: name, phone: phone, status: 'Active' }]).select().single();
+            if (newWorker) workerId = newWorker.id;
           }
 
-          // 2. שיבוץ
           if (workerId) {
-            // בדיקת כפילות לפני שיבוץ למניעת שגיאות
-            const { error: assignError } = await supabase
-              .from('campaign_assignments')
-              .insert([{
-                demand_unit_id: unitId,
-                worker_id: workerId,
-                status: 'Matched'
-              }]);
-
+            const { error: assignError } = await supabase.from('campaign_assignments').insert([{ demand_unit_id: unitId, worker_id: workerId, status: 'Matched' }]);
             if (!assignError) successCount++;
-            else console.log("Assign error (maybe duplicate):", assignError.message);
           }
         }
-
-        alert(`הפעולה הסתיימה! ${successCount} עובדים נקלטו בהצלחה מתוך ${data.length - 1} שורות.`);
+        alert(`הפעולה הסתיימה! ${successCount} עובדים נקלטו.`);
         fetchAssignedWorkers(unitId);
-
-      } catch (error) {
-        console.error("Excel Error:", error);
-        alert('שגיאה בקריאת הקובץ. בדוק ב-Console (F12) לפרטים.');
-      } finally {
-        setImporting(false);
-        if (fileInputRef.current) fileInputRef.current.value = '';
-      }
+      } catch (error) { console.error("Excel Error:", error); alert('שגיאה באקסל'); }
+      finally { setImporting(false); if(fileInputRef.current) fileInputRef.current.value = ''; }
     };
-
     reader.readAsBinaryString(file);
   };
 
-  // --- שאר הלוגיקה (זהה לקודם) ---
   const handleCellClick = async (client: any, date: string, existingData: any) => {
     setEditingCell({ client, date, id: existingData?.id });
     if (existingData) {
@@ -217,23 +242,8 @@ export default function ExtrasPage() {
     return newUnitId;
   };
 
-  const handleAssignWorker = async (worker: any) => {
-    let unitId = editingCell.id;
-    if (!unitId) unitId = await handleSaveUnitSettings();
-
-    if (assignedWorkers.find(a => a.worker_id === worker.id)) { alert('עובד כבר משובץ'); return; }
-
-    const { error } = await supabase.from('campaign_assignments').insert([{
-      demand_unit_id: unitId, worker_id: worker.id, status: 'Matched'
-    }]);
-
-    if (!error) { setWorkerSearchTerm(''); fetchAssignedWorkers(unitId); }
-  };
-
   const handleStatusChange = async (assignmentId: string, newStatus: string) => {
-    const { error } = await supabase.rpc('transition_assignment_status', {
-      p_assignment_id: assignmentId, p_new_status: newStatus
-    });
+    const { error } = await supabase.rpc('transition_assignment_status', { p_assignment_id: assignmentId, p_new_status: newStatus });
     if (!error) fetchAssignedWorkers(editingCell.id);
   };
 
@@ -266,7 +276,6 @@ export default function ExtrasPage() {
     return dates;
   };
 
-  // Render Logic...
   if (!selectedCampaign) return <div className="p-10 text-center">טוען...</div>;
   const dates = getDatesInRange(selectedCampaign.start_date, selectedCampaign.end_date);
 
@@ -280,17 +289,8 @@ export default function ExtrasPage() {
           <div><h1 className="text-2xl font-bold">{selectedCampaign.name}</h1></div>
         </div>
         <div className="flex gap-2">
-            <button
-                onClick={() => { setCampFormData({ name: '', start_date: '', end_date: '' }); setSelectedCampaign(null); setIsCampModalOpen(true); }}
-                className="bg-purple-600 text-white px-4 py-2 rounded-lg font-bold hover:bg-purple-700 flex items-center gap-2"
-            >
-                <PlusCircle size={18} /> פרויקט חדש
-            </button>
-            <select
-              className="border rounded p-2 bg-gray-50"
-              value={selectedCampaign.id}
-              onChange={(e) => { const c = campaigns.find(x => x.id === e.target.value); if(c) setSelectedCampaign(c); }}
-            >
+            <button onClick={() => { setCampFormData({ name: '', start_date: '', end_date: '' }); setSelectedCampaign(null); setIsCampModalOpen(true); }} className="bg-purple-600 text-white px-4 py-2 rounded-lg font-bold hover:bg-purple-700 flex items-center gap-2"><PlusCircle size={18} /> פרויקט חדש</button>
+            <select className="border rounded p-2 bg-gray-50" value={selectedCampaign.id} onChange={(e) => { const c = campaigns.find(x => x.id === e.target.value); if(c) setSelectedCampaign(c); }}>
               {campaigns.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
             </select>
         </div>
@@ -322,15 +322,10 @@ export default function ExtrasPage() {
                   const unit = matrix[key];
                   const isFull = unit && unit.filled_count >= unit.quantity;
                   return (
-                    <td
-                      key={key} onClick={() => handleCellClick(client, date, unit)}
-                      className={`p-1 border-b border-l cursor-pointer h-20 transition-colors ${unit ? (isFull ? 'bg-green-50' : 'bg-orange-50') : 'hover:bg-gray-100'}`}
-                    >
+                    <td key={key} onClick={() => handleCellClick(client, date, unit)} className={`p-1 border-b border-l cursor-pointer h-20 transition-colors ${unit ? (isFull ? 'bg-green-50' : 'bg-orange-50') : 'hover:bg-gray-100'}`}>
                       {unit ? (
                         <div className="flex flex-col items-center justify-center h-full">
-                          <span className={`font-bold text-xl ${isFull ? 'text-green-700' : 'text-orange-600'}`}>
-                            {unit.filled_count}/{unit.quantity}
-                          </span>
+                          <span className={`font-bold text-xl ${isFull ? 'text-green-700' : 'text-orange-600'}`}>{unit.filled_count}/{unit.quantity}</span>
                           <span className="text-[10px] text-gray-600">{unit.role}</span>
                         </div>
                       ) : <PlusCircle className="mx-auto w-6 h-6 opacity-0 hover:opacity-40 text-gray-400" />}
@@ -343,19 +338,17 @@ export default function ExtrasPage() {
         </table>
       </div>
 
-      {/* --- MODAL 2: שיבוץ כוח אדם --- */}
+      {/* --- MODAL: שיבוץ כוח אדם --- */}
       {isUnitModalOpen && editingCell && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4 animate-in fade-in">
           <div className="bg-white rounded-xl shadow-2xl w-full max-w-4xl h-[80vh] flex overflow-hidden">
 
-            {/* SIDEBAR */}
             <div className="w-1/3 bg-gray-50 border-l p-6 flex flex-col gap-6">
               <div>
                 <h3 className="font-bold text-lg text-gray-800 mb-1">{editingCell.client.name}</h3>
                 <p className="text-sm text-gray-500">{new Date(editingCell.date).toLocaleDateString('he-IL', { weekday: 'long', day: 'numeric', month: 'long' })}</p>
               </div>
 
-              {/* SETTINGS FORM */}
               <div className="space-y-3 bg-white p-4 rounded-lg border shadow-sm">
                 <div>
                    <label className="text-xs font-bold text-gray-500 uppercase">תפקיד</label>
@@ -370,41 +363,39 @@ export default function ExtrasPage() {
                 <button onClick={handleSaveUnitSettings} className="w-full mt-2 py-1.5 bg-gray-800 text-white text-sm rounded hover:bg-black">עדכן דרישה</button>
               </div>
 
-              {/* EXCEL UPLOAD (NEW!) */}
               <div className="bg-green-50 p-4 rounded-lg border border-green-200">
                 <label className="text-xs font-bold text-green-700 uppercase mb-2 block">קליטה קיבוצית (אקסל)</label>
-                <p className="text-[10px] text-green-600 mb-2">פורמט: שם מלא (עמודה A), טלפון (עמודה B)</p>
                 <div className="flex gap-2">
-                  <button
-                    onClick={() => fileInputRef.current?.click()}
-                    disabled={importing}
-                    className="flex-1 bg-green-600 text-white py-2 rounded hover:bg-green-700 flex items-center justify-center gap-2 text-sm font-bold shadow-sm"
-                  >
-                    {importing ? 'טוען...' : <><FileSpreadsheet size={16} /> טען קובץ</>}
-                  </button>
+                  <button onClick={() => fileInputRef.current?.click()} disabled={importing} className="flex-1 bg-green-600 text-white py-2 rounded hover:bg-green-700 flex items-center justify-center gap-2 text-sm font-bold shadow-sm">{importing ? 'טוען...' : <><FileSpreadsheet size={16} /> טען קובץ</>}</button>
                   <input type="file" ref={fileInputRef} hidden accept=".xlsx,.xls" onChange={handleExcelUpload} />
                 </div>
               </div>
 
-              {/* SEARCH */}
               <div className="flex-1 flex flex-col mt-2">
-                <label className="text-xs font-bold text-gray-500 uppercase mb-2">חיפוש פרטני</label>
+                <label className="text-xs font-bold text-gray-500 uppercase mb-2">חיפוש (עובדים + לידים)</label>
                 <div className="relative">
                   <Search className="absolute right-3 top-2.5 text-gray-400" size={16} />
                   <input type="text" placeholder="חפש שם..." className="w-full pl-3 pr-9 py-2 border rounded-lg outline-none focus:ring-2 focus:ring-purple-500" value={workerSearchTerm} onChange={(e) => setWorkerSearchTerm(e.target.value)} />
                 </div>
                 <div className="mt-2 flex-1 overflow-y-auto space-y-2">
-                  {searchResults.map(worker => (
-                    <div key={worker.id} className="flex justify-between items-center p-3 bg-white border rounded-lg hover:border-purple-300 shadow-sm">
-                      <div><div className="font-bold text-sm">{worker.full_name}</div><div className="text-xs text-gray-500">{worker.phone}</div></div>
-                      <button onClick={() => handleAssignWorker(worker)} className="bg-purple-50 text-purple-700 p-1.5 rounded-full hover:bg-purple-600 hover:text-white"><UserPlus size={18} /></button>
+                  {searchResults.map(person => (
+                    <div key={person.id} className="flex justify-between items-center p-3 bg-white border rounded-lg hover:border-purple-300 shadow-sm">
+                      <div>
+                        <div className="flex items-center gap-2">
+                           <div className="font-bold text-sm">{person.full_name}</div>
+                           {/* תווית אם זה ליד */}
+                           {person.type === 'Candidate' && <span className="text-[10px] bg-blue-100 text-blue-600 px-1.5 rounded font-bold">מועמד</span>}
+                        </div>
+                        <div className="text-xs text-gray-500">{person.phone}</div>
+                      </div>
+                      <button onClick={() => handleAssignPerson(person)} className="bg-purple-50 text-purple-700 p-1.5 rounded-full hover:bg-purple-600 hover:text-white"><UserPlus size={18} /></button>
                     </div>
                   ))}
+                  {workerSearchTerm.length > 1 && searchResults.length === 0 && <div className="text-center text-sm text-gray-400 mt-4">לא נמצאו תוצאות</div>}
                 </div>
               </div>
             </div>
 
-            {/* MAIN CONTENT */}
             <div className="w-2/3 p-6 flex flex-col">
               <div className="flex justify-between items-center mb-4">
                 <h3 className="font-bold text-xl">משובצים ({assignedWorkers.length}/{unitFormData.quantity})</h3>
@@ -425,7 +416,6 @@ export default function ExtrasPage() {
                         <td className="py-3"><button onClick={() => { if(confirm('למחוק?')) supabase.from('campaign_assignments').delete().eq('id', assignment.id).then(() => fetchAssignedWorkers(editingCell.id)); }} className="text-red-400 hover:text-red-600"><Trash2 size={16} /></button></td>
                       </tr>
                     ))}
-                    {assignedWorkers.length === 0 && <tr><td colSpan={4} className="py-10 text-center text-gray-400">השתמש בייבוא אקסל או בחיפוש להוספת עובדים</td></tr>}
                   </tbody>
                 </table>
               </div>
@@ -435,10 +425,9 @@ export default function ExtrasPage() {
         </div>
       )}
 
-      {/* Modal לקמפיין */}
       {isCampModalOpen && (
          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-            <div className="bg-white p-6 rounded-lg w-full max-w-md">
+             <div className="bg-white p-6 rounded-lg w-full max-w-md">
                 <h3 className="text-lg font-bold mb-4">ניהול פרויקט</h3>
                 <input className="w-full border p-2 mb-2 rounded" placeholder="שם" value={campFormData.name} onChange={e => setCampFormData({...campFormData, name: e.target.value})} />
                 <div className="flex gap-2 mb-4">
