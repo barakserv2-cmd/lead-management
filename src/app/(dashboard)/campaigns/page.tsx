@@ -36,50 +36,62 @@ export default function ExtrasPage() {
   useEffect(() => { fetchCampaignsAndClients(); }, []);
   useEffect(() => { if (selectedCampaign) fetchMatrix(); }, [selectedCampaign]);
 
-  // --- לוגיקת חיפוש משולבת (עובדים + לידים) ---
+  // --- לוגיקת חיפוש מתוקנת (עובדים + לידים בלבד) ---
   useEffect(() => {
     const searchAll = async () => {
-      if (workerSearchTerm.length < 2) { setSearchResults([]); return; }
+      // אם אין מספיק תווים, נקה תוצאות
+      if (workerSearchTerm.length < 2) {
+        setSearchResults([]);
+        return;
+      }
+
+      const term = `%${workerSearchTerm}%`;
 
       // 1. חיפוש עובדים קיימים (Workers)
-      const { data: workers } = await supabase
+      const { data: workers, error: workerError } = await supabase
         .from('workers')
         .select('id, full_name, phone')
-        .ilike('full_name', `%${workerSearchTerm}%`)
+        .ilike('full_name', term)
         .limit(5);
 
-      // 2. חיפוש לידים (Leads) - התיקון הוא כאן: שינוי מ-candidates ל-leads
-      const { data: leads } = await supabase
+      // 2. חיפוש לידים (Leads) - הלוח שיש לך במערכת
+      const { data: leads, error: leadError } = await supabase
         .from('leads')
-        .select('id, name, phone') // שים לב: בטבלת לידים השם הוא בדרך כלל 'name'
-        .ilike('name', `%${workerSearchTerm}%`)
+        .select('id, name, phone') // שים לב: בלידים השם הוא בדרך כלל 'name'
+        .ilike('name', term)
         .limit(5);
 
-      // 3. איחוד התוצאות
-      const formattedWorkers = (workers || []).map(w => ({ ...w, type: 'Worker' }));
+      // נרמול ואיחוד התוצאות
+      const allResults: any[] = [];
 
-      const formattedLeads = (leads || []).map(l => ({
-        id: l.id,
-        full_name: l.name, // נרמול השם שיהיה אחיד לממשק
-        phone: l.phone,
-        type: 'Lead' // תווית מזהה חדשה
-      }));
+      // הוספת עובדים
+      if (workers) {
+        workers.forEach(w => allResults.push({
+          id: w.id,
+          full_name: w.full_name,
+          phone: w.phone,
+          type: 'Worker'
+        }));
+      }
 
-      // סינון כפילויות (אם ליד כבר קיים כעובד עם אותו טלפון, נציג רק את העובד)
-      const combined = [...formattedWorkers];
-      formattedLeads.forEach(lead => {
-        // מנקה את הטלפון להשוואה
-        const cleanLeadPhone = lead.phone?.replace(/\D/g, '');
-        const exists = combined.some(w => w.phone?.replace(/\D/g, '') === cleanLeadPhone);
+      // הוספת לידים
+      if (leads) {
+        leads.forEach(l => allResults.push({
+          id: l.id,
+          full_name: l.name, // אנחנו ממפים את name ל-full_name כדי שהממשק יבין
+          phone: l.phone,
+          type: 'Lead'
+        }));
+      }
 
-        if (!exists) {
-          combined.push(lead);
-        }
-      });
+      // סינון כפילויות לפי טלפון
+      // (למשל: אם ליד כבר הפך לעובד, נראה רק את העובד)
+      const uniqueResults = Array.from(new Map(allResults.map(item => [item.phone, item])).values());
 
-      setSearchResults(combined);
+      setSearchResults(uniqueResults);
     };
 
+    // מנגנון Debounce (מחכה שתפסיק להקליד לפני ששולח בקשה)
     const timeoutId = setTimeout(searchAll, 300);
     return () => clearTimeout(timeoutId);
   }, [workerSearchTerm]);
