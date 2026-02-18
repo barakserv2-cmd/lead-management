@@ -82,7 +82,7 @@ export default function ExtrasPage() {
     if (data) setAssignedWorkers(data);
   }
 
-  // --- לוגיקת האקסל החדשה ---
+  // --- לוגיקת האקסל ---
   const handleExcelUpload = async (e: any) => {
     const file = e.target.files[0];
     if (!file) return;
@@ -92,37 +92,44 @@ export default function ExtrasPage() {
 
     reader.onload = async (evt: any) => {
       try {
-        // 1. קריאת הקובץ
         const bstr = evt.target.result;
         const wb = XLSX.read(bstr, { type: 'binary' });
         const wsname = wb.SheetNames[0];
         const ws = wb.Sheets[wsname];
 
-        // המרה ל-JSON (מניח שורה ראשונה כותרות: Name, Phone)
-        const data = XLSX.utils.sheet_to_json(ws, { header: 1 }); // מערך של מערכים
+        // המרה למערך של שורות
+        const data: any[][] = XLSX.utils.sheet_to_json(ws, { header: 1 });
 
-        // מוודאים שיש יחידת דרישה
+        console.log("Raw Excel Data:", data); // נראה מה המחשב רואה ב-F12
+
         let unitId = editingCell.id;
-        if (!unitId) {
-          unitId = await handleSaveUnitSettings();
-        }
+        if (!unitId) unitId = await handleSaveUnitSettings();
 
         let successCount = 0;
 
-        // 2. ריצה על השורות (מדלגים על כותרת שורה 0)
+        // שינוי: מתחילים מ-1 (מדלגים על כותרת).
+        // אם אין לך כותרות באקסל, שנה את זה ל: let i = 0
         for (let i = 1; i < data.length; i++) {
-          const row: any = data[i];
+          const row = data[i];
+          if (!row || row.length === 0) continue; // דילוג על שורות ריקות
+
           const name = row[0]; // עמודה A
-          let phone = row[1]; // עמודה B
+          let phone = row[1];  // עמודה B
 
-          if (!name || !phone) continue;
+          // בדיקה אם השורה ריקה
+          if (!name || !phone) {
+             console.log(`Skipping row ${i}: Missing name or phone`, row);
+             continue;
+          }
 
-          // ניקוי טלפון
-          phone = phone.toString().replace(/\D/g, '');
-          if (!phone.startsWith('0')) phone = '0' + phone; // תיקון פורמט ישראלי אם צריך
+          // ניקוי ופירמוט טלפון (קריטי באקסל!)
+          phone = phone.toString().replace(/[^0-9]/g, ''); // משאיר רק מספרים
+          if (phone.startsWith('972')) phone = '0' + phone.slice(3); // תיקון קידומת בינ"ל
+          if (!phone.startsWith('0')) phone = '0' + phone; // הוספת 0 אם חסר
 
-          // 3. מצא או צור עובד (Upsert Logic)
-          // ננסה למצוא לפי טלפון
+          console.log(`Processing: ${name} - ${phone}`);
+
+          // 1. מציאת/יצירת עובד
           let { data: existingWorker } = await supabase
             .from('workers')
             .select('id')
@@ -131,7 +138,6 @@ export default function ExtrasPage() {
 
           let workerId = existingWorker?.id;
 
-          // אם לא קיים - ניצור חדש
           if (!workerId) {
             const { data: newWorker, error: createError } = await supabase
               .from('workers')
@@ -139,12 +145,16 @@ export default function ExtrasPage() {
               .select()
               .single();
 
-            if (newWorker) workerId = newWorker.id;
+            if (createError) {
+              console.error("Error creating worker:", createError);
+              continue;
+            }
+            workerId = newWorker.id;
           }
 
-          // 4. שיבוץ למשמרת
+          // 2. שיבוץ
           if (workerId) {
-            // בדיקה אם כבר משובץ כדי לא לקבל שגיאה
+            // בדיקת כפילות לפני שיבוץ למניעת שגיאות
             const { error: assignError } = await supabase
               .from('campaign_assignments')
               .insert([{
@@ -154,18 +164,19 @@ export default function ExtrasPage() {
               }]);
 
             if (!assignError) successCount++;
+            else console.log("Assign error (maybe duplicate):", assignError.message);
           }
         }
 
-        alert(`הפעולה הסתיימה! ${successCount} עובדים נקלטו ושובצו בהצלחה.`);
-        fetchAssignedWorkers(unitId); // רענון מסך
+        alert(`הפעולה הסתיימה! ${successCount} עובדים נקלטו בהצלחה מתוך ${data.length - 1} שורות.`);
+        fetchAssignedWorkers(unitId);
 
       } catch (error) {
-        console.error(error);
-        alert('שגיאה בקריאת הקובץ. וודא שהפורמט תקין (שם, טלפון)');
+        console.error("Excel Error:", error);
+        alert('שגיאה בקריאת הקובץ. בדוק ב-Console (F12) לפרטים.');
       } finally {
         setImporting(false);
-        if (fileInputRef.current) fileInputRef.current.value = ''; // איפוס האינפוט
+        if (fileInputRef.current) fileInputRef.current.value = '';
       }
     };
 
