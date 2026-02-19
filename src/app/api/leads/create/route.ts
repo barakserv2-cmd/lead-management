@@ -6,7 +6,7 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json();
-    const { name, phone, role } = body;
+    const { name, phone, role, source } = body;
 
     if (!name) {
       return NextResponse.json(
@@ -44,7 +44,7 @@ export async function POST(request: NextRequest) {
         name,
         phone: phone || null,
         job_title: role || "כללי",
-        source: "אחר",
+        source: source || "אחר",
         status: "חדש",
       })
       .select("id, name, phone, job_title")
