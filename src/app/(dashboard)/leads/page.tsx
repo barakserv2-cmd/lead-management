@@ -45,12 +45,20 @@ export default async function LeadsPage({
           />
         </div>
       </div>
+      <Pagination
+        currentPage={currentPage}
+        totalPages={totalPages}
+        totalCount={totalCount}
+        pageSize={PAGE_SIZE}
+        className="mb-4"
+      />
       <LeadsContent leads={typedLeads} />
       <Pagination
         currentPage={currentPage}
         totalPages={totalPages}
         totalCount={totalCount}
         pageSize={PAGE_SIZE}
+        className="mt-4"
       />
     </div>
   );

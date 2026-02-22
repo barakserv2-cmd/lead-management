@@ -5,11 +5,13 @@ export function Pagination({
   totalPages,
   totalCount,
   pageSize,
+  className = "",
 }: {
   currentPage: number;
   totalPages: number;
   totalCount: number;
   pageSize: number;
+  className?: string;
 }) {
   if (totalPages <= 1) return null;
 
@@ -31,7 +33,7 @@ export function Pagination({
   }
 
   return (
-    <div className="flex items-center justify-between mt-4 bg-white rounded-xl shadow-sm border px-4 py-3">
+    <div className={`flex items-center justify-between bg-white rounded-xl shadow-sm border px-4 py-3 ${className}`}>
       <span className="text-sm text-gray-500">
         {from}–{to} מתוך {totalCount}
       </span>
