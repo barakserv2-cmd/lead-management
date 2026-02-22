@@ -51,6 +51,7 @@ const STATUS_COLORS: Record<string, string> = {
   "מעורב": "bg-cyan-100 text-cyan-800",
   "בסינון": "bg-yellow-100 text-yellow-800",
   "מתאים": "bg-emerald-100 text-emerald-800",
+  "התקבל": "bg-purple-100 text-purple-800",
   "נדחה": "bg-red-100 text-red-800",
 };
 
@@ -205,11 +206,14 @@ export function LeadSheet({
     }
   }
 
+  const matchedClient = (lead.preferences as Record<string, unknown>)?.matched_client as string | undefined;
+
   const fields = [
     { label: "טלפון", value: displayPhone, dir: "ltr" as const },
     { label: "אימייל", value: displayEmail, dir: "ltr" as const },
     { label: "מיקום", value: displayLocation },
     { label: "תפקיד", value: displayJobTitle },
+    { label: "לקוח", value: matchedClient },
     { label: "ניסיון", value: displayExperience },
     { label: "גיל", value: displayAge?.toString() },
     { label: "תאריך", value: new Date(lead.created_at).toLocaleDateString("he-IL") },

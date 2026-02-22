@@ -10,11 +10,45 @@ function getSupabase() {
   );
 }
 
+async function logStatusChange(leadId: string, fromStatus: string | null, toStatus: string) {
+  await getSupabase().from("lead_status_history").insert({
+    lead_id: leadId,
+    from_status: fromStatus,
+    to_status: toStatus,
+  });
+}
+
+export async function getStatusHistory(leadId: string) {
+  const { data, error } = await getSupabase()
+    .from("lead_status_history")
+    .select("*")
+    .eq("lead_id", leadId)
+    .order("changed_at", { ascending: true });
+
+  if (error) return { history: [], error: error.message };
+  return { history: data ?? [], error: null };
+}
+
 export async function updateLeadStatus(leadId: string, newStatus: string) {
-  const { error } = await getSupabase()
+  const supabase = getSupabase();
+
+  // Fetch current status before update
+  const { data: current } = await supabase
+    .from("leads")
+    .select("status")
+    .eq("id", leadId)
+    .single();
+
+  const previousStatus = current?.status ?? null;
+
+  const { error } = await supabase
     .from("leads")
     .update({ status: newStatus })
     .eq("id", leadId);
+
+  if (!error) {
+    await logStatusChange(leadId, previousStatus, newStatus);
+  }
 
   return { error: error?.message ?? null };
 }
@@ -22,14 +56,18 @@ export async function updateLeadStatus(leadId: string, newStatus: string) {
 export async function updateLeadStatusWithRole(leadId: string, newStatus: string, role: string, clientName?: string) {
   const supabase = getSupabase();
 
+  // Fetch current status + preferences before update
+  const { data: current } = await supabase
+    .from("leads")
+    .select("status, preferences")
+    .eq("id", leadId)
+    .single();
+
+  const previousStatus = current?.status ?? null;
+
   // Merge matched_client into existing preferences
   let prefs: Record<string, unknown> = {};
   if (clientName) {
-    const { data: current } = await supabase
-      .from("leads")
-      .select("preferences")
-      .eq("id", leadId)
-      .single();
     prefs = { ...(current?.preferences as Record<string, unknown> ?? {}), matched_client: clientName };
   }
 
@@ -40,6 +78,10 @@ export async function updateLeadStatusWithRole(leadId: string, newStatus: string
     .from("leads")
     .update(updateData)
     .eq("id", leadId);
+
+  if (!error) {
+    await logStatusChange(leadId, previousStatus, newStatus);
+  }
 
   return { error: error?.message ?? null };
 }

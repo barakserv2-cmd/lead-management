@@ -56,6 +56,13 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Log the status change
+    await supabase.from("lead_status_history").insert({
+      lead_id,
+      from_status: previousStatus,
+      to_status: status,
+    });
+
     return NextResponse.json({
       success: true,
       lead_id,

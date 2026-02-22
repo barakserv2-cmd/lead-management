@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { toast } from "sonner";
@@ -29,7 +29,9 @@ import {
   updateLeadPreferences,
   updateLeadField,
   updateLeadDetails,
+  getStatusHistory,
 } from "../actions";
+import { STATUS_COLORS as GLOBAL_STATUS_COLORS } from "@/lib/constants";
 import { ConversationSheet } from "./conversation-sheet";
 
 // ── Label / Color maps ──────────────────────────────────────
@@ -212,12 +214,106 @@ function UsersIcon({ className = "w-6 h-6" }: { className?: string }) {
   );
 }
 
+function BuildingIcon({ className = "w-4 h-4" }: { className?: string }) {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+      <rect width="16" height="20" x="4" y="2" rx="2" ry="2" />
+      <path d="M9 22v-4h6v4" />
+      <path d="M8 6h.01" /><path d="M16 6h.01" />
+      <path d="M8 10h.01" /><path d="M16 10h.01" />
+      <path d="M8 14h.01" /><path d="M16 14h.01" />
+    </svg>
+  );
+}
+
 function ClipboardIcon({ className = "w-6 h-6" }: { className?: string }) {
   return (
     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
       <rect width="8" height="4" x="8" y="2" rx="1" ry="1" />
       <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2" />
     </svg>
+  );
+}
+
+// ── History Timeline ────────────────────────────────────────
+
+function HistoryTimeline({
+  entries,
+  loading,
+  createdAt,
+  onLoad,
+}: {
+  entries: Array<{ id: string; from_status: string | null; to_status: string; changed_at: string }>;
+  loading: boolean;
+  createdAt: string;
+  onLoad: () => void;
+}) {
+  useEffect(() => { onLoad(); }, [onLoad]);
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-10 text-gray-400 text-sm">
+        טוען היסטוריה...
+      </div>
+    );
+  }
+
+  const hasEntries = entries.length > 0;
+
+  return (
+    <div className="relative pr-4">
+      {/* Vertical line */}
+      <div className="absolute right-[7px] top-2 bottom-2 w-0.5 bg-gray-200" />
+
+      {/* Created entry */}
+      <div className="relative flex items-start gap-3 pb-4">
+        <div className="relative z-10 w-3.5 h-3.5 rounded-full bg-blue-500 border-2 border-white shadow mt-0.5 flex-shrink-0" />
+        <div>
+          <p className="text-sm font-medium text-gray-800">ליד נוצר</p>
+          <p className="text-xs text-gray-400 mt-0.5">
+            {new Date(createdAt).toLocaleDateString("he-IL")}
+            {" "}
+            {new Date(createdAt).toLocaleTimeString("he-IL", { hour: "2-digit", minute: "2-digit" })}
+          </p>
+        </div>
+      </div>
+
+      {/* Status change entries */}
+      {hasEntries ? entries.map((entry) => {
+        const statusColor = (GLOBAL_STATUS_COLORS as Record<string, string>)[entry.to_status] ?? "bg-gray-100 text-gray-800";
+        const dotColor = statusColor.split(" ")[0].replace("bg-", "bg-");
+
+        return (
+          <div key={entry.id} className="relative flex items-start gap-3 pb-4">
+            <div className={`relative z-10 w-3.5 h-3.5 rounded-full border-2 border-white shadow mt-0.5 flex-shrink-0 ${dotColor}`} />
+            <div>
+              <div className="flex items-center gap-1.5 flex-wrap">
+                {entry.from_status && (
+                  <>
+                    <span className={`inline-block px-1.5 py-0.5 rounded text-[10px] font-semibold ${(GLOBAL_STATUS_COLORS as Record<string, string>)[entry.from_status] ?? "bg-gray-100 text-gray-800"}`}>
+                      {entry.from_status}
+                    </span>
+                    <span className="text-gray-400 text-xs">&larr;</span>
+                  </>
+                )}
+                <span className={`inline-block px-1.5 py-0.5 rounded text-[10px] font-semibold ${statusColor}`}>
+                  {entry.to_status}
+                </span>
+              </div>
+              <p className="text-xs text-gray-400 mt-0.5">
+                {new Date(entry.changed_at).toLocaleDateString("he-IL")}
+                {" "}
+                {new Date(entry.changed_at).toLocaleTimeString("he-IL", { hour: "2-digit", minute: "2-digit" })}
+              </p>
+            </div>
+          </div>
+        );
+      }) : (
+        <div className="py-4 text-center text-gray-400 text-xs">
+          אין שינויי סטטוס עדיין
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -252,6 +348,25 @@ export function LeadDetail({ lead }: { lead: Lead }) {
   const [editExperience, setEditExperience] = useState(lead.experience ?? "");
   const [editAge, setEditAge] = useState(lead.age?.toString() ?? "");
   const [savingEdit, setSavingEdit] = useState(false);
+
+  // History state
+  const [historyEntries, setHistoryEntries] = useState<Array<{
+    id: string;
+    from_status: string | null;
+    to_status: string;
+    changed_at: string;
+  }>>([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [historyLoaded, setHistoryLoaded] = useState(false);
+
+  const loadHistory = useCallback(async () => {
+    if (historyLoaded) return;
+    setHistoryLoading(true);
+    const result = await getStatusHistory(lead.id);
+    setHistoryEntries(result.history);
+    setHistoryLoading(false);
+    setHistoryLoaded(true);
+  }, [lead.id, historyLoaded]);
 
   const intlPhone = formatPhone(displayPhone);
 
@@ -487,6 +602,18 @@ export function LeadDetail({ lead }: { lead: Lead }) {
                   </p>
                 </div>
               </div>
+
+              <div className="flex items-center gap-3">
+                <div className="flex-shrink-0 w-9 h-9 rounded-lg bg-purple-50 flex items-center justify-center text-purple-600">
+                  <BuildingIcon className="w-4 h-4" />
+                </div>
+                <div>
+                  <p className="text-[11px] text-gray-400 font-medium">לקוח</p>
+                  <p className="text-sm font-semibold text-gray-800">
+                    {(lead.preferences as Record<string, unknown>)?.matched_client as string ?? "—"}
+                  </p>
+                </div>
+              </div>
             </div>
 
             {/* Financial Alert Box */}
@@ -581,11 +708,12 @@ export function LeadDetail({ lead }: { lead: Lead }) {
 
               {/* History */}
               <TabsContent value="history" className="mt-3">
-                <div className="flex flex-col items-center justify-center py-10 text-gray-400">
-                  <ClipboardIcon className="w-10 h-10 mb-3 opacity-30" />
-                  <p className="text-sm font-medium">אין היסטוריה עדיין</p>
-                  <p className="text-xs mt-1">שינויי סטטוס ופעולות יופיעו כאן</p>
-                </div>
+                <HistoryTimeline
+                  entries={historyEntries}
+                  loading={historyLoading}
+                  createdAt={lead.created_at}
+                  onLoad={loadHistory}
+                />
               </TabsContent>
 
               {/* Preferences */}
