@@ -91,7 +91,8 @@ function parseFbJobsLead(emailText: string): AIParseResult | null {
 
 export async function parseEmailWithAI(
   emailText: string,
-  subject: string
+  subject: string,
+  from?: string
 ): Promise<AIParseResult> {
   // Fast path: detect FB Jobs leads by subject and parse without AI
   if (/NEW LEAD FROM FB JOBS/i.test(subject)) {
@@ -110,7 +111,7 @@ export async function parseEmailWithAI(
       messages: [
         {
           role: "user",
-          content: `נושא: ${subject}\n\nגוף המייל:\n${emailText}`,
+          content: `${from ? `מאת: ${from}\n` : ""}נושא: ${subject}\n\nגוף המייל:\n${emailText}`,
         },
       ],
     });

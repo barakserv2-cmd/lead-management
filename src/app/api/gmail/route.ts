@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
-import { fetchUnreadEmails, markAsRead } from "@/lib/gmail";
+import { fetchUnreadEmails, markAsRead, parseFromHeader } from "@/lib/gmail";
 import { parseEmailWithAI } from "@/lib/ai/parse-email";
 import { LEAD_STATUSES } from "@/lib/constants";
 
@@ -16,7 +16,15 @@ function delay(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+export async function GET() {
+  return handleFetchEmails();
+}
+
 export async function POST() {
+  return handleFetchEmails();
+}
+
+async function handleFetchEmails() {
   const summary = {
     processed: 0,
     new_leads: 0,
@@ -64,7 +72,7 @@ export async function POST() {
         }
 
         // 2b. Send to Claude AI to detect if this is a lead and extract details
-        const aiResult = await parseEmailWithAI(email.body, email.subject);
+        const aiResult = await parseEmailWithAI(email.body, email.subject, email.from);
         console.log(
           `[Gmail] AI result: is_lead=${aiResult.is_lead}, ${aiResult.name}, phone: ${aiResult.phone}, confidence: ${aiResult.confidence}`
         );
@@ -77,7 +85,7 @@ export async function POST() {
           continue;
         }
 
-        const name = aiResult.name || "לא ידוע";
+        const name = aiResult.name || parseFromHeader(email.from) || "לא ידוע";
         const job_title = aiResult.job_title || null;
         const phone = aiResult.phone;
 

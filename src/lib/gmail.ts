@@ -1,15 +1,64 @@
 import { google } from "googleapis";
+import { createClient } from "@supabase/supabase-js";
 
-const oauth2Client = new google.auth.OAuth2(
-  process.env.GMAIL_CLIENT_ID,
-  process.env.GMAIL_CLIENT_SECRET
-);
+function getSupabase() {
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!
+  );
+}
 
-oauth2Client.setCredentials({
-  refresh_token: process.env.GMAIL_REFRESH_TOKEN,
-});
+const REDIRECT_URI = `${process.env.NEXT_PUBLIC_APP_URL}/api/auth/gmail/callback`;
 
-const gmail = google.gmail({ version: "v1", auth: oauth2Client });
+function createOAuth2Client() {
+  return new google.auth.OAuth2(
+    process.env.GMAIL_CLIENT_ID,
+    process.env.GMAIL_CLIENT_SECRET,
+    REDIRECT_URI
+  );
+}
+
+export { createOAuth2Client };
+
+async function getGmailClient() {
+  const oauth2Client = createOAuth2Client();
+
+  // Try loading tokens from DB first
+  const { data: settings } = await getSupabase()
+    .from("settings")
+    .select("gmail_access_token, gmail_refresh_token, gmail_token_expiry")
+    .eq("id", 1)
+    .single();
+
+  if (settings?.gmail_refresh_token) {
+    oauth2Client.setCredentials({
+      access_token: settings.gmail_access_token ?? undefined,
+      refresh_token: settings.gmail_refresh_token,
+      expiry_date: settings.gmail_token_expiry
+        ? new Date(settings.gmail_token_expiry).getTime()
+        : undefined,
+    });
+  } else if (process.env.GMAIL_REFRESH_TOKEN) {
+    // Fall back to env var
+    oauth2Client.setCredentials({
+      refresh_token: process.env.GMAIL_REFRESH_TOKEN,
+    });
+  } else {
+    throw new Error("No Gmail credentials configured. Connect Gmail in Settings.");
+  }
+
+  // Auto-persist refreshed tokens back to DB
+  oauth2Client.on("tokens", async (tokens) => {
+    const update: Record<string, unknown> = { updated_at: new Date().toISOString() };
+    if (tokens.access_token) update.gmail_access_token = tokens.access_token;
+    if (tokens.refresh_token) update.gmail_refresh_token = tokens.refresh_token;
+    if (tokens.expiry_date) update.gmail_token_expiry = new Date(tokens.expiry_date).toISOString();
+
+    await getSupabase().from("settings").update(update).eq("id", 1);
+  });
+
+  return google.gmail({ version: "v1", auth: oauth2Client });
+}
 
 const SUBJECT_RE = /מועמדות חדשה מ(.+?)\s+למשרת\s+(.+)/;
 const PHONE_RE = /0[2-9]\d-?\d{7}/g;
@@ -110,9 +159,21 @@ function extractBodyFromPayload(payload: {
   return "";
 }
 
+export function parseFromHeader(from: string): string | null {
+  // "Display Name <email@example.com>" → "Display Name"
+  const match = from.match(/^"?(.+?)"?\s*<.+>$/);
+  if (match) {
+    const name = match[1].trim();
+    // Skip if the "name" is just an email address
+    if (!name.includes("@") && name.length >= 2) return name;
+  }
+  return null;
+}
+
 export interface GmailMessage {
   id: string;
   subject: string;
+  from: string;
   body: string;
   date: string;
 }
@@ -120,6 +181,8 @@ export interface GmailMessage {
 export async function fetchUnreadEmails(
   maxResults = 20
 ): Promise<GmailMessage[]> {
+  const gmail = await getGmailClient();
+
   const res = await gmail.users.messages.list({
     userId: "me",
     q: "is:unread {AllJobs CV קורות חיים משרה פנייה מועמד lead candidate CASHIERS \"FB JOBS\" INFINES}",
@@ -140,6 +203,8 @@ export async function fetchUnreadEmails(
     const headers = full.data.payload?.headers || [];
     const subject =
       headers.find((h) => h.name?.toLowerCase() === "subject")?.value || "";
+    const from =
+      headers.find((h) => h.name?.toLowerCase() === "from")?.value || "";
     const date =
       headers.find((h) => h.name?.toLowerCase() === "date")?.value || "";
     const body = full.data.payload
@@ -148,7 +213,7 @@ export async function fetchUnreadEmails(
         )
       : "";
 
-    results.push({ id: msg.id, subject, body, date });
+    results.push({ id: msg.id, subject, from, body, date });
   }
 
   return results;
@@ -156,6 +221,7 @@ export async function fetchUnreadEmails(
 
 export async function markAsRead(messageId: string): Promise<void> {
   try {
+    const gmail = await getGmailClient();
     await gmail.users.messages.modify({
       userId: "me",
       id: messageId,
