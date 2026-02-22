@@ -9,7 +9,6 @@ import type {
 export interface Lead {
   id: string;
   created_at: string;
-  updated_at: string;
   name: string;
   phone: string | null;
   email: string | null;

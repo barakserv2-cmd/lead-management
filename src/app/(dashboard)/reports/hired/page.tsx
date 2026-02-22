@@ -10,7 +10,7 @@ export default async function HiredReportPage() {
     .from("leads")
     .select("*")
     .eq("status", LEAD_STATUSES.HIRED)
-    .order("updated_at", { ascending: false });
+    .order("created_at", { ascending: false });
 
   const typedLeads = (leads ?? []) as Lead[];
 

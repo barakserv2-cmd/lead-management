@@ -31,13 +31,13 @@ export function HiredContent({ leads }: { leads: Lead[] }) {
 
     if (dateFrom) {
       result = result.filter(
-        (l) => l.updated_at.slice(0, 10) >= dateFrom
+        (l) => l.created_at.slice(0, 10) >= dateFrom
       );
     }
 
     if (dateTo) {
       result = result.filter(
-        (l) => l.updated_at.slice(0, 10) <= dateTo
+        (l) => l.created_at.slice(0, 10) <= dateTo
       );
     }
 
@@ -136,7 +136,7 @@ export function HiredContent({ leads }: { leads: Lead[] }) {
                       {lead.job_title ?? "—"}
                     </td>
                     <td className="px-4 py-3 text-gray-600">
-                      {new Date(lead.updated_at).toLocaleDateString("he-IL")}
+                      {new Date(lead.created_at).toLocaleDateString("he-IL")}
                     </td>
                   </tr>
                 );
