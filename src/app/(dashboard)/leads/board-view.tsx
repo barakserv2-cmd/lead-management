@@ -17,6 +17,7 @@ const BOARD_COLUMNS = [
   { value: "בסינון", label: "בסינון", headerColor: "bg-yellow-500" },
   { value: "מתאים", label: "מתאים", headerColor: "bg-emerald-500" },
   { value: "התקבל", label: "התקבל", headerColor: "bg-purple-600" },
+  { value: "סיום העסקה", label: "סיום העסקה", headerColor: "bg-stone-500" },
   { value: "נדחה", label: "נדחה", headerColor: "bg-red-500" },
 ];
 

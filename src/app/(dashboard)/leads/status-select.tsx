@@ -9,6 +9,7 @@ const QUICK_STATUSES = [
   { value: "בסינון", label: "בסינון", color: "bg-yellow-100 text-yellow-800", dot: "bg-yellow-500" },
   { value: "מתאים", label: "מתאים", color: "bg-emerald-100 text-emerald-800", dot: "bg-emerald-500" },
   { value: "התקבל", label: "התקבל", color: "bg-purple-100 text-purple-800", dot: "bg-purple-500" },
+  { value: "סיום העסקה", label: "סיום העסקה", color: "bg-stone-200 text-stone-800", dot: "bg-stone-500" },
   { value: "נדחה", label: "נדחה", color: "bg-red-100 text-red-800", dot: "bg-red-500" },
 ];
 
