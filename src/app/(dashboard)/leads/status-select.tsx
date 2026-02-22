@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { updateLeadStatus, updateLeadStatusWithRole } from "./actions";
+import { updateLeadStatus, updateLeadStatusWithRole, getActiveClients } from "./actions";
 
 // DB enum values verified against live Supabase database
 const QUICK_STATUSES = [
@@ -30,6 +30,8 @@ export function StatusSelect({ leadId, currentStatus }: { leadId: string; curren
   const [loading, setLoading] = useState(false);
   const [roleModalOpen, setRoleModalOpen] = useState(false);
   const [roleValue, setRoleValue] = useState("");
+  const [clientValue, setClientValue] = useState("");
+  const [clients, setClients] = useState<{ id: string; name: string }[]>([]);
   const ref = useRef<HTMLDivElement>(null);
   const roleInputRef = useRef<HTMLInputElement>(null);
 
@@ -48,8 +50,9 @@ export function StatusSelect({ leadId, currentStatus }: { leadId: string; curren
   }, [toast]);
 
   useEffect(() => {
-    if (roleModalOpen && roleInputRef.current) {
-      roleInputRef.current.focus();
+    if (roleModalOpen) {
+      roleInputRef.current?.focus();
+      getActiveClients().then(({ clients: c }) => setClients(c));
     }
   }, [roleModalOpen]);
 
@@ -65,6 +68,7 @@ export function StatusSelect({ leadId, currentStatus }: { leadId: string; curren
     if (newStatus === "מתאים") {
       setOpen(false);
       setRoleValue("");
+      setClientValue("");
       setRoleModalOpen(true);
       return;
     }
@@ -85,13 +89,14 @@ export function StatusSelect({ leadId, currentStatus }: { leadId: string; curren
   }
 
   async function handleRoleConfirm() {
-    const trimmed = roleValue.trim();
-    if (!trimmed) return;
+    const trimmedRole = roleValue.trim();
+    const trimmedClient = clientValue.trim();
+    if (!trimmedRole || !trimmedClient) return;
 
     setRoleModalOpen(false);
     setLoading(true);
 
-    const result = await updateLeadStatusWithRole(leadId, "מתאים", trimmed);
+    const result = await updateLeadStatusWithRole(leadId, "מתאים", trimmedRole, trimmedClient);
 
     setLoading(false);
 
@@ -99,13 +104,14 @@ export function StatusSelect({ leadId, currentStatus }: { leadId: string; curren
       setToast(`שגיאה: ${result.error}`);
     } else {
       setStatus("מתאים");
-      setToast(`עודכן למתאים — ${trimmed}`);
+      setToast(`עודכן למתאים — ${trimmedRole} @ ${trimmedClient}`);
     }
   }
 
   function handleRoleCancel() {
     setRoleModalOpen(false);
     setRoleValue("");
+    setClientValue("");
   }
 
   return (
@@ -181,11 +187,23 @@ export function StatusSelect({ leadId, currentStatus }: { leadId: string; curren
               ))}
             </div>
 
+            <label className="block text-sm font-semibold text-gray-900 mb-1">בחר לקוח</label>
+            <select
+              value={clientValue}
+              onChange={(e) => setClientValue(e.target.value)}
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 mb-4 bg-white"
+            >
+              <option value="">— בחר לקוח —</option>
+              {clients.map((c) => (
+                <option key={c.id} value={c.name}>{c.name}</option>
+              ))}
+            </select>
+
             <div className="flex gap-2">
               <button
                 type="button"
                 onClick={handleRoleConfirm}
-                disabled={!roleValue.trim()}
+                disabled={!roleValue.trim() || !clientValue.trim()}
                 className="flex-1 py-2 rounded-lg text-sm font-semibold text-white bg-emerald-600 hover:bg-emerald-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
               >
                 אישור

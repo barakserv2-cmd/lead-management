@@ -19,13 +19,40 @@ export async function updateLeadStatus(leadId: string, newStatus: string) {
   return { error: error?.message ?? null };
 }
 
-export async function updateLeadStatusWithRole(leadId: string, newStatus: string, role: string) {
-  const { error } = await getSupabase()
+export async function updateLeadStatusWithRole(leadId: string, newStatus: string, role: string, clientName?: string) {
+  const supabase = getSupabase();
+
+  // Merge matched_client into existing preferences
+  let prefs: Record<string, unknown> = {};
+  if (clientName) {
+    const { data: current } = await supabase
+      .from("leads")
+      .select("preferences")
+      .eq("id", leadId)
+      .single();
+    prefs = { ...(current?.preferences as Record<string, unknown> ?? {}), matched_client: clientName };
+  }
+
+  const updateData: Record<string, unknown> = { status: newStatus, job_title: role };
+  if (clientName) updateData.preferences = prefs;
+
+  const { error } = await supabase
     .from("leads")
-    .update({ status: newStatus, job_title: role })
+    .update(updateData)
     .eq("id", leadId);
 
   return { error: error?.message ?? null };
+}
+
+export async function getActiveClients() {
+  const { data, error } = await getSupabase()
+    .from("clients")
+    .select("id, name")
+    .eq("status", "Active")
+    .order("name");
+
+  if (error) return { clients: [], error: error.message };
+  return { clients: data ?? [], error: null };
 }
 
 export async function getLeadNotes(leadId: string) {
