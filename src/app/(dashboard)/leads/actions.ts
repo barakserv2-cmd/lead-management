@@ -55,6 +55,17 @@ export async function getActiveClients() {
   return { clients: data ?? [], error: null };
 }
 
+export async function getOpenJobs() {
+  const { data, error } = await getSupabase()
+    .from("jobs")
+    .select("id, title, client_id, clients(name)")
+    .eq("status", "Open")
+    .order("created_at", { ascending: false });
+
+  if (error) return { jobs: [], error: error.message };
+  return { jobs: data ?? [], error: null };
+}
+
 export async function getLeadNotes(leadId: string) {
   const { data, error } = await getSupabase()
     .from("leads")

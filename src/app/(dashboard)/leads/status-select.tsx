@@ -1,9 +1,8 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { updateLeadStatus, updateLeadStatusWithRole, getActiveClients } from "./actions";
+import { updateLeadStatus, updateLeadStatusWithRole, getActiveClients, getOpenJobs } from "./actions";
 
-// DB enum values verified against live Supabase database
 const QUICK_STATUSES = [
   { value: "חדש", label: "חדש", color: "bg-blue-100 text-blue-800", dot: "bg-blue-500" },
   { value: "מעורב", label: "נוצר קשר", color: "bg-cyan-100 text-cyan-800", dot: "bg-cyan-500" },
@@ -11,8 +10,6 @@ const QUICK_STATUSES = [
   { value: "מתאים", label: "מתאים", color: "bg-emerald-100 text-emerald-800", dot: "bg-emerald-500" },
   { value: "נדחה", label: "נדחה", color: "bg-red-100 text-red-800", dot: "bg-red-500" },
 ];
-
-const ROLE_SUGGESTIONS = ["מלצר", "טבח", "קופאי", "ברמן", "מנקה", "שטיפת כלים", "מארחת", "כללי"];
 
 function getStatusStyle(status: string) {
   return QUICK_STATUSES.find((s) => s.value === status) ?? {
@@ -23,17 +20,28 @@ function getStatusStyle(status: string) {
   };
 }
 
+type JobOption = { id: string; title: string; client_id: string; clients: { name: string } | null };
+
 export function StatusSelect({ leadId, currentStatus }: { leadId: string; currentStatus: string }) {
   const [status, setStatus] = useState(currentStatus);
   const [open, setOpen] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [roleModalOpen, setRoleModalOpen] = useState(false);
+
+  // Modal form state
   const [roleValue, setRoleValue] = useState("");
   const [clientValue, setClientValue] = useState("");
+  const [customRole, setCustomRole] = useState(false);
+  const [customClient, setCustomClient] = useState(false);
+
+  // DB data
+  const [jobs, setJobs] = useState<JobOption[]>([]);
   const [clients, setClients] = useState<{ id: string; name: string }[]>([]);
+
   const ref = useRef<HTMLDivElement>(null);
-  const roleInputRef = useRef<HTMLInputElement>(null);
+  const customRoleRef = useRef<HTMLInputElement>(null);
+  const customClientRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {
@@ -51,10 +59,20 @@ export function StatusSelect({ leadId, currentStatus }: { leadId: string; curren
 
   useEffect(() => {
     if (roleModalOpen) {
-      roleInputRef.current?.focus();
-      getActiveClients().then(({ clients: c }) => setClients(c));
+      Promise.all([getOpenJobs(), getActiveClients()]).then(([jobRes, clientRes]) => {
+        setJobs(jobRes.jobs as JobOption[]);
+        setClients(clientRes.clients);
+      });
     }
   }, [roleModalOpen]);
+
+  useEffect(() => {
+    if (customRole && customRoleRef.current) customRoleRef.current.focus();
+  }, [customRole]);
+
+  useEffect(() => {
+    if (customClient && customClientRef.current) customClientRef.current.focus();
+  }, [customClient]);
 
   const current = getStatusStyle(status);
 
@@ -64,20 +82,19 @@ export function StatusSelect({ leadId, currentStatus }: { leadId: string; curren
       return;
     }
 
-    // If selecting "מתאים", open role modal instead of updating immediately
     if (newStatus === "מתאים") {
       setOpen(false);
       setRoleValue("");
       setClientValue("");
+      setCustomRole(false);
+      setCustomClient(false);
       setRoleModalOpen(true);
       return;
     }
 
     setLoading(true);
     setOpen(false);
-
     const result = await updateLeadStatus(leadId, newStatus);
-
     setLoading(false);
 
     if (result.error) {
@@ -86,6 +103,34 @@ export function StatusSelect({ leadId, currentStatus }: { leadId: string; curren
       setStatus(newStatus);
       setToast("הסטטוס עודכן");
     }
+  }
+
+  function handleJobSelect(value: string) {
+    if (value === "__custom__") {
+      setCustomRole(true);
+      setRoleValue("");
+      return;
+    }
+    setCustomRole(false);
+    const job = jobs.find((j) => j.id === value);
+    if (job) {
+      setRoleValue(job.title);
+      // Auto-fill client from the job
+      if (job.clients?.name) {
+        setClientValue(job.clients.name);
+        setCustomClient(false);
+      }
+    }
+  }
+
+  function handleClientSelect(value: string) {
+    if (value === "__custom__") {
+      setCustomClient(true);
+      setClientValue("");
+      return;
+    }
+    setCustomClient(false);
+    setClientValue(value);
   }
 
   async function handleRoleConfirm() {
@@ -112,7 +157,13 @@ export function StatusSelect({ leadId, currentStatus }: { leadId: string; curren
     setRoleModalOpen(false);
     setRoleValue("");
     setClientValue("");
+    setCustomRole(false);
+    setCustomClient(false);
   }
+
+  // Find selected job id for the dropdown
+  const selectedJobId = !customRole ? (jobs.find((j) => j.title === roleValue)?.id ?? "") : "__custom__";
+  const selectedClientDropdown = !customClient ? clientValue : "__custom__";
 
   return (
     <div className="relative" ref={ref}>
@@ -153,53 +204,64 @@ export function StatusSelect({ leadId, currentStatus }: { leadId: string; curren
         </div>
       )}
 
-      {/* Role Modal */}
+      {/* Role + Client Modal */}
       {roleModalOpen && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[100] p-4" onClick={handleRoleCancel}>
           <div className="bg-white rounded-xl shadow-2xl w-full max-w-sm p-5" dir="rtl" onClick={(e) => e.stopPropagation()}>
-            <h3 className="text-base font-bold text-gray-900 mb-1">בחירת משרה</h3>
-            <p className="text-xs text-gray-500 mb-4">לאיזו משרה הליד מתאים?</p>
+            <h3 className="text-base font-bold text-gray-900 mb-1">שיוך ליד למשרה</h3>
+            <p className="text-xs text-gray-500 mb-4">בחר משרה ולקוח מהרשימה, או הוסף ידנית</p>
 
-            <input
-              ref={roleInputRef}
-              type="text"
-              value={roleValue}
-              onChange={(e) => setRoleValue(e.target.value)}
-              onKeyDown={(e) => { if (e.key === "Enter" && roleValue.trim()) handleRoleConfirm(); }}
-              placeholder="הקלד שם משרה..."
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 mb-3"
-            />
-
-            <div className="flex flex-wrap gap-1.5 mb-4">
-              {ROLE_SUGGESTIONS.map((r) => (
-                <button
-                  key={r}
-                  type="button"
-                  onClick={() => setRoleValue(r)}
-                  className={`px-2.5 py-1 rounded-full text-xs font-medium transition-colors ${
-                    roleValue === r
-                      ? "bg-emerald-600 text-white"
-                      : "bg-gray-100 text-gray-700 hover:bg-gray-200"
-                  }`}
-                >
-                  {r}
-                </button>
-              ))}
-            </div>
-
-            <label className="block text-sm font-semibold text-gray-900 mb-1">בחר לקוח</label>
+            {/* Job / Role */}
+            <label className="block text-sm font-semibold text-gray-900 mb-1">משרה</label>
             <select
-              value={clientValue}
-              onChange={(e) => setClientValue(e.target.value)}
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 mb-4 bg-white"
+              value={selectedJobId}
+              onChange={(e) => handleJobSelect(e.target.value)}
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 mb-2 bg-white"
+            >
+              <option value="">— בחר משרה —</option>
+              {jobs.map((j) => (
+                <option key={j.id} value={j.id}>
+                  {j.title} {j.clients?.name ? `(${j.clients.name})` : ""}
+                </option>
+              ))}
+              <option value="__custom__">+ הוסף ידנית...</option>
+            </select>
+            {customRole && (
+              <input
+                ref={customRoleRef}
+                type="text"
+                value={roleValue}
+                onChange={(e) => setRoleValue(e.target.value)}
+                placeholder="הקלד שם משרה..."
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 mb-2"
+              />
+            )}
+
+            {/* Client */}
+            <label className="block text-sm font-semibold text-gray-900 mb-1 mt-3">לקוח</label>
+            <select
+              value={selectedClientDropdown}
+              onChange={(e) => handleClientSelect(e.target.value)}
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 mb-2 bg-white"
             >
               <option value="">— בחר לקוח —</option>
               {clients.map((c) => (
                 <option key={c.id} value={c.name}>{c.name}</option>
               ))}
+              <option value="__custom__">+ הוסף ידנית...</option>
             </select>
+            {customClient && (
+              <input
+                ref={customClientRef}
+                type="text"
+                value={clientValue}
+                onChange={(e) => setClientValue(e.target.value)}
+                placeholder="הקלד שם לקוח..."
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 mb-2"
+              />
+            )}
 
-            <div className="flex gap-2">
+            <div className="flex gap-2 mt-4">
               <button
                 type="button"
                 onClick={handleRoleConfirm}
