@@ -9,6 +9,7 @@ const NAV_ITEMS = [
   { href: "/jobs", label: "משרות", icon: "📋" },
   { href: "/leads", label: "לידים", icon: "👥" },
   { href: "/campaigns", label: "אקסטרות", icon: "📅" },
+  { href: "/reports/hired", label: "דוח מועסקים", icon: "📈" },
   { href: "/settings", label: "הגדרות", icon: "⚙️" },
 ];
 

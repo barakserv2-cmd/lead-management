@@ -8,6 +8,7 @@ const QUICK_STATUSES = [
   { value: "מעורב", label: "נוצר קשר", color: "bg-cyan-100 text-cyan-800", dot: "bg-cyan-500" },
   { value: "בסינון", label: "בסינון", color: "bg-yellow-100 text-yellow-800", dot: "bg-yellow-500" },
   { value: "מתאים", label: "מתאים", color: "bg-emerald-100 text-emerald-800", dot: "bg-emerald-500" },
+  { value: "התקבל", label: "התקבל", color: "bg-purple-100 text-purple-800", dot: "bg-purple-500" },
   { value: "נדחה", label: "נדחה", color: "bg-red-100 text-red-800", dot: "bg-red-500" },
 ];
 
@@ -83,7 +84,7 @@ export function StatusSelect({ leadId, currentStatus }: { leadId: string; curren
       return;
     }
 
-    if (newStatus === "מתאים") {
+    if (newStatus === "התקבל") {
       setOpen(false);
       setSelectedClientId("");
       setClientValue("");
@@ -150,15 +151,15 @@ export function StatusSelect({ leadId, currentStatus }: { leadId: string; curren
     setRoleModalOpen(false);
     setLoading(true);
 
-    const result = await updateLeadStatusWithRole(leadId, "מתאים", trimmedRole, trimmedClient);
+    const result = await updateLeadStatusWithRole(leadId, "התקבל", trimmedRole, trimmedClient);
 
     setLoading(false);
 
     if (result.error) {
       setToast(`שגיאה: ${result.error}`);
     } else {
-      setStatus("מתאים");
-      setToast(`עודכן למתאים — ${trimmedRole} @ ${trimmedClient}`);
+      setStatus("התקבל");
+      setToast(`התקבל — ${trimmedRole} @ ${trimmedClient}`);
     }
   }
 

@@ -158,7 +158,7 @@ export default function ExtrasPage() {
         workerId = newWorker.id;
 
         // 3. (אופציונלי) עדכון הליד לסטטוס "התקבל" כדי שלא יופיע כחדש
-        await supabase.from('leads').update({ status: 'Hired' }).eq('id', person.id);
+        await supabase.from('leads').update({ status: 'התקבל' }).eq('id', person.id);
       }
     }
 
