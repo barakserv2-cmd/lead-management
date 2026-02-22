@@ -19,6 +19,15 @@ export async function updateLeadStatus(leadId: string, newStatus: string) {
   return { error: error?.message ?? null };
 }
 
+export async function updateLeadStatusWithRole(leadId: string, newStatus: string, role: string) {
+  const { error } = await getSupabase()
+    .from("leads")
+    .update({ status: newStatus, job_title: role })
+    .eq("id", leadId);
+
+  return { error: error?.message ?? null };
+}
+
 export async function getLeadNotes(leadId: string) {
   const { data, error } = await getSupabase()
     .from("leads")

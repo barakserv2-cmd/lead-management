@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { updateLeadStatus } from "./actions";
+import { updateLeadStatus, updateLeadStatusWithRole } from "./actions";
 
 // DB enum values verified against live Supabase database
 const QUICK_STATUSES = [
@@ -11,6 +11,8 @@ const QUICK_STATUSES = [
   { value: "מתאים", label: "מתאים", color: "bg-emerald-100 text-emerald-800", dot: "bg-emerald-500" },
   { value: "נדחה", label: "נדחה", color: "bg-red-100 text-red-800", dot: "bg-red-500" },
 ];
+
+const ROLE_SUGGESTIONS = ["מלצר", "טבח", "קופאי", "ברמן", "מנקה", "שטיפת כלים", "מארחת", "כללי"];
 
 function getStatusStyle(status: string) {
   return QUICK_STATUSES.find((s) => s.value === status) ?? {
@@ -26,7 +28,10 @@ export function StatusSelect({ leadId, currentStatus }: { leadId: string; curren
   const [open, setOpen] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [roleModalOpen, setRoleModalOpen] = useState(false);
+  const [roleValue, setRoleValue] = useState("");
   const ref = useRef<HTMLDivElement>(null);
+  const roleInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {
@@ -42,6 +47,12 @@ export function StatusSelect({ leadId, currentStatus }: { leadId: string; curren
     return () => clearTimeout(t);
   }, [toast]);
 
+  useEffect(() => {
+    if (roleModalOpen && roleInputRef.current) {
+      roleInputRef.current.focus();
+    }
+  }, [roleModalOpen]);
+
   const current = getStatusStyle(status);
 
   async function handleSelect(newStatus: string) {
@@ -49,6 +60,15 @@ export function StatusSelect({ leadId, currentStatus }: { leadId: string; curren
       setOpen(false);
       return;
     }
+
+    // If selecting "מתאים", open role modal instead of updating immediately
+    if (newStatus === "מתאים") {
+      setOpen(false);
+      setRoleValue("");
+      setRoleModalOpen(true);
+      return;
+    }
+
     setLoading(true);
     setOpen(false);
 
@@ -62,6 +82,30 @@ export function StatusSelect({ leadId, currentStatus }: { leadId: string; curren
       setStatus(newStatus);
       setToast("הסטטוס עודכן");
     }
+  }
+
+  async function handleRoleConfirm() {
+    const trimmed = roleValue.trim();
+    if (!trimmed) return;
+
+    setRoleModalOpen(false);
+    setLoading(true);
+
+    const result = await updateLeadStatusWithRole(leadId, "מתאים", trimmed);
+
+    setLoading(false);
+
+    if (result.error) {
+      setToast(`שגיאה: ${result.error}`);
+    } else {
+      setStatus("מתאים");
+      setToast(`עודכן למתאים — ${trimmed}`);
+    }
+  }
+
+  function handleRoleCancel() {
+    setRoleModalOpen(false);
+    setRoleValue("");
   }
 
   return (
@@ -100,6 +144,61 @@ export function StatusSelect({ leadId, currentStatus }: { leadId: string; curren
               </button>
             );
           })}
+        </div>
+      )}
+
+      {/* Role Modal */}
+      {roleModalOpen && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[100] p-4" onClick={handleRoleCancel}>
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-sm p-5" dir="rtl" onClick={(e) => e.stopPropagation()}>
+            <h3 className="text-base font-bold text-gray-900 mb-1">בחירת משרה</h3>
+            <p className="text-xs text-gray-500 mb-4">לאיזו משרה הליד מתאים?</p>
+
+            <input
+              ref={roleInputRef}
+              type="text"
+              value={roleValue}
+              onChange={(e) => setRoleValue(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter" && roleValue.trim()) handleRoleConfirm(); }}
+              placeholder="הקלד שם משרה..."
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 mb-3"
+            />
+
+            <div className="flex flex-wrap gap-1.5 mb-4">
+              {ROLE_SUGGESTIONS.map((r) => (
+                <button
+                  key={r}
+                  type="button"
+                  onClick={() => setRoleValue(r)}
+                  className={`px-2.5 py-1 rounded-full text-xs font-medium transition-colors ${
+                    roleValue === r
+                      ? "bg-emerald-600 text-white"
+                      : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+                  }`}
+                >
+                  {r}
+                </button>
+              ))}
+            </div>
+
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={handleRoleConfirm}
+                disabled={!roleValue.trim()}
+                className="flex-1 py-2 rounded-lg text-sm font-semibold text-white bg-emerald-600 hover:bg-emerald-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+              >
+                אישור
+              </button>
+              <button
+                type="button"
+                onClick={handleRoleCancel}
+                className="flex-1 py-2 rounded-lg text-sm font-semibold text-gray-700 bg-gray-100 hover:bg-gray-200 transition-colors"
+              >
+                ביטול
+              </button>
+            </div>
+          </div>
         </div>
       )}
 
