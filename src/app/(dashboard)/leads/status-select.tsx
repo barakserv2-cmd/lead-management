@@ -30,8 +30,9 @@ export function StatusSelect({ leadId, currentStatus }: { leadId: string; curren
   const [roleModalOpen, setRoleModalOpen] = useState(false);
 
   // Modal form state
-  const [roleValue, setRoleValue] = useState("");
+  const [selectedClientId, setSelectedClientId] = useState("");
   const [clientValue, setClientValue] = useState("");
+  const [roleValue, setRoleValue] = useState("");
   const [customRole, setCustomRole] = useState(false);
   const [customClient, setCustomClient] = useState(false);
 
@@ -84,8 +85,9 @@ export function StatusSelect({ leadId, currentStatus }: { leadId: string; curren
 
     if (newStatus === "מתאים") {
       setOpen(false);
-      setRoleValue("");
+      setSelectedClientId("");
       setClientValue("");
+      setRoleValue("");
       setCustomRole(false);
       setCustomClient(false);
       setRoleModalOpen(true);
@@ -105,6 +107,22 @@ export function StatusSelect({ leadId, currentStatus }: { leadId: string; curren
     }
   }
 
+  function handleClientSelect(value: string) {
+    if (value === "__custom__") {
+      setCustomClient(true);
+      setClientValue("");
+      setSelectedClientId("");
+    } else {
+      setCustomClient(false);
+      const client = clients.find((c) => c.id === value);
+      setSelectedClientId(value);
+      setClientValue(client?.name ?? "");
+    }
+    // Reset job selection when client changes
+    setRoleValue("");
+    setCustomRole(false);
+  }
+
   function handleJobSelect(value: string) {
     if (value === "__custom__") {
       setCustomRole(true);
@@ -115,23 +133,14 @@ export function StatusSelect({ leadId, currentStatus }: { leadId: string; curren
     const job = jobs.find((j) => j.id === value);
     if (job) {
       setRoleValue(job.title);
-      // Auto-fill client from the job
-      if (job.clients?.name) {
-        setClientValue(job.clients.name);
-        setCustomClient(false);
-      }
     }
   }
 
-  function handleClientSelect(value: string) {
-    if (value === "__custom__") {
-      setCustomClient(true);
-      setClientValue("");
-      return;
-    }
-    setCustomClient(false);
-    setClientValue(value);
-  }
+  // Filter jobs by selected client
+  const filteredJobs = selectedClientId
+    ? jobs.filter((j) => j.client_id === selectedClientId)
+    : [];
+  const jobsDisabled = !selectedClientId && !customClient;
 
   async function handleRoleConfirm() {
     const trimmedRole = roleValue.trim();
@@ -155,15 +164,16 @@ export function StatusSelect({ leadId, currentStatus }: { leadId: string; curren
 
   function handleRoleCancel() {
     setRoleModalOpen(false);
-    setRoleValue("");
+    setSelectedClientId("");
     setClientValue("");
+    setRoleValue("");
     setCustomRole(false);
     setCustomClient(false);
   }
 
-  // Find selected job id for the dropdown
-  const selectedJobId = !customRole ? (jobs.find((j) => j.title === roleValue)?.id ?? "") : "__custom__";
-  const selectedClientDropdown = !customClient ? clientValue : "__custom__";
+  // Computed dropdown values
+  const selectedJobId = !customRole ? (filteredJobs.find((j) => j.title === roleValue)?.id ?? "") : "__custom__";
+  const selectedClientDropdown = !customClient ? selectedClientId : "__custom__";
 
   return (
     <div className="relative" ref={ref}>
@@ -209,36 +219,10 @@ export function StatusSelect({ leadId, currentStatus }: { leadId: string; curren
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[100] p-4" onClick={handleRoleCancel}>
           <div className="bg-white rounded-xl shadow-2xl w-full max-w-sm p-5" dir="rtl" onClick={(e) => e.stopPropagation()}>
             <h3 className="text-base font-bold text-gray-900 mb-1">שיוך ליד למשרה</h3>
-            <p className="text-xs text-gray-500 mb-4">בחר משרה ולקוח מהרשימה, או הוסף ידנית</p>
+            <p className="text-xs text-gray-500 mb-4">בחר לקוח, ואז בחר משרה מהרשימה המסוננת</p>
 
-            {/* Job / Role */}
-            <label className="block text-sm font-semibold text-gray-900 mb-1">משרה</label>
-            <select
-              value={selectedJobId}
-              onChange={(e) => handleJobSelect(e.target.value)}
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 mb-2 bg-white"
-            >
-              <option value="">— בחר משרה —</option>
-              {jobs.map((j) => (
-                <option key={j.id} value={j.id}>
-                  {j.title} {j.clients?.name ? `(${j.clients.name})` : ""}
-                </option>
-              ))}
-              <option value="__custom__">+ הוסף ידנית...</option>
-            </select>
-            {customRole && (
-              <input
-                ref={customRoleRef}
-                type="text"
-                value={roleValue}
-                onChange={(e) => setRoleValue(e.target.value)}
-                placeholder="הקלד שם משרה..."
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 mb-2"
-              />
-            )}
-
-            {/* Client */}
-            <label className="block text-sm font-semibold text-gray-900 mb-1 mt-3">לקוח</label>
+            {/* Client (first) */}
+            <label className="block text-sm font-semibold text-gray-900 mb-1">לקוח</label>
             <select
               value={selectedClientDropdown}
               onChange={(e) => handleClientSelect(e.target.value)}
@@ -246,7 +230,7 @@ export function StatusSelect({ leadId, currentStatus }: { leadId: string; curren
             >
               <option value="">— בחר לקוח —</option>
               {clients.map((c) => (
-                <option key={c.id} value={c.name}>{c.name}</option>
+                <option key={c.id} value={c.id}>{c.name}</option>
               ))}
               <option value="__custom__">+ הוסף ידנית...</option>
             </select>
@@ -257,6 +241,31 @@ export function StatusSelect({ leadId, currentStatus }: { leadId: string; curren
                 value={clientValue}
                 onChange={(e) => setClientValue(e.target.value)}
                 placeholder="הקלד שם לקוח..."
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 mb-2"
+              />
+            )}
+
+            {/* Job / Role (filtered by client) */}
+            <label className="block text-sm font-semibold text-gray-900 mb-1 mt-3">משרה</label>
+            <select
+              value={selectedJobId}
+              onChange={(e) => handleJobSelect(e.target.value)}
+              disabled={jobsDisabled}
+              className={`w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 mb-2 bg-white ${jobsDisabled ? "opacity-50 cursor-not-allowed" : ""}`}
+            >
+              <option value="">{jobsDisabled ? "— בחר לקוח קודם —" : "— בחר משרה —"}</option>
+              {filteredJobs.map((j) => (
+                <option key={j.id} value={j.id}>{j.title}</option>
+              ))}
+              <option value="__custom__">+ הוסף ידנית...</option>
+            </select>
+            {customRole && (
+              <input
+                ref={customRoleRef}
+                type="text"
+                value={roleValue}
+                onChange={(e) => setRoleValue(e.target.value)}
+                placeholder="הקלד שם משרה..."
                 className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 mb-2"
               />
             )}
