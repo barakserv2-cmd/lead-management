@@ -19,7 +19,7 @@ function SettingsContent() {
     connected: boolean;
     email: string | null;
     connectedAt: string | null;
-  } | null>(null);
+  }>({ connected: false, email: null, connectedAt: null });
   const [disconnecting, setDisconnecting] = useState(false);
   const [fetching, setFetching] = useState(false);
   const [fetchResult, setFetchResult] = useState<{
@@ -33,13 +33,13 @@ function SettingsContent() {
   useEffect(() => {
     getGmailStatus()
       .then(setGmailStatus)
-      .catch(() => setGmailStatus({ connected: false, email: null, connectedAt: null }));
+      .catch(() => {});
   }, []);
 
   useEffect(() => {
     if (searchParams.get("gmail_connected") === "true") {
       toast.success("Gmail חובר בהצלחה!");
-      getGmailStatus().then(setGmailStatus);
+      getGmailStatus().then(setGmailStatus).catch(() => {});
     }
     const error = searchParams.get("gmail_error");
     if (error) {
@@ -93,65 +93,57 @@ function SettingsContent() {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            {gmailStatus === null ? (
-              <p className="text-sm text-gray-400">טוען...</p>
-            ) : gmailStatus.connected ? (
-              <>
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <span className="inline-block w-3 h-3 rounded-full bg-green-500" />
-                    <div>
-                      <p className="text-sm font-medium">
-                        מחובר — {gmailStatus.email}
-                      </p>
-                      {gmailStatus.connectedAt && (
-                        <p className="text-xs text-gray-500">
-                          חובר בתאריך{" "}
-                          {new Date(gmailStatus.connectedAt).toLocaleDateString(
-                            "he-IL"
-                          )}
-                        </p>
-                      )}
-                    </div>
-                  </div>
-                  <div className="flex gap-2">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={handleFetchEmails}
-                      disabled={fetching}
-                    >
-                      {fetching ? "שולף מיילים..." : "שלוף מיילים"}
-                    </Button>
-                    <Button
-                      variant="destructive"
-                      size="sm"
-                      onClick={handleDisconnect}
-                      disabled={disconnecting}
-                    >
-                      {disconnecting ? "מנתק..." : "נתק"}
-                    </Button>
-                  </div>
+            {gmailStatus.connected && (
+              <div className="flex items-center gap-3 mb-3">
+                <span className="inline-block w-3 h-3 rounded-full bg-green-500" />
+                <div>
+                  <p className="text-sm font-medium">
+                    מחובר — {gmailStatus.email}
+                  </p>
+                  {gmailStatus.connectedAt && (
+                    <p className="text-xs text-gray-500">
+                      חובר בתאריך{" "}
+                      {new Date(gmailStatus.connectedAt).toLocaleDateString("he-IL")}
+                    </p>
+                  )}
                 </div>
-                {fetchResult && (
-                  <div className="mt-3 text-xs text-gray-500 border-t pt-3 space-y-1">
-                    <p>עובדו: {fetchResult.processed} | חדשים: {fetchResult.new_leads} | כפולים: {fetchResult.duplicates} | דולגו: {fetchResult.skipped} | שגיאות: {fetchResult.errors}</p>
-                  </div>
-                )}
-              </>
-            ) : (
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <span className="inline-block w-3 h-3 rounded-full bg-gray-300" />
-                  <p className="text-sm text-gray-500">Gmail לא מחובר</p>
-                </div>
+              </div>
+            )}
+
+            {!gmailStatus.connected && (
+              <div className="flex items-center gap-3 mb-3">
+                <span className="inline-block w-3 h-3 rounded-full bg-gray-300" />
+                <p className="text-sm text-gray-500">Gmail לא מחובר</p>
+              </div>
+            )}
+
+            <div className="flex gap-2">
+              <Button
+                onClick={() => (window.location.href = "/api/auth/gmail/authorize")}
+              >
+                חבר Gmail
+              </Button>
+              <Button
+                variant="outline"
+                onClick={handleFetchEmails}
+                disabled={fetching}
+              >
+                {fetching ? "שולף מיילים..." : "שלוף מיילים"}
+              </Button>
+              {gmailStatus.connected && (
                 <Button
-                  onClick={() =>
-                    (window.location.href = "/api/auth/gmail/authorize")
-                  }
+                  variant="destructive"
+                  onClick={handleDisconnect}
+                  disabled={disconnecting}
                 >
-                  חבר Gmail
+                  {disconnecting ? "מנתק..." : "נתק"}
                 </Button>
+              )}
+            </div>
+
+            {fetchResult && (
+              <div className="mt-3 text-xs text-gray-500 border-t pt-3">
+                <p>עובדו: {fetchResult.processed} | חדשים: {fetchResult.new_leads} | כפולים: {fetchResult.duplicates} | דולגו: {fetchResult.skipped} | שגיאות: {fetchResult.errors}</p>
               </div>
             )}
           </CardContent>
