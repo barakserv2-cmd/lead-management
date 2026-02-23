@@ -31,7 +31,9 @@ function SettingsContent() {
   } | null>(null);
 
   useEffect(() => {
-    getGmailStatus().then(setGmailStatus);
+    getGmailStatus()
+      .then(setGmailStatus)
+      .catch(() => setGmailStatus({ connected: false, email: null, connectedAt: null }));
   }, []);
 
   useEffect(() => {

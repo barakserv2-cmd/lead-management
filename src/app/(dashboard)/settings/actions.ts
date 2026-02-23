@@ -14,21 +14,25 @@ export async function getGmailStatus(): Promise<{
   email: string | null;
   connectedAt: string | null;
 }> {
-  const { data } = await getSupabase()
-    .from("settings")
-    .select("gmail_email, gmail_connected_at, gmail_refresh_token")
-    .eq("id", 1)
-    .single();
+  try {
+    const { data, error } = await getSupabase()
+      .from("settings")
+      .select("gmail_email, gmail_connected_at, gmail_refresh_token")
+      .eq("id", 1)
+      .single();
 
-  if (!data || !data.gmail_refresh_token) {
+    if (error || !data || !data.gmail_refresh_token) {
+      return { connected: false, email: null, connectedAt: null };
+    }
+
+    return {
+      connected: true,
+      email: data.gmail_email,
+      connectedAt: data.gmail_connected_at,
+    };
+  } catch {
     return { connected: false, email: null, connectedAt: null };
   }
-
-  return {
-    connected: true,
-    email: data.gmail_email,
-    connectedAt: data.gmail_connected_at,
-  };
 }
 
 export async function disconnectGmail(): Promise<{ error: string | null }> {
