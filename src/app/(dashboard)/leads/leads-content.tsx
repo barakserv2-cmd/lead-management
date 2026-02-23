@@ -6,6 +6,8 @@ import { StatusSelect } from "./status-select";
 import { ViewToggle } from "./view-toggle";
 import { BoardView } from "./board-view";
 import { LeadSheet, type SheetLead } from "./lead-sheet";
+import { BulkWhatsAppDialog } from "./bulk-whatsapp-dialog";
+import { Button } from "@/components/ui/button";
 
 function getInitials(name: string) {
   const parts = name.trim().split(/\s+/);
@@ -62,6 +64,31 @@ function formatShortDate(dateStr: string) {
 
 export function LeadsContent({ leads }: { leads: Lead[] }) {
   const [selectedLead, setSelectedLead] = useState<SheetLead | null>(null);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [waDialogOpen, setWaDialogOpen] = useState(false);
+
+  const allSelected = leads.length > 0 && selectedIds.size === leads.length;
+
+  function toggleSelectAll() {
+    if (allSelected) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(leads.map((l) => l.id)));
+    }
+  }
+
+  function toggleSelect(id: string) {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  const selectedRecipients = leads
+    .filter((l) => selectedIds.has(l.id) && l.phone)
+    .map((l) => ({ name: l.name, phone: formatPhone(l.phone)! }));
 
   const boardLeads = leads.map((l) => ({
     id: l.id,
@@ -76,6 +103,14 @@ export function LeadsContent({ leads }: { leads: Lead[] }) {
       <table className="w-full text-sm">
         <thead className="bg-gray-50 border-b">
           <tr>
+            <th className="px-3 py-3 w-10">
+              <input
+                type="checkbox"
+                checked={allSelected}
+                onChange={toggleSelectAll}
+                className="rounded border-gray-300 cursor-pointer"
+              />
+            </th>
             <th className="px-4 py-3 text-right font-medium text-gray-600">שם</th>
             <th className="px-4 py-3 text-right font-medium text-gray-600">טלפון</th>
             <th className="px-4 py-3 text-right font-medium text-gray-600">תפקיד</th>
@@ -88,7 +123,7 @@ export function LeadsContent({ leads }: { leads: Lead[] }) {
         <tbody>
           {leads.length === 0 ? (
             <tr>
-              <td colSpan={7} className="px-4 py-12 text-center text-gray-400">
+              <td colSpan={8} className="px-4 py-12 text-center text-gray-400">
                 אין לידים עדיין. חבר את Gmail כדי להתחיל.
               </td>
             </tr>
@@ -96,8 +131,17 @@ export function LeadsContent({ leads }: { leads: Lead[] }) {
             leads.map((lead) => {
               const intlPhone = formatPhone(lead.phone);
               const sourceColor = SOURCE_COLORS[lead.source] ?? "bg-gray-100 text-gray-600";
+              const isSelected = selectedIds.has(lead.id);
               return (
-                <tr key={lead.id} className="border-b border-gray-100 hover:bg-blue-50/40 transition-colors duration-150">
+                <tr key={lead.id} className={"border-b border-gray-100 transition-colors duration-150 " + (isSelected ? "bg-blue-50/60" : "hover:bg-blue-50/40")}>
+                  <td className="px-3 py-3">
+                    <input
+                      type="checkbox"
+                      checked={isSelected}
+                      onChange={() => toggleSelect(lead.id)}
+                      className="rounded border-gray-300 cursor-pointer"
+                    />
+                  </td>
                   <td className="px-4 py-3">
                     <button
                       type="button"
@@ -170,6 +214,35 @@ export function LeadsContent({ leads }: { leads: Lead[] }) {
 
   return (
     <>
+      {selectedIds.size > 0 && (
+        <div className="flex items-center gap-3 mb-3 p-3 bg-green-50 border border-green-200 rounded-lg">
+          <span className="text-sm text-green-800 font-medium">
+            {selectedIds.size} נבחרו
+          </span>
+          <Button
+            size="sm"
+            className="bg-green-600 hover:bg-green-700"
+            onClick={() => setWaDialogOpen(true)}
+            disabled={selectedRecipients.length === 0}
+          >
+            <WhatsAppIcon />
+            <span className="mr-1.5">שלח WhatsApp</span>
+          </Button>
+          {selectedRecipients.length < selectedIds.size && (
+            <span className="text-xs text-gray-500">
+              ({selectedIds.size - selectedRecipients.length} ללא טלפון — ידולגו)
+            </span>
+          )}
+          <button
+            type="button"
+            onClick={() => setSelectedIds(new Set())}
+            className="text-xs text-gray-500 hover:text-gray-700 mr-auto"
+          >
+            נקה בחירה
+          </button>
+        </div>
+      )}
+
       <ViewToggle
         listView={tableView}
         boardView={<BoardView leads={boardLeads} onSelectLead={(id) => {
@@ -178,6 +251,13 @@ export function LeadsContent({ leads }: { leads: Lead[] }) {
         }} />}
       />
       <LeadSheet lead={selectedLead} onClose={() => setSelectedLead(null)} />
+
+      <BulkWhatsAppDialog
+        open={waDialogOpen}
+        onOpenChange={setWaDialogOpen}
+        recipients={selectedRecipients}
+        onSuccess={() => setSelectedIds(new Set())}
+      />
     </>
   );
 }
