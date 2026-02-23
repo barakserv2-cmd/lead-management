@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import type { Lead } from "@/types/leads";
 import { LeadsContent } from "./leads-content";
 import { Pagination } from "./pagination";
+import { AddLeadDialog } from "./add-lead-dialog";
 
 const PAGE_SIZE = 50;
 
@@ -43,6 +44,7 @@ export default async function LeadsPage({
             placeholder="חיפוש..."
             className="px-4 py-2 border border-gray-300 rounded-lg text-sm"
           />
+          <AddLeadDialog />
         </div>
       </div>
       <Pagination

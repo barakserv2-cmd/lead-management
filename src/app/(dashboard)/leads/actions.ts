@@ -231,6 +231,31 @@ export async function completeReminder(reminderId: string) {
   return { error: error?.message ?? null };
 }
 
+export async function createLead(data: {
+  name: string;
+  phone: string;
+  job_title: string;
+  source: string;
+  status: string;
+}) {
+  const { data: lead, error } = await getSupabase()
+    .from("leads")
+    .insert({
+      name: data.name,
+      phone: data.phone || null,
+      job_title: data.job_title || null,
+      source: data.source || "אחר",
+      status: data.status || "חדש",
+    })
+    .select()
+    .single();
+
+  if (error) return { lead: null, error: error.message };
+
+  revalidatePath("/leads");
+  return { lead, error: null };
+}
+
 export async function updateLeadDetails(
   leadId: string,
   details: {
