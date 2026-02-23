@@ -18,6 +18,7 @@ export interface Lead {
   job_title: string | null;
   source: LeadSource;
   status: LeadStatus;
+  sub_status: string | null;
   assigned_to: string | null;
   notes: string | null;
   original_email_id: string | null;

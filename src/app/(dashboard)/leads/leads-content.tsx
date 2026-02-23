@@ -115,7 +115,7 @@ export function LeadsContent({ leads }: { leads: Lead[] }) {
                   <td className="px-4 py-3 text-gray-600" dir="ltr">{lead.phone ?? "—"}</td>
                   <td className="px-4 py-3 text-gray-600">{lead.job_title ?? "—"}</td>
                   <td className="px-4 py-3">
-                    <StatusSelect leadId={lead.id} currentStatus={lead.status} />
+                    <StatusSelect leadId={lead.id} currentStatus={lead.status} currentSubStatus={lead.sub_status} />
                   </td>
                   <td className="px-4 py-3">
                     <span className={"inline-block px-2.5 py-1 rounded-full text-xs font-medium " + sourceColor}>

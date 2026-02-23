@@ -43,12 +43,21 @@ export async function updateLeadStatus(leadId: string, newStatus: string) {
 
   const { error } = await supabase
     .from("leads")
-    .update({ status: newStatus })
+    .update({ status: newStatus, sub_status: null })
     .eq("id", leadId);
 
   if (!error) {
     await logStatusChange(leadId, previousStatus, newStatus);
   }
+
+  return { error: error?.message ?? null };
+}
+
+export async function updateLeadSubStatus(leadId: string, subStatus: string | null) {
+  const { error } = await getSupabase()
+    .from("leads")
+    .update({ sub_status: subStatus })
+    .eq("id", leadId);
 
   return { error: error?.message ?? null };
 }

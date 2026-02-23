@@ -38,6 +38,17 @@ export const STATUS_COLORS: Record<LeadStatus, string> = {
   [LEAD_STATUSES.ARCHIVED]: "bg-zinc-100 text-zinc-800",
 };
 
+// Sub-statuses keyed by main status — scalable for future statuses
+export const SUB_STATUSES: Record<string, string[]> = {
+  [LEAD_STATUSES.CONTACTED]: [
+    "אין מענה",
+    "לא זמין במיידי",
+    "ביקש פרטים בלבד",
+    "אין מענה 3 פעמים",
+    "ביקש לחזור אליו מאוחר יותר",
+  ],
+};
+
 export const LEAD_SOURCES = [
   "AllJobs",
   "אימייל ישיר",

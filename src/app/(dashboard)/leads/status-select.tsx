@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { updateLeadStatus, updateLeadStatusWithRole, getActiveClients, getOpenJobs } from "./actions";
+import { updateLeadStatus, updateLeadStatusWithRole, updateLeadSubStatus, getActiveClients, getOpenJobs } from "./actions";
+import { SUB_STATUSES } from "@/lib/constants";
 
 const QUICK_STATUSES = [
   { value: "חדש", label: "חדש", color: "bg-blue-100 text-blue-800", dot: "bg-blue-500" },
@@ -24,8 +25,9 @@ function getStatusStyle(status: string) {
 
 type JobOption = { id: string; title: string; client_id: string; clients: { name: string } | null };
 
-export function StatusSelect({ leadId, currentStatus }: { leadId: string; currentStatus: string }) {
+export function StatusSelect({ leadId, currentStatus, currentSubStatus }: { leadId: string; currentStatus: string; currentSubStatus?: string | null }) {
   const [status, setStatus] = useState(currentStatus);
+  const [subStatus, setSubStatus] = useState<string | null>(currentSubStatus ?? null);
   const [open, setOpen] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -105,7 +107,17 @@ export function StatusSelect({ leadId, currentStatus }: { leadId: string; curren
       setToast(`שגיאה: ${result.error}`);
     } else {
       setStatus(newStatus);
+      setSubStatus(null);
       setToast("הסטטוס עודכן");
+    }
+  }
+
+  async function handleSubStatusChange(value: string) {
+    const newSub = value || null;
+    setSubStatus(newSub);
+    const result = await updateLeadSubStatus(leadId, newSub);
+    if (result.error) {
+      setToast(`שגיאה: ${result.error}`);
     }
   }
 
@@ -214,6 +226,20 @@ export function StatusSelect({ leadId, currentStatus }: { leadId: string; curren
             );
           })}
         </div>
+      )}
+
+      {/* Sub-status dropdown */}
+      {SUB_STATUSES[status] && (
+        <select
+          value={subStatus ?? ""}
+          onChange={(e) => handleSubStatusChange(e.target.value)}
+          className="mt-1 w-full text-[10px] border border-gray-200 rounded-md px-1.5 py-0.5 text-gray-600 bg-white focus:outline-none focus:ring-1 focus:ring-cyan-400"
+        >
+          <option value="">— תת-סטטוס —</option>
+          {SUB_STATUSES[status].map((sub) => (
+            <option key={sub} value={sub}>{sub}</option>
+          ))}
+        </select>
       )}
 
       {/* Role + Client Modal */}
