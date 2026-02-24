@@ -42,7 +42,7 @@ export async function POST(req: NextRequest) {
     try {
       const res = await fetch(GREEN_API_URL, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json; charset=utf-8" },
         body: JSON.stringify(payload),
       });
 
