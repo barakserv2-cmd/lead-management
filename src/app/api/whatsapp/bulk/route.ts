@@ -35,15 +35,20 @@ export async function POST(req: NextRequest) {
     const chatId = formatChatId(r.phone);
 
     const payload = { chatId, message: personalizedMessage };
+    const bodyBytes = new TextEncoder().encode(JSON.stringify(payload));
 
     console.log(`[WhatsApp Bulk] Phone: ${r.phone} -> chatId: ${chatId}`);
     console.log(`[WhatsApp Bulk] Payload:`, JSON.stringify(payload));
+    console.log(`[WhatsApp Bulk] Body byte length: ${bodyBytes.length}`);
 
     try {
       const res = await fetch(GREEN_API_URL, {
         method: "POST",
-        headers: { "Content-Type": "application/json; charset=utf-8" },
-        body: JSON.stringify(payload),
+        headers: {
+          "Content-Type": "application/json; charset=utf-8",
+          "Content-Length": String(bodyBytes.length),
+        },
+        body: bodyBytes,
       });
 
       const responseBody = await res.text();
