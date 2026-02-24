@@ -39,11 +39,6 @@ export default async function LeadsPage({
         <h1 className="text-2xl font-bold">לידים</h1>
         <div className="flex items-center gap-3">
           <span className="text-sm text-gray-500">{totalCount} לידים</span>
-          <input
-            type="text"
-            placeholder="חיפוש..."
-            className="px-4 py-2 border border-gray-300 rounded-lg text-sm"
-          />
           <AddLeadDialog />
         </div>
       </div>
