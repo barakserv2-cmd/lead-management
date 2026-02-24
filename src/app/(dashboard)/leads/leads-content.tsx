@@ -66,26 +66,14 @@ export function LeadsContent({ leads }: { leads: Lead[] }) {
   const [selectedLead, setSelectedLead] = useState<SheetLead | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [waDialogOpen, setWaDialogOpen] = useState(false);
-  const [searchQuery, setSearchQuery] = useState("");
 
-  const filteredLeads = searchQuery.trim()
-    ? leads.filter((l) => {
-        const q = searchQuery.trim().toLowerCase();
-        return (
-          l.name.toLowerCase().includes(q) ||
-          (l.phone && l.phone.includes(q)) ||
-          (l.job_title && l.job_title.toLowerCase().includes(q))
-        );
-      })
-    : leads;
-
-  const allSelected = filteredLeads.length > 0 && selectedIds.size === filteredLeads.length;
+  const allSelected = leads.length > 0 && selectedIds.size === leads.length;
 
   function toggleSelectAll() {
     if (allSelected) {
       setSelectedIds(new Set());
     } else {
-      setSelectedIds(new Set(filteredLeads.map((l) => l.id)));
+      setSelectedIds(new Set(leads.map((l) => l.id)));
     }
   }
 
@@ -102,7 +90,7 @@ export function LeadsContent({ leads }: { leads: Lead[] }) {
     .filter((l) => selectedIds.has(l.id) && l.phone)
     .map((l) => ({ name: l.name, phone: formatPhone(l.phone)! }));
 
-  const boardLeads = filteredLeads.map((l) => ({
+  const boardLeads = leads.map((l) => ({
     id: l.id,
     name: l.name,
     phone: l.phone,
@@ -111,17 +99,7 @@ export function LeadsContent({ leads }: { leads: Lead[] }) {
   }));
 
   const tableView = (
-    <div>
-      <div className="mb-3">
-        <input
-          type="text"
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-          placeholder="חיפוש לפי שם, טלפון או תפקיד..."
-          className="w-full max-w-md px-4 py-2 border border-gray-300 rounded-lg text-sm"
-        />
-      </div>
-      <div className="bg-white rounded-xl shadow-sm border overflow-hidden">
+    <div className="bg-white rounded-xl shadow-sm border overflow-hidden">
       <table className="w-full text-sm">
         <thead className="bg-gray-50 border-b">
           <tr>
@@ -143,14 +121,14 @@ export function LeadsContent({ leads }: { leads: Lead[] }) {
           </tr>
         </thead>
         <tbody>
-          {filteredLeads.length === 0 ? (
+          {leads.length === 0 ? (
             <tr>
               <td colSpan={8} className="px-4 py-12 text-center text-gray-400">
-                {searchQuery.trim() ? "לא נמצאו תוצאות" : "אין לידים עדיין. חבר את Gmail כדי להתחיל."}
+                אין לידים עדיין. חבר את Gmail כדי להתחיל.
               </td>
             </tr>
           ) : (
-            filteredLeads.map((lead) => {
+            leads.map((lead) => {
               const intlPhone = formatPhone(lead.phone);
               const sourceColor = SOURCE_COLORS[lead.source] ?? "bg-gray-100 text-gray-600";
               const isSelected = selectedIds.has(lead.id);
@@ -231,7 +209,6 @@ export function LeadsContent({ leads }: { leads: Lead[] }) {
           )}
         </tbody>
       </table>
-      </div>
     </div>
   );
 

@@ -5,18 +5,27 @@ export function Pagination({
   totalPages,
   totalCount,
   pageSize,
+  searchQuery = "",
   className = "",
 }: {
   currentPage: number;
   totalPages: number;
   totalCount: number;
   pageSize: number;
+  searchQuery?: string;
   className?: string;
 }) {
   if (totalPages <= 1) return null;
 
   const from = (currentPage - 1) * pageSize + 1;
   const to = Math.min(currentPage * pageSize, totalCount);
+
+  function buildHref(page: number) {
+    const params = new URLSearchParams();
+    params.set("page", String(page));
+    if (searchQuery) params.set("q", searchQuery);
+    return `/leads?${params.toString()}`;
+  }
 
   // Build page numbers to show: always show first, last, current, and neighbors
   const pages: (number | "...")[] = [];
@@ -41,7 +50,7 @@ export function Pagination({
       <div className="flex items-center gap-1">
         {currentPage > 1 ? (
           <Link
-            href={`/leads?page=${currentPage - 1}`}
+            href={buildHref(currentPage - 1)}
             className="px-3 py-1.5 text-sm rounded-md border hover:bg-gray-50 transition-colors"
           >
             הקודם
@@ -60,7 +69,7 @@ export function Pagination({
           ) : (
             <Link
               key={p}
-              href={`/leads?page=${p}`}
+              href={buildHref(p)}
               className={`px-3 py-1.5 text-sm rounded-md border transition-colors ${
                 p === currentPage
                   ? "bg-blue-600 text-white border-blue-600"
@@ -74,7 +83,7 @@ export function Pagination({
 
         {currentPage < totalPages ? (
           <Link
-            href={`/leads?page=${currentPage + 1}`}
+            href={buildHref(currentPage + 1)}
             className="px-3 py-1.5 text-sm rounded-md border hover:bg-gray-50 transition-colors"
           >
             הבא
