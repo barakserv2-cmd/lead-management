@@ -14,25 +14,6 @@ function formatChatId(phone: string): string {
   return digits + "@c.us";
 }
 
-// Test endpoint — GET /api/whatsapp/bulk?phone=972547000992 sends a hardcoded Hebrew message
-export async function GET(req: NextRequest) {
-  const phone = req.nextUrl.searchParams.get("phone") || "972547000992";
-  const chatId = phone.includes("@") ? phone : phone + "@c.us";
-  const payload = { chatId, message: "\u05E9\u05DC\u05D5\u05DD Barak, \u05D1\u05D3\u05D9\u05E7\u05EA \u05E2\u05D1\u05E8\u05D9\u05EA \u05DE\u05D4\u05E9\u05E8\u05EA!" };
-
-  console.log("[WhatsApp Test] Payload:", JSON.stringify(payload));
-
-  const res = await fetch(GREEN_API_URL, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload),
-  });
-  const responseBody = await res.text();
-  console.log("[WhatsApp Test] Status:", res.status, "Body:", responseBody);
-
-  return NextResponse.json({ status: res.status, response: responseBody, payload });
-}
-
 export async function POST(req: NextRequest) {
   const body = await req.json();
   const { recipients, message } = body as {
@@ -54,20 +35,15 @@ export async function POST(req: NextRequest) {
     const chatId = formatChatId(r.phone);
 
     const payload = { chatId, message: personalizedMessage };
-    const bodyBytes = new TextEncoder().encode(JSON.stringify(payload));
 
     console.log(`[WhatsApp Bulk] Phone: ${r.phone} -> chatId: ${chatId}`);
     console.log(`[WhatsApp Bulk] Payload:`, JSON.stringify(payload));
-    console.log(`[WhatsApp Bulk] Body byte length: ${bodyBytes.length}`);
 
     try {
       const res = await fetch(GREEN_API_URL, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json; charset=utf-8",
-          "Content-Length": String(bodyBytes.length),
-        },
-        body: bodyBytes,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
       });
 
       const responseBody = await res.text();
