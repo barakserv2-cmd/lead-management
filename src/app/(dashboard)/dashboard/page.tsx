@@ -14,20 +14,20 @@ export default async function DashboardPage() {
     .select("*", { count: "exact", head: true })
     .eq("status", LEAD_STATUSES.NEW);
 
-  const { count: screeningCount } = await supabase
+  const { count: followupCount } = await supabase
     .from("leads")
     .select("*", { count: "exact", head: true })
-    .eq("status", LEAD_STATUSES.SCREENING);
+    .eq("status", LEAD_STATUSES.FOLLOWUP);
 
   const { count: qualifiedCount } = await supabase
     .from("leads")
     .select("*", { count: "exact", head: true })
     .eq("status", LEAD_STATUSES.QUALIFIED);
 
-  const { count: placedCount } = await supabase
+  const { count: notRelevantCount } = await supabase
     .from("leads")
     .select("*", { count: "exact", head: true })
-    .eq("status", LEAD_STATUSES.PLACED);
+    .eq("status", LEAD_STATUSES.NOT_RELEVANT);
 
   // Leads per day — last 7 days
   const sevenDaysAgo = new Date();
@@ -70,10 +70,10 @@ export default async function DashboardPage() {
 
   const cards = [
     { label: "סה״כ לידים", value: totalCount ?? 0, color: "bg-purple-50 text-purple-700" },
-    { label: "לידים חדשים", value: newCount ?? 0, color: "bg-blue-50 text-blue-700" },
-    { label: "בסינון", value: screeningCount ?? 0, color: "bg-yellow-50 text-yellow-700" },
+    { label: "חדשים", value: newCount ?? 0, color: "bg-blue-50 text-blue-700" },
+    { label: "מעקב", value: followupCount ?? 0, color: "bg-orange-50 text-orange-700" },
     { label: "מתאימים", value: qualifiedCount ?? 0, color: "bg-green-50 text-green-700" },
-    { label: "הושמו", value: placedCount ?? 0, color: "bg-emerald-50 text-emerald-700" },
+    { label: "לא רלוונטי", value: notRelevantCount ?? 0, color: "bg-gray-100 text-gray-700" },
   ];
 
   return (

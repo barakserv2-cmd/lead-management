@@ -1,53 +1,21 @@
 export const LEAD_STATUSES = {
   NEW: "חדש",
-  PARSED: "מפוענח",
-  CONTACTED: "נוצר קשר",
-  ENGAGED: "מעורב",
-  SCREENING: "בסינון",
+  FOLLOWUP: "מעקב",
   QUALIFIED: "מתאים",
-  PLACED: "הושמה",
-  HIRED: "התקבל",
-  TERMINATED: "סיום העסקה",
-  NO_RESPONSE: "ללא תגובה",
-  FOLLOWUP_1: "Follow-up 1",
-  FOLLOWUP_2: "Follow-up 2",
-  COLD: "קר",
-  REJECTED: "נדחה",
-  REMOVED: "הוסר",
-  ARCHIVED: "ארכיון",
+  NOT_RELEVANT: "לא רלוונטי",
 } as const;
 
 export type LeadStatus = (typeof LEAD_STATUSES)[keyof typeof LEAD_STATUSES];
 
 export const STATUS_COLORS: Record<LeadStatus, string> = {
   [LEAD_STATUSES.NEW]: "bg-blue-100 text-blue-800",
-  [LEAD_STATUSES.PARSED]: "bg-indigo-100 text-indigo-800",
-  [LEAD_STATUSES.CONTACTED]: "bg-cyan-100 text-cyan-800",
-  [LEAD_STATUSES.ENGAGED]: "bg-teal-100 text-teal-800",
-  [LEAD_STATUSES.SCREENING]: "bg-yellow-100 text-yellow-800",
+  [LEAD_STATUSES.FOLLOWUP]: "bg-orange-100 text-orange-800",
   [LEAD_STATUSES.QUALIFIED]: "bg-green-100 text-green-800",
-  [LEAD_STATUSES.PLACED]: "bg-emerald-100 text-emerald-800",
-  [LEAD_STATUSES.HIRED]: "bg-purple-100 text-purple-800",
-  [LEAD_STATUSES.TERMINATED]: "bg-stone-200 text-stone-800",
-  [LEAD_STATUSES.NO_RESPONSE]: "bg-gray-100 text-gray-800",
-  [LEAD_STATUSES.FOLLOWUP_1]: "bg-orange-100 text-orange-800",
-  [LEAD_STATUSES.FOLLOWUP_2]: "bg-amber-100 text-amber-800",
-  [LEAD_STATUSES.COLD]: "bg-slate-100 text-slate-800",
-  [LEAD_STATUSES.REJECTED]: "bg-red-100 text-red-800",
-  [LEAD_STATUSES.REMOVED]: "bg-rose-100 text-rose-800",
-  [LEAD_STATUSES.ARCHIVED]: "bg-zinc-100 text-zinc-800",
+  [LEAD_STATUSES.NOT_RELEVANT]: "bg-gray-200 text-gray-700",
 };
 
 // Sub-statuses keyed by main status — scalable for future statuses
-export const SUB_STATUSES: Record<string, string[]> = {
-  [LEAD_STATUSES.CONTACTED]: [
-    "אין מענה",
-    "לא זמין במיידי",
-    "ביקש פרטים בלבד",
-    "אין מענה 3 פעמים",
-    "ביקש לחזור אליו מאוחר יותר",
-  ],
-};
+export const SUB_STATUSES: Record<string, string[]> = {};
 
 export const LEAD_SOURCES = [
   "AllJobs",

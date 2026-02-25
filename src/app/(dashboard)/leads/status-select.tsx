@@ -1,17 +1,14 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { updateLeadStatus, updateLeadStatusWithRole, updateLeadSubStatus, getActiveClients, getOpenJobs } from "./actions";
+import { updateLeadStatus, updateLeadSubStatus } from "./actions";
 import { SUB_STATUSES } from "@/lib/constants";
 
 const QUICK_STATUSES = [
   { value: "חדש", label: "חדש", color: "bg-blue-100 text-blue-800", dot: "bg-blue-500" },
-  { value: "מעורב", label: "נוצר קשר", color: "bg-cyan-100 text-cyan-800", dot: "bg-cyan-500" },
-  { value: "בסינון", label: "בסינון", color: "bg-yellow-100 text-yellow-800", dot: "bg-yellow-500" },
-  { value: "מתאים", label: "מתאים", color: "bg-emerald-100 text-emerald-800", dot: "bg-emerald-500" },
-  { value: "התקבל", label: "התקבל", color: "bg-purple-100 text-purple-800", dot: "bg-purple-500" },
-  { value: "סיום העסקה", label: "סיום העסקה", color: "bg-stone-200 text-stone-800", dot: "bg-stone-500" },
-  { value: "נדחה", label: "נדחה", color: "bg-red-100 text-red-800", dot: "bg-red-500" },
+  { value: "מעקב", label: "מעקב", color: "bg-orange-100 text-orange-800", dot: "bg-orange-500" },
+  { value: "מתאים", label: "מתאים", color: "bg-green-100 text-green-800", dot: "bg-green-500" },
+  { value: "לא רלוונטי", label: "לא רלוונטי", color: "bg-gray-200 text-gray-700", dot: "bg-gray-500" },
 ];
 
 function getStatusStyle(status: string) {
@@ -23,30 +20,14 @@ function getStatusStyle(status: string) {
   };
 }
 
-type JobOption = { id: string; title: string; client_id: string; clients: { name: string } | null };
-
 export function StatusSelect({ leadId, currentStatus, currentSubStatus }: { leadId: string; currentStatus: string; currentSubStatus?: string | null }) {
   const [status, setStatus] = useState(currentStatus);
   const [subStatus, setSubStatus] = useState<string | null>(currentSubStatus ?? null);
   const [open, setOpen] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-  const [roleModalOpen, setRoleModalOpen] = useState(false);
-
-  // Modal form state
-  const [selectedClientId, setSelectedClientId] = useState("");
-  const [clientValue, setClientValue] = useState("");
-  const [roleValue, setRoleValue] = useState("");
-  const [customRole, setCustomRole] = useState(false);
-  const [customClient, setCustomClient] = useState(false);
-
-  // DB data
-  const [jobs, setJobs] = useState<JobOption[]>([]);
-  const [clients, setClients] = useState<{ id: string; name: string }[]>([]);
 
   const ref = useRef<HTMLDivElement>(null);
-  const customRoleRef = useRef<HTMLInputElement>(null);
-  const customClientRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {
@@ -62,39 +43,11 @@ export function StatusSelect({ leadId, currentStatus, currentSubStatus }: { lead
     return () => clearTimeout(t);
   }, [toast]);
 
-  useEffect(() => {
-    if (roleModalOpen) {
-      Promise.all([getOpenJobs(), getActiveClients()]).then(([jobRes, clientRes]) => {
-        setJobs(jobRes.jobs as JobOption[]);
-        setClients(clientRes.clients);
-      });
-    }
-  }, [roleModalOpen]);
-
-  useEffect(() => {
-    if (customRole && customRoleRef.current) customRoleRef.current.focus();
-  }, [customRole]);
-
-  useEffect(() => {
-    if (customClient && customClientRef.current) customClientRef.current.focus();
-  }, [customClient]);
-
   const current = getStatusStyle(status);
 
   async function handleSelect(newStatus: string) {
     if (newStatus === status) {
       setOpen(false);
-      return;
-    }
-
-    if (newStatus === "התקבל") {
-      setOpen(false);
-      setSelectedClientId("");
-      setClientValue("");
-      setRoleValue("");
-      setCustomRole(false);
-      setCustomClient(false);
-      setRoleModalOpen(true);
       return;
     }
 
@@ -120,74 +73,6 @@ export function StatusSelect({ leadId, currentStatus, currentSubStatus }: { lead
       setToast(`שגיאה: ${result.error}`);
     }
   }
-
-  function handleClientSelect(value: string) {
-    if (value === "__custom__") {
-      setCustomClient(true);
-      setClientValue("");
-      setSelectedClientId("");
-    } else {
-      setCustomClient(false);
-      const client = clients.find((c) => c.id === value);
-      setSelectedClientId(value);
-      setClientValue(client?.name ?? "");
-    }
-    // Reset job selection when client changes
-    setRoleValue("");
-    setCustomRole(false);
-  }
-
-  function handleJobSelect(value: string) {
-    if (value === "__custom__") {
-      setCustomRole(true);
-      setRoleValue("");
-      return;
-    }
-    setCustomRole(false);
-    const job = jobs.find((j) => j.id === value);
-    if (job) {
-      setRoleValue(job.title);
-    }
-  }
-
-  // Filter jobs by selected client
-  const filteredJobs = selectedClientId
-    ? jobs.filter((j) => j.client_id === selectedClientId)
-    : [];
-  const jobsDisabled = !selectedClientId && !customClient;
-
-  async function handleRoleConfirm() {
-    const trimmedRole = roleValue.trim();
-    const trimmedClient = clientValue.trim();
-    if (!trimmedRole || !trimmedClient) return;
-
-    setRoleModalOpen(false);
-    setLoading(true);
-
-    const result = await updateLeadStatusWithRole(leadId, "התקבל", trimmedRole, trimmedClient);
-
-    setLoading(false);
-
-    if (result.error) {
-      setToast(`שגיאה: ${result.error}`);
-    } else {
-      setStatus("התקבל");
-      setToast(`התקבל — ${trimmedRole} @ ${trimmedClient}`);
-    }
-  }
-
-  function handleRoleCancel() {
-    setRoleModalOpen(false);
-    setSelectedClientId("");
-    setClientValue("");
-    setRoleValue("");
-    setCustomRole(false);
-    setCustomClient(false);
-  }
-
-  // Computed dropdown values
-  const selectedJobId = !customRole ? (filteredJobs.find((j) => j.title === roleValue)?.id ?? "") : "__custom__";
-  const selectedClientDropdown = !customClient ? selectedClientId : "__custom__";
 
   return (
     <div className="relative" ref={ref}>
@@ -240,83 +125,6 @@ export function StatusSelect({ leadId, currentStatus, currentSubStatus }: { lead
             <option key={sub} value={sub}>{sub}</option>
           ))}
         </select>
-      )}
-
-      {/* Role + Client Modal */}
-      {roleModalOpen && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[100] p-4" onClick={handleRoleCancel}>
-          <div className="bg-white rounded-xl shadow-2xl w-full max-w-sm p-5" dir="rtl" onClick={(e) => e.stopPropagation()}>
-            <h3 className="text-base font-bold text-gray-900 mb-1">שיוך ליד למשרה</h3>
-            <p className="text-xs text-gray-500 mb-4">בחר לקוח, ואז בחר משרה מהרשימה המסוננת</p>
-
-            {/* Client (first) */}
-            <label className="block text-sm font-semibold text-gray-900 mb-1">לקוח</label>
-            <select
-              value={selectedClientDropdown}
-              onChange={(e) => handleClientSelect(e.target.value)}
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 mb-2 bg-white"
-            >
-              <option value="">— בחר לקוח —</option>
-              {clients.map((c) => (
-                <option key={c.id} value={c.id}>{c.name}</option>
-              ))}
-              <option value="__custom__">+ הוסף ידנית...</option>
-            </select>
-            {customClient && (
-              <input
-                ref={customClientRef}
-                type="text"
-                value={clientValue}
-                onChange={(e) => setClientValue(e.target.value)}
-                placeholder="הקלד שם לקוח..."
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 mb-2"
-              />
-            )}
-
-            {/* Job / Role (filtered by client) */}
-            <label className="block text-sm font-semibold text-gray-900 mb-1 mt-3">משרה</label>
-            <select
-              value={selectedJobId}
-              onChange={(e) => handleJobSelect(e.target.value)}
-              disabled={jobsDisabled}
-              className={`w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 mb-2 bg-white ${jobsDisabled ? "opacity-50 cursor-not-allowed" : ""}`}
-            >
-              <option value="">{jobsDisabled ? "— בחר לקוח קודם —" : "— בחר משרה —"}</option>
-              {filteredJobs.map((j) => (
-                <option key={j.id} value={j.id}>{j.title}</option>
-              ))}
-              <option value="__custom__">+ הוסף ידנית...</option>
-            </select>
-            {customRole && (
-              <input
-                ref={customRoleRef}
-                type="text"
-                value={roleValue}
-                onChange={(e) => setRoleValue(e.target.value)}
-                placeholder="הקלד שם משרה..."
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 mb-2"
-              />
-            )}
-
-            <div className="flex gap-2 mt-4">
-              <button
-                type="button"
-                onClick={handleRoleConfirm}
-                disabled={!roleValue.trim() || !clientValue.trim()}
-                className="flex-1 py-2 rounded-lg text-sm font-semibold text-white bg-emerald-600 hover:bg-emerald-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-              >
-                אישור
-              </button>
-              <button
-                type="button"
-                onClick={handleRoleCancel}
-                className="flex-1 py-2 rounded-lg text-sm font-semibold text-gray-700 bg-gray-100 hover:bg-gray-200 transition-colors"
-              >
-                ביטול
-              </button>
-            </div>
-          </div>
-        </div>
       )}
 
       {toast && (
