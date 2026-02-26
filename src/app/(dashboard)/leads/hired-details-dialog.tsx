@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   Dialog,
   DialogContent,
@@ -9,8 +9,19 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { getActiveClients, getOpenJobs } from "./actions";
+
+interface ClientOption {
+  id: string;
+  name: string;
+}
+
+interface JobOption {
+  id: string;
+  title: string;
+  client_id: string;
+}
 
 interface HiredDetailsDialogProps {
   open: boolean;
@@ -25,20 +36,62 @@ export function HiredDetailsDialog({
   onConfirm,
   loading,
 }: HiredDetailsDialogProps) {
-  const [client, setClient] = useState("");
-  const [position, setPosition] = useState("");
+  const [clients, setClients] = useState<ClientOption[]>([]);
+  const [jobs, setJobs] = useState<JobOption[]>([]);
+  const [fetching, setFetching] = useState(false);
+
+  const [selectedClientId, setSelectedClientId] = useState("");
+  const [selectedJobId, setSelectedJobId] = useState("");
+
+  // Fetch clients and jobs when dialog opens
+  useEffect(() => {
+    if (!open) return;
+    let cancelled = false;
+    setFetching(true);
+
+    Promise.all([getActiveClients(), getOpenJobs()]).then(
+      ([clientsResult, jobsResult]) => {
+        if (cancelled) return;
+        setClients(clientsResult.clients as ClientOption[]);
+        setJobs(
+          (jobsResult.jobs as (JobOption & { clients?: { name: string } })[]).map((j) => ({
+            id: j.id,
+            title: j.title,
+            client_id: j.client_id,
+          }))
+        );
+        setFetching(false);
+      }
+    );
+
+    return () => {
+      cancelled = true;
+    };
+  }, [open]);
+
+  // Reset position when client changes
+  useEffect(() => {
+    setSelectedJobId("");
+  }, [selectedClientId]);
+
+  const filteredJobs = selectedClientId
+    ? jobs.filter((j) => j.client_id === selectedClientId)
+    : [];
+
+  const selectedClient = clients.find((c) => c.id === selectedClientId);
+  const selectedJob = jobs.find((j) => j.id === selectedJobId);
 
   function handleOpenChange(value: boolean) {
     if (!value) {
-      setClient("");
-      setPosition("");
+      setSelectedClientId("");
+      setSelectedJobId("");
     }
     onOpenChange(value);
   }
 
   function handleConfirm() {
-    if (client.trim() && position.trim()) {
-      onConfirm(client.trim(), position.trim());
+    if (selectedClient && selectedJob) {
+      onConfirm(selectedClient.name, selectedJob.title);
     }
   }
 
@@ -51,21 +104,39 @@ export function HiredDetailsDialog({
         <div className="flex flex-col gap-4 py-2">
           <div className="space-y-2">
             <Label htmlFor="hired-client">לקוח *</Label>
-            <Input
+            <select
               id="hired-client"
-              value={client}
-              onChange={(e) => setClient(e.target.value)}
-              placeholder="שם הלקוח"
-            />
+              value={selectedClientId}
+              onChange={(e) => setSelectedClientId(e.target.value)}
+              disabled={fetching}
+              className="w-full rounded-md border border-gray-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent"
+            >
+              <option value="">{fetching ? "טוען..." : "— בחר לקוח —"}</option>
+              {clients.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                </option>
+              ))}
+            </select>
           </div>
           <div className="space-y-2">
             <Label htmlFor="hired-position">משרה *</Label>
-            <Input
+            <select
               id="hired-position"
-              value={position}
-              onChange={(e) => setPosition(e.target.value)}
-              placeholder="שם המשרה / תפקיד"
-            />
+              value={selectedJobId}
+              onChange={(e) => setSelectedJobId(e.target.value)}
+              disabled={!selectedClientId || fetching}
+              className="w-full rounded-md border border-gray-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <option value="">
+                {!selectedClientId ? "— בחר לקוח תחילה —" : filteredJobs.length === 0 ? "— אין משרות פתוחות —" : "— בחר משרה —"}
+              </option>
+              {filteredJobs.map((j) => (
+                <option key={j.id} value={j.id}>
+                  {j.title}
+                </option>
+              ))}
+            </select>
           </div>
         </div>
         <DialogFooter>
@@ -78,7 +149,7 @@ export function HiredDetailsDialog({
           </Button>
           <Button
             onClick={handleConfirm}
-            disabled={!client.trim() || !position.trim() || loading}
+            disabled={!selectedClient || !selectedJob || loading}
             className="bg-green-600 hover:bg-green-700"
           >
             {loading ? "שומר..." : "אישור"}
