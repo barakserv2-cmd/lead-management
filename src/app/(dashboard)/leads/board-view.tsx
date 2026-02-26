@@ -2,6 +2,10 @@
 
 import { useState } from "react";
 import { updateLeadStatus } from "./actions";
+import { LEAD_STATUSES } from "@/lib/constants";
+import { RejectionReasonDialog } from "./rejection-reason-dialog";
+
+const NOT_RELEVANT = LEAD_STATUSES.NOT_RELEVANT;
 
 interface LeadCard {
   id: string;
@@ -9,6 +13,7 @@ interface LeadCard {
   phone: string | null;
   source: string;
   status: string;
+  rejection_reason: string | null;
 }
 
 const BOARD_COLUMNS = [
@@ -38,6 +43,9 @@ export function BoardView({ leads: initialLeads, onSelectLead }: { leads: LeadCa
   const [leads, setLeads] = useState(initialLeads);
   const [dragging, setDragging] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
+  const [rejectionDialogOpen, setRejectionDialogOpen] = useState(false);
+  const [pendingDrop, setPendingDrop] = useState<{ leadId: string; previousStatus: string } | null>(null);
+  const [rejectionLoading, setRejectionLoading] = useState(false);
 
   function handleDragStart(leadId: string) {
     setDragging(leadId);
@@ -56,9 +64,18 @@ export function BoardView({ leads: initialLeads, onSelectLead }: { leads: LeadCa
       return;
     }
 
+    // Optimistically move
     setLeads((prev) =>
-      prev.map((l) => (l.id === dragging ? { ...l, status: columnValue } : l))
+      prev.map((l) => (l.id === dragging ? { ...l, status: columnValue, rejection_reason: null } : l))
     );
+
+    if (columnValue === NOT_RELEVANT) {
+      setPendingDrop({ leadId: dragging, previousStatus: lead.status });
+      setDragging(null);
+      setRejectionDialogOpen(true);
+      return;
+    }
+
     setDragging(null);
 
     const result = await updateLeadStatus(dragging, columnValue);
@@ -71,6 +88,38 @@ export function BoardView({ leads: initialLeads, onSelectLead }: { leads: LeadCa
       setToast("הסטטוס עודכן");
     }
     setTimeout(() => setToast(null), 2500);
+  }
+
+  async function handleRejectionConfirm(reason: string) {
+    if (!pendingDrop) return;
+    setRejectionLoading(true);
+    const result = await updateLeadStatus(pendingDrop.leadId, NOT_RELEVANT, reason);
+    setRejectionLoading(false);
+    setRejectionDialogOpen(false);
+
+    if (result.error) {
+      setLeads((prev) =>
+        prev.map((l) => (l.id === pendingDrop.leadId ? { ...l, status: pendingDrop.previousStatus } : l))
+      );
+      setToast(`שגיאה: ${result.error}`);
+    } else {
+      setLeads((prev) =>
+        prev.map((l) => (l.id === pendingDrop.leadId ? { ...l, rejection_reason: reason } : l))
+      );
+      setToast("הסטטוס עודכן");
+    }
+    setPendingDrop(null);
+    setTimeout(() => setToast(null), 2500);
+  }
+
+  function handleRejectionCancel() {
+    if (pendingDrop) {
+      setLeads((prev) =>
+        prev.map((l) => (l.id === pendingDrop.leadId ? { ...l, status: pendingDrop.previousStatus } : l))
+      );
+    }
+    setPendingDrop(null);
+    setRejectionDialogOpen(false);
   }
 
   return (
@@ -126,6 +175,11 @@ export function BoardView({ leads: initialLeads, onSelectLead }: { leads: LeadCa
                             {lead.source}
                           </span>
                         </div>
+                        {lead.rejection_reason && (
+                          <span className="mt-1.5 inline-block px-2 py-0.5 rounded-full text-[10px] font-medium bg-red-50 text-red-600 border border-red-200">
+                            {lead.rejection_reason}
+                          </span>
+                        )}
                       </div>
                     );
                   })
@@ -141,6 +195,13 @@ export function BoardView({ leads: initialLeads, onSelectLead }: { leads: LeadCa
           {toast}
         </div>
       )}
+
+      <RejectionReasonDialog
+        open={rejectionDialogOpen}
+        onOpenChange={(open) => { if (!open) handleRejectionCancel(); }}
+        onConfirm={handleRejectionConfirm}
+        loading={rejectionLoading}
+      />
     </>
   );
 }

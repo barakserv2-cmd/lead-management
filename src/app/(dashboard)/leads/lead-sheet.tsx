@@ -43,6 +43,7 @@ export interface SheetLead {
   active_jobs_count: number;
   active_employees_count: number;
   recruitment_status: string;
+  rejection_reason: string | null;
   preferences: Record<string, unknown> | null;
 }
 

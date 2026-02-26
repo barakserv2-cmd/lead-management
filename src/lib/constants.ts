@@ -58,6 +58,15 @@ export const RECRUITMENT_STATUSES = {
 export type RecruitmentStatus =
   (typeof RECRUITMENT_STATUSES)[keyof typeof RECRUITMENT_STATUSES];
 
+// ── Rejection reasons for "לא רלוונטי" ──────────────────────
+export const REJECTION_REASONS = [
+  "אין מענה 3",
+  "לא מתאים",
+  "דחוי",
+  "שכר לא תואם את הדרישה",
+  "חסום",
+] as const;
+
 // ── Conversation Mode enums ─────────────────────────────────
 
 export const INTERACTION_TYPES = {

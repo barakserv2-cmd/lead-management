@@ -2,6 +2,7 @@
 
 import { createClient as createServerClient } from "@supabase/supabase-js";
 import { revalidatePath } from "next/cache";
+import { LEAD_STATUSES } from "@/lib/constants";
 
 function getSupabase() {
   return createServerClient(
@@ -29,7 +30,7 @@ export async function getStatusHistory(leadId: string) {
   return { history: data ?? [], error: null };
 }
 
-export async function updateLeadStatus(leadId: string, newStatus: string) {
+export async function updateLeadStatus(leadId: string, newStatus: string, rejectionReason?: string) {
   const supabase = getSupabase();
 
   // Fetch current status before update
@@ -41,9 +42,15 @@ export async function updateLeadStatus(leadId: string, newStatus: string) {
 
   const previousStatus = current?.status ?? null;
 
+  const updateData: Record<string, unknown> = {
+    status: newStatus,
+    sub_status: null,
+    rejection_reason: newStatus === LEAD_STATUSES.NOT_RELEVANT ? (rejectionReason ?? null) : null,
+  };
+
   const { error } = await supabase
     .from("leads")
-    .update({ status: newStatus, sub_status: null })
+    .update(updateData)
     .eq("id", leadId);
 
   if (!error) {

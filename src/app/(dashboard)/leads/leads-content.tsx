@@ -96,6 +96,7 @@ export function LeadsContent({ leads }: { leads: Lead[] }) {
     phone: l.phone,
     source: l.source,
     status: l.status,
+    rejection_reason: l.rejection_reason,
   }));
 
   const tableView = (
@@ -159,7 +160,14 @@ export function LeadsContent({ leads }: { leads: Lead[] }) {
                   <td className="px-4 py-3 text-gray-600" dir="ltr">{lead.phone ?? "—"}</td>
                   <td className="px-4 py-3 text-gray-600">{lead.job_title ?? "—"}</td>
                   <td className="px-4 py-3">
-                    <StatusSelect leadId={lead.id} currentStatus={lead.status} currentSubStatus={lead.sub_status} />
+                    <div className="flex items-center gap-1.5">
+                      <StatusSelect leadId={lead.id} currentStatus={lead.status} currentSubStatus={lead.sub_status} />
+                      {lead.rejection_reason && (
+                        <span className="inline-block px-2 py-0.5 rounded-full text-[10px] font-medium bg-red-50 text-red-600 border border-red-200">
+                          {lead.rejection_reason}
+                        </span>
+                      )}
+                    </div>
                   </td>
                   <td className="px-4 py-3">
                     <span className={"inline-block px-2.5 py-1 rounded-full text-xs font-medium " + sourceColor}>
