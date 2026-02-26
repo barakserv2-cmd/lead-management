@@ -5,9 +5,11 @@ import { updateLeadStatus } from "./actions";
 import { LEAD_STATUSES } from "@/lib/constants";
 import { RejectionReasonDialog } from "./rejection-reason-dialog";
 import { HiredDetailsDialog } from "./hired-details-dialog";
+import { InterviewDialog } from "./interview-dialog";
 
 const NOT_RELEVANT = LEAD_STATUSES.NOT_RELEVANT;
 const ACCEPTED = LEAD_STATUSES.ACCEPTED;
+const INTERVIEW = LEAD_STATUSES.INTERVIEW;
 
 interface LeadCard {
   id: string;
@@ -18,6 +20,8 @@ interface LeadCard {
   rejection_reason: string | null;
   hired_client: string | null;
   hired_position: string | null;
+  interview_date: string | null;
+  interview_notes: string | null;
 }
 
 const BOARD_COLUMNS = [
@@ -50,6 +54,7 @@ export function BoardView({ leads: initialLeads, onSelectLead }: { leads: LeadCa
   const [toast, setToast] = useState<string | null>(null);
   const [rejectionDialogOpen, setRejectionDialogOpen] = useState(false);
   const [hiredDialogOpen, setHiredDialogOpen] = useState(false);
+  const [interviewDialogOpen, setInterviewDialogOpen] = useState(false);
   const [pendingDrop, setPendingDrop] = useState<{ leadId: string; previousStatus: string } | null>(null);
   const [dialogLoading, setDialogLoading] = useState(false);
 
@@ -72,8 +77,15 @@ export function BoardView({ leads: initialLeads, onSelectLead }: { leads: LeadCa
 
     // Optimistically move
     setLeads((prev) =>
-      prev.map((l) => (l.id === dragging ? { ...l, status: columnValue, rejection_reason: null, hired_client: null, hired_position: null } : l))
+      prev.map((l) => (l.id === dragging ? { ...l, status: columnValue, rejection_reason: null, hired_client: null, hired_position: null, interview_date: null, interview_notes: null } : l))
     );
+
+    if (columnValue === INTERVIEW) {
+      setPendingDrop({ leadId: dragging, previousStatus: lead.status });
+      setDragging(null);
+      setInterviewDialogOpen(true);
+      return;
+    }
 
     if (columnValue === NOT_RELEVANT) {
       setPendingDrop({ leadId: dragging, previousStatus: lead.status });
@@ -147,6 +159,28 @@ export function BoardView({ leads: initialLeads, onSelectLead }: { leads: LeadCa
     setTimeout(() => setToast(null), 2500);
   }
 
+  async function handleInterviewConfirm(date: string, notes: string) {
+    if (!pendingDrop) return;
+    setDialogLoading(true);
+    const result = await updateLeadStatus(pendingDrop.leadId, INTERVIEW, { interviewDate: date, interviewNotes: notes });
+    setDialogLoading(false);
+    setInterviewDialogOpen(false);
+
+    if (result.error) {
+      setLeads((prev) =>
+        prev.map((l) => (l.id === pendingDrop.leadId ? { ...l, status: pendingDrop.previousStatus } : l))
+      );
+      setToast(`שגיאה: ${result.error}`);
+    } else {
+      setLeads((prev) =>
+        prev.map((l) => (l.id === pendingDrop.leadId ? { ...l, interview_date: date, interview_notes: notes } : l))
+      );
+      setToast("הסטטוס עודכן");
+    }
+    setPendingDrop(null);
+    setTimeout(() => setToast(null), 2500);
+  }
+
   function handleDialogCancel() {
     if (pendingDrop) {
       setLeads((prev) =>
@@ -156,6 +190,7 @@ export function BoardView({ leads: initialLeads, onSelectLead }: { leads: LeadCa
     setPendingDrop(null);
     setRejectionDialogOpen(false);
     setHiredDialogOpen(false);
+    setInterviewDialogOpen(false);
   }
 
   return (
@@ -221,6 +256,13 @@ export function BoardView({ leads: initialLeads, onSelectLead }: { leads: LeadCa
                             <span className="font-medium">לקוח:</span> {lead.hired_client} | <span className="font-medium">משרה:</span> {lead.hired_position}
                           </p>
                         )}
+                        {lead.interview_date && (
+                          <p className="mt-1.5 text-[10px] text-purple-700 bg-purple-50 border border-purple-200 rounded-lg px-2 py-1">
+                            <span className="font-medium">ראיון:</span>{" "}
+                            {new Date(lead.interview_date).toLocaleDateString("he-IL", { day: "numeric", month: "numeric" })}{" "}
+                            בשעה {new Date(lead.interview_date).toLocaleTimeString("he-IL", { hour: "2-digit", minute: "2-digit" })}
+                          </p>
+                        )}
                       </div>
                     );
                   })
@@ -248,6 +290,13 @@ export function BoardView({ leads: initialLeads, onSelectLead }: { leads: LeadCa
         open={hiredDialogOpen}
         onOpenChange={(open) => { if (!open) handleDialogCancel(); }}
         onConfirm={handleHiredConfirm}
+        loading={dialogLoading}
+      />
+
+      <InterviewDialog
+        open={interviewDialogOpen}
+        onOpenChange={(open) => { if (!open) handleDialogCancel(); }}
+        onConfirm={handleInterviewConfirm}
         loading={dialogLoading}
       />
     </>

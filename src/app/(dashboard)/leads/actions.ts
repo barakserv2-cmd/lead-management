@@ -33,7 +33,7 @@ export async function getStatusHistory(leadId: string) {
 export async function updateLeadStatus(
   leadId: string,
   newStatus: string,
-  extra?: { rejectionReason?: string; hiredClient?: string; hiredPosition?: string }
+  extra?: { rejectionReason?: string; hiredClient?: string; hiredPosition?: string; interviewDate?: string; interviewNotes?: string }
 ) {
   const supabase = getSupabase();
 
@@ -52,6 +52,8 @@ export async function updateLeadStatus(
     rejection_reason: newStatus === LEAD_STATUSES.NOT_RELEVANT ? (extra?.rejectionReason ?? null) : null,
     hired_client: newStatus === LEAD_STATUSES.ACCEPTED ? (extra?.hiredClient ?? null) : null,
     hired_position: newStatus === LEAD_STATUSES.ACCEPTED ? (extra?.hiredPosition ?? null) : null,
+    interview_date: newStatus === LEAD_STATUSES.INTERVIEW ? (extra?.interviewDate ?? null) : null,
+    interview_notes: newStatus === LEAD_STATUSES.INTERVIEW ? (extra?.interviewNotes ?? null) : null,
   };
 
   const { error } = await supabase

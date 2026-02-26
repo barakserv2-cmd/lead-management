@@ -5,9 +5,11 @@ import { updateLeadStatus, updateLeadSubStatus } from "./actions";
 import { LEAD_STATUSES, SUB_STATUSES } from "@/lib/constants";
 import { RejectionReasonDialog } from "./rejection-reason-dialog";
 import { HiredDetailsDialog } from "./hired-details-dialog";
+import { InterviewDialog } from "./interview-dialog";
 
 const NOT_RELEVANT = LEAD_STATUSES.NOT_RELEVANT;
 const ACCEPTED = LEAD_STATUSES.ACCEPTED;
+const INTERVIEW = LEAD_STATUSES.INTERVIEW;
 
 const QUICK_STATUSES = [
   { value: LEAD_STATUSES.NEW, label: "חדש", color: "bg-blue-100 text-blue-800", dot: "bg-blue-500" },
@@ -34,6 +36,7 @@ export function StatusSelect({ leadId, currentStatus, currentSubStatus }: { lead
   const [loading, setLoading] = useState(false);
   const [rejectionDialogOpen, setRejectionDialogOpen] = useState(false);
   const [hiredDialogOpen, setHiredDialogOpen] = useState(false);
+  const [interviewDialogOpen, setInterviewDialogOpen] = useState(false);
 
   const ref = useRef<HTMLDivElement>(null);
 
@@ -68,6 +71,11 @@ export function StatusSelect({ leadId, currentStatus, currentSubStatus }: { lead
 
     if (newStatus === ACCEPTED) {
       setHiredDialogOpen(true);
+      return;
+    }
+
+    if (newStatus === INTERVIEW) {
+      setInterviewDialogOpen(true);
       return;
     }
 
@@ -109,6 +117,21 @@ export function StatusSelect({ leadId, currentStatus, currentSubStatus }: { lead
       setToast(`שגיאה: ${result.error}`);
     } else {
       setStatus(ACCEPTED);
+      setSubStatus(null);
+      setToast("הסטטוס עודכן");
+    }
+  }
+
+  async function handleInterviewConfirm(date: string, notes: string) {
+    setLoading(true);
+    const result = await updateLeadStatus(leadId, INTERVIEW, { interviewDate: date, interviewNotes: notes });
+    setLoading(false);
+    setInterviewDialogOpen(false);
+
+    if (result.error) {
+      setToast(`שגיאה: ${result.error}`);
+    } else {
+      setStatus(INTERVIEW);
       setSubStatus(null);
       setToast("הסטטוס עודכן");
     }
@@ -195,6 +218,13 @@ export function StatusSelect({ leadId, currentStatus, currentSubStatus }: { lead
         open={hiredDialogOpen}
         onOpenChange={setHiredDialogOpen}
         onConfirm={handleHiredConfirm}
+        loading={loading}
+      />
+
+      <InterviewDialog
+        open={interviewDialogOpen}
+        onOpenChange={setInterviewDialogOpen}
+        onConfirm={handleInterviewConfirm}
         loading={loading}
       />
     </>

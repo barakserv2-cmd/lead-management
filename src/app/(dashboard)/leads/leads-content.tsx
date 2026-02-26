@@ -99,6 +99,8 @@ export function LeadsContent({ leads }: { leads: Lead[] }) {
     rejection_reason: l.rejection_reason,
     hired_client: l.hired_client,
     hired_position: l.hired_position,
+    interview_date: l.interview_date,
+    interview_notes: l.interview_notes,
   }));
 
   const tableView = (

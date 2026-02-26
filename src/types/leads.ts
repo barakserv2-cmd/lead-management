@@ -32,6 +32,8 @@ export interface Lead {
   rejection_reason: string | null;
   hired_client: string | null;
   hired_position: string | null;
+  interview_date: string | null;
+  interview_notes: string | null;
   preferences: Record<string, unknown> | null;
 }
 
