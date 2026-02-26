@@ -97,6 +97,8 @@ export function LeadsContent({ leads }: { leads: Lead[] }) {
     source: l.source,
     status: l.status,
     rejection_reason: l.rejection_reason,
+    hired_client: l.hired_client,
+    hired_position: l.hired_position,
   }));
 
   const tableView = (
@@ -165,6 +167,11 @@ export function LeadsContent({ leads }: { leads: Lead[] }) {
                       {lead.rejection_reason && (
                         <span className="inline-block px-2 py-0.5 rounded-full text-[10px] font-medium bg-red-50 text-red-600 border border-red-200">
                           {lead.rejection_reason}
+                        </span>
+                      )}
+                      {lead.hired_client && lead.hired_position && (
+                        <span className="inline-block px-2 py-0.5 rounded-full text-[10px] font-medium bg-green-50 text-green-700 border border-green-200">
+                          {lead.hired_client} | {lead.hired_position}
                         </span>
                       )}
                     </div>

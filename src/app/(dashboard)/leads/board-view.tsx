@@ -4,8 +4,10 @@ import { useState } from "react";
 import { updateLeadStatus } from "./actions";
 import { LEAD_STATUSES } from "@/lib/constants";
 import { RejectionReasonDialog } from "./rejection-reason-dialog";
+import { HiredDetailsDialog } from "./hired-details-dialog";
 
 const NOT_RELEVANT = LEAD_STATUSES.NOT_RELEVANT;
+const ACCEPTED = LEAD_STATUSES.ACCEPTED;
 
 interface LeadCard {
   id: string;
@@ -14,6 +16,8 @@ interface LeadCard {
   source: string;
   status: string;
   rejection_reason: string | null;
+  hired_client: string | null;
+  hired_position: string | null;
 }
 
 const BOARD_COLUMNS = [
@@ -45,8 +49,9 @@ export function BoardView({ leads: initialLeads, onSelectLead }: { leads: LeadCa
   const [dragging, setDragging] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const [rejectionDialogOpen, setRejectionDialogOpen] = useState(false);
+  const [hiredDialogOpen, setHiredDialogOpen] = useState(false);
   const [pendingDrop, setPendingDrop] = useState<{ leadId: string; previousStatus: string } | null>(null);
-  const [rejectionLoading, setRejectionLoading] = useState(false);
+  const [dialogLoading, setDialogLoading] = useState(false);
 
   function handleDragStart(leadId: string) {
     setDragging(leadId);
@@ -67,13 +72,20 @@ export function BoardView({ leads: initialLeads, onSelectLead }: { leads: LeadCa
 
     // Optimistically move
     setLeads((prev) =>
-      prev.map((l) => (l.id === dragging ? { ...l, status: columnValue, rejection_reason: null } : l))
+      prev.map((l) => (l.id === dragging ? { ...l, status: columnValue, rejection_reason: null, hired_client: null, hired_position: null } : l))
     );
 
     if (columnValue === NOT_RELEVANT) {
       setPendingDrop({ leadId: dragging, previousStatus: lead.status });
       setDragging(null);
       setRejectionDialogOpen(true);
+      return;
+    }
+
+    if (columnValue === ACCEPTED) {
+      setPendingDrop({ leadId: dragging, previousStatus: lead.status });
+      setDragging(null);
+      setHiredDialogOpen(true);
       return;
     }
 
@@ -93,9 +105,9 @@ export function BoardView({ leads: initialLeads, onSelectLead }: { leads: LeadCa
 
   async function handleRejectionConfirm(reason: string) {
     if (!pendingDrop) return;
-    setRejectionLoading(true);
-    const result = await updateLeadStatus(pendingDrop.leadId, NOT_RELEVANT, reason);
-    setRejectionLoading(false);
+    setDialogLoading(true);
+    const result = await updateLeadStatus(pendingDrop.leadId, NOT_RELEVANT, { rejectionReason: reason });
+    setDialogLoading(false);
     setRejectionDialogOpen(false);
 
     if (result.error) {
@@ -113,7 +125,29 @@ export function BoardView({ leads: initialLeads, onSelectLead }: { leads: LeadCa
     setTimeout(() => setToast(null), 2500);
   }
 
-  function handleRejectionCancel() {
+  async function handleHiredConfirm(client: string, position: string) {
+    if (!pendingDrop) return;
+    setDialogLoading(true);
+    const result = await updateLeadStatus(pendingDrop.leadId, ACCEPTED, { hiredClient: client, hiredPosition: position });
+    setDialogLoading(false);
+    setHiredDialogOpen(false);
+
+    if (result.error) {
+      setLeads((prev) =>
+        prev.map((l) => (l.id === pendingDrop.leadId ? { ...l, status: pendingDrop.previousStatus } : l))
+      );
+      setToast(`שגיאה: ${result.error}`);
+    } else {
+      setLeads((prev) =>
+        prev.map((l) => (l.id === pendingDrop.leadId ? { ...l, hired_client: client, hired_position: position } : l))
+      );
+      setToast("הסטטוס עודכן");
+    }
+    setPendingDrop(null);
+    setTimeout(() => setToast(null), 2500);
+  }
+
+  function handleDialogCancel() {
     if (pendingDrop) {
       setLeads((prev) =>
         prev.map((l) => (l.id === pendingDrop.leadId ? { ...l, status: pendingDrop.previousStatus } : l))
@@ -121,6 +155,7 @@ export function BoardView({ leads: initialLeads, onSelectLead }: { leads: LeadCa
     }
     setPendingDrop(null);
     setRejectionDialogOpen(false);
+    setHiredDialogOpen(false);
   }
 
   return (
@@ -181,6 +216,11 @@ export function BoardView({ leads: initialLeads, onSelectLead }: { leads: LeadCa
                             {lead.rejection_reason}
                           </span>
                         )}
+                        {lead.hired_client && lead.hired_position && (
+                          <p className="mt-1.5 text-[10px] text-green-700 bg-green-50 border border-green-200 rounded-lg px-2 py-1">
+                            <span className="font-medium">לקוח:</span> {lead.hired_client} | <span className="font-medium">משרה:</span> {lead.hired_position}
+                          </p>
+                        )}
                       </div>
                     );
                   })
@@ -199,9 +239,16 @@ export function BoardView({ leads: initialLeads, onSelectLead }: { leads: LeadCa
 
       <RejectionReasonDialog
         open={rejectionDialogOpen}
-        onOpenChange={(open) => { if (!open) handleRejectionCancel(); }}
+        onOpenChange={(open) => { if (!open) handleDialogCancel(); }}
         onConfirm={handleRejectionConfirm}
-        loading={rejectionLoading}
+        loading={dialogLoading}
+      />
+
+      <HiredDetailsDialog
+        open={hiredDialogOpen}
+        onOpenChange={(open) => { if (!open) handleDialogCancel(); }}
+        onConfirm={handleHiredConfirm}
+        loading={dialogLoading}
       />
     </>
   );

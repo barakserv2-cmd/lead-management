@@ -30,7 +30,11 @@ export async function getStatusHistory(leadId: string) {
   return { history: data ?? [], error: null };
 }
 
-export async function updateLeadStatus(leadId: string, newStatus: string, rejectionReason?: string) {
+export async function updateLeadStatus(
+  leadId: string,
+  newStatus: string,
+  extra?: { rejectionReason?: string; hiredClient?: string; hiredPosition?: string }
+) {
   const supabase = getSupabase();
 
   // Fetch current status before update
@@ -45,7 +49,9 @@ export async function updateLeadStatus(leadId: string, newStatus: string, reject
   const updateData: Record<string, unknown> = {
     status: newStatus,
     sub_status: null,
-    rejection_reason: newStatus === LEAD_STATUSES.NOT_RELEVANT ? (rejectionReason ?? null) : null,
+    rejection_reason: newStatus === LEAD_STATUSES.NOT_RELEVANT ? (extra?.rejectionReason ?? null) : null,
+    hired_client: newStatus === LEAD_STATUSES.ACCEPTED ? (extra?.hiredClient ?? null) : null,
+    hired_position: newStatus === LEAD_STATUSES.ACCEPTED ? (extra?.hiredPosition ?? null) : null,
   };
 
   const { error } = await supabase

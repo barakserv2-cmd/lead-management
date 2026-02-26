@@ -4,8 +4,10 @@ import { useState, useRef, useEffect } from "react";
 import { updateLeadStatus, updateLeadSubStatus } from "./actions";
 import { LEAD_STATUSES, SUB_STATUSES } from "@/lib/constants";
 import { RejectionReasonDialog } from "./rejection-reason-dialog";
+import { HiredDetailsDialog } from "./hired-details-dialog";
 
 const NOT_RELEVANT = LEAD_STATUSES.NOT_RELEVANT;
+const ACCEPTED = LEAD_STATUSES.ACCEPTED;
 
 const QUICK_STATUSES = [
   { value: LEAD_STATUSES.NEW, label: "חדש", color: "bg-blue-100 text-blue-800", dot: "bg-blue-500" },
@@ -31,6 +33,7 @@ export function StatusSelect({ leadId, currentStatus, currentSubStatus }: { lead
   const [toast, setToast] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [rejectionDialogOpen, setRejectionDialogOpen] = useState(false);
+  const [hiredDialogOpen, setHiredDialogOpen] = useState(false);
 
   const ref = useRef<HTMLDivElement>(null);
 
@@ -63,6 +66,11 @@ export function StatusSelect({ leadId, currentStatus, currentSubStatus }: { lead
       return;
     }
 
+    if (newStatus === ACCEPTED) {
+      setHiredDialogOpen(true);
+      return;
+    }
+
     setLoading(true);
     const result = await updateLeadStatus(leadId, newStatus);
     setLoading(false);
@@ -78,7 +86,7 @@ export function StatusSelect({ leadId, currentStatus, currentSubStatus }: { lead
 
   async function handleRejectionConfirm(reason: string) {
     setLoading(true);
-    const result = await updateLeadStatus(leadId, NOT_RELEVANT, reason);
+    const result = await updateLeadStatus(leadId, NOT_RELEVANT, { rejectionReason: reason });
     setLoading(false);
     setRejectionDialogOpen(false);
 
@@ -86,6 +94,21 @@ export function StatusSelect({ leadId, currentStatus, currentSubStatus }: { lead
       setToast(`שגיאה: ${result.error}`);
     } else {
       setStatus(NOT_RELEVANT);
+      setSubStatus(null);
+      setToast("הסטטוס עודכן");
+    }
+  }
+
+  async function handleHiredConfirm(client: string, position: string) {
+    setLoading(true);
+    const result = await updateLeadStatus(leadId, ACCEPTED, { hiredClient: client, hiredPosition: position });
+    setLoading(false);
+    setHiredDialogOpen(false);
+
+    if (result.error) {
+      setToast(`שגיאה: ${result.error}`);
+    } else {
+      setStatus(ACCEPTED);
       setSubStatus(null);
       setToast("הסטטוס עודכן");
     }
@@ -165,6 +188,13 @@ export function StatusSelect({ leadId, currentStatus, currentSubStatus }: { lead
         open={rejectionDialogOpen}
         onOpenChange={setRejectionDialogOpen}
         onConfirm={handleRejectionConfirm}
+        loading={loading}
+      />
+
+      <HiredDetailsDialog
+        open={hiredDialogOpen}
+        onOpenChange={setHiredDialogOpen}
+        onConfirm={handleHiredConfirm}
         loading={loading}
       />
     </>

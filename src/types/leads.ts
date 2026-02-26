@@ -30,6 +30,8 @@ export interface Lead {
   active_employees_count: number;
   recruitment_status: RecruitmentStatus;
   rejection_reason: string | null;
+  hired_client: string | null;
+  hired_position: string | null;
   preferences: Record<string, unknown> | null;
 }
 
