@@ -19,10 +19,10 @@ export default async function DashboardPage() {
     .select("*", { count: "exact", head: true })
     .eq("status", LEAD_STATUSES.FOLLOWUP);
 
-  const { count: qualifiedCount } = await supabase
+  const { count: interviewCount } = await supabase
     .from("leads")
     .select("*", { count: "exact", head: true })
-    .eq("status", LEAD_STATUSES.QUALIFIED);
+    .eq("status", LEAD_STATUSES.INTERVIEW);
 
   const { count: notRelevantCount } = await supabase
     .from("leads")
@@ -72,7 +72,7 @@ export default async function DashboardPage() {
     { label: "סה״כ לידים", value: totalCount ?? 0, color: "bg-purple-50 text-purple-700" },
     { label: "חדשים", value: newCount ?? 0, color: "bg-blue-50 text-blue-700" },
     { label: "מעקב", value: followupCount ?? 0, color: "bg-orange-50 text-orange-700" },
-    { label: "מתאימים", value: qualifiedCount ?? 0, color: "bg-green-50 text-green-700" },
+    { label: "ראיון במשרד", value: interviewCount ?? 0, color: "bg-purple-50 text-purple-700" },
     { label: "לא רלוונטי", value: notRelevantCount ?? 0, color: "bg-gray-100 text-gray-700" },
   ];
 

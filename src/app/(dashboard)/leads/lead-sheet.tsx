@@ -49,7 +49,7 @@ export interface SheetLead {
 const STATUS_COLORS: Record<string, string> = {
   "חדש": "bg-blue-100 text-blue-800",
   "מעקב": "bg-orange-100 text-orange-800",
-  "מתאים": "bg-green-100 text-green-800",
+  "ראיון במשרד": "bg-purple-100 text-purple-800",
   "לא רלוונטי": "bg-gray-200 text-gray-700",
 };
 

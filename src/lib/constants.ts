@@ -1,7 +1,7 @@
 export const LEAD_STATUSES = {
   NEW: "חדש",
   FOLLOWUP: "מעקב",
-  QUALIFIED: "מתאים",
+  INTERVIEW: "ראיון במשרד",
   NOT_RELEVANT: "לא רלוונטי",
 } as const;
 
@@ -10,7 +10,7 @@ export type LeadStatus = (typeof LEAD_STATUSES)[keyof typeof LEAD_STATUSES];
 export const STATUS_COLORS: Record<LeadStatus, string> = {
   [LEAD_STATUSES.NEW]: "bg-blue-100 text-blue-800",
   [LEAD_STATUSES.FOLLOWUP]: "bg-orange-100 text-orange-800",
-  [LEAD_STATUSES.QUALIFIED]: "bg-green-100 text-green-800",
+  [LEAD_STATUSES.INTERVIEW]: "bg-purple-100 text-purple-800",
   [LEAD_STATUSES.NOT_RELEVANT]: "bg-gray-200 text-gray-700",
 };
 

@@ -9,7 +9,7 @@ export default async function HiredReportPage() {
   const { data: leads } = await supabase
     .from("leads")
     .select("*")
-    .eq("status", LEAD_STATUSES.QUALIFIED)
+    .eq("status", LEAD_STATUSES.INTERVIEW)
     .order("created_at", { ascending: false });
 
   const typedLeads = (leads ?? []) as Lead[];
