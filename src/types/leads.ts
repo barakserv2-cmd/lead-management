@@ -35,6 +35,7 @@ export interface Lead {
   interview_date: string | null;
   interview_notes: string | null;
   followup_notes: string | null;
+  tags: string[] | null;
   preferences: Record<string, unknown> | null;
 }
 

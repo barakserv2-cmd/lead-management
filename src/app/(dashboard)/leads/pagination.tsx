@@ -1,11 +1,13 @@
+"use client";
+
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 
 export function Pagination({
   currentPage,
   totalPages,
   totalCount,
   pageSize,
-  searchQuery = "",
   className = "",
 }: {
   currentPage: number;
@@ -15,15 +17,16 @@ export function Pagination({
   searchQuery?: string;
   className?: string;
 }) {
+  const searchParams = useSearchParams();
+
   if (totalPages <= 1) return null;
 
   const from = (currentPage - 1) * pageSize + 1;
   const to = Math.min(currentPage * pageSize, totalCount);
 
   function buildHref(page: number) {
-    const params = new URLSearchParams();
+    const params = new URLSearchParams(searchParams.toString());
     params.set("page", String(page));
-    if (searchQuery) params.set("q", searchQuery);
     return `/leads?${params.toString()}`;
   }
 
