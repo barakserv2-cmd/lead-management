@@ -11,6 +11,7 @@ const QUICK_STATUSES = [
   { value: LEAD_STATUSES.NEW, label: "חדש", color: "bg-blue-100 text-blue-800", dot: "bg-blue-500" },
   { value: LEAD_STATUSES.FOLLOWUP, label: "מעקב", color: "bg-orange-100 text-orange-800", dot: "bg-orange-500" },
   { value: LEAD_STATUSES.INTERVIEW, label: "ראיון במשרד", color: "bg-purple-100 text-purple-800", dot: "bg-purple-500" },
+  { value: LEAD_STATUSES.ACCEPTED, label: "התקבל", color: "bg-green-100 text-green-800", dot: "bg-green-500" },
   { value: LEAD_STATUSES.NOT_RELEVANT, label: "לא רלוונטי", color: "bg-gray-200 text-gray-700", dot: "bg-gray-500" },
 ];
 

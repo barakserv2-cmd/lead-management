@@ -17,10 +17,11 @@ interface LeadCard {
 }
 
 const BOARD_COLUMNS = [
-  { value: "חדש", label: "חדש", headerColor: "bg-blue-500" },
-  { value: "מעקב", label: "מעקב", headerColor: "bg-orange-500" },
-  { value: "ראיון במשרד", label: "ראיון במשרד", headerColor: "bg-purple-500" },
-  { value: "לא רלוונטי", label: "לא רלוונטי", headerColor: "bg-gray-500" },
+  { value: LEAD_STATUSES.NEW, label: "חדש", headerColor: "bg-blue-500" },
+  { value: LEAD_STATUSES.FOLLOWUP, label: "מעקב", headerColor: "bg-orange-500" },
+  { value: LEAD_STATUSES.INTERVIEW, label: "ראיון במשרד", headerColor: "bg-purple-500" },
+  { value: LEAD_STATUSES.ACCEPTED, label: "התקבל", headerColor: "bg-green-500" },
+  { value: LEAD_STATUSES.NOT_RELEVANT, label: "לא רלוונטי", headerColor: "bg-gray-500" },
 ];
 
 const SOURCE_COLORS: Record<string, string> = {

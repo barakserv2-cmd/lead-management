@@ -2,6 +2,7 @@ export const LEAD_STATUSES = {
   NEW: "חדש",
   FOLLOWUP: "מעקב",
   INTERVIEW: "ראיון במשרד",
+  ACCEPTED: "התקבל",
   NOT_RELEVANT: "לא רלוונטי",
 } as const;
 
@@ -11,6 +12,7 @@ export const STATUS_COLORS: Record<LeadStatus, string> = {
   [LEAD_STATUSES.NEW]: "bg-blue-100 text-blue-800",
   [LEAD_STATUSES.FOLLOWUP]: "bg-orange-100 text-orange-800",
   [LEAD_STATUSES.INTERVIEW]: "bg-purple-100 text-purple-800",
+  [LEAD_STATUSES.ACCEPTED]: "bg-green-100 text-green-800",
   [LEAD_STATUSES.NOT_RELEVANT]: "bg-gray-200 text-gray-700",
 };
 

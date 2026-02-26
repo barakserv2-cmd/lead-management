@@ -24,6 +24,11 @@ export default async function DashboardPage() {
     .select("*", { count: "exact", head: true })
     .eq("status", LEAD_STATUSES.INTERVIEW);
 
+  const { count: acceptedCount } = await supabase
+    .from("leads")
+    .select("*", { count: "exact", head: true })
+    .eq("status", LEAD_STATUSES.ACCEPTED);
+
   const { count: notRelevantCount } = await supabase
     .from("leads")
     .select("*", { count: "exact", head: true })
@@ -73,13 +78,14 @@ export default async function DashboardPage() {
     { label: "חדשים", value: newCount ?? 0, color: "bg-blue-50 text-blue-700" },
     { label: "מעקב", value: followupCount ?? 0, color: "bg-orange-50 text-orange-700" },
     { label: "ראיון במשרד", value: interviewCount ?? 0, color: "bg-purple-50 text-purple-700" },
+    { label: "התקבל", value: acceptedCount ?? 0, color: "bg-green-50 text-green-700" },
     { label: "לא רלוונטי", value: notRelevantCount ?? 0, color: "bg-gray-100 text-gray-700" },
   ];
 
   return (
     <div>
       <h1 className="text-2xl font-bold mb-6">דשבורד</h1>
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-4">
         {cards.map((card) => (
           <div
             key={card.label}
