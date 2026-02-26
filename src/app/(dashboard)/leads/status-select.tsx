@@ -6,10 +6,12 @@ import { LEAD_STATUSES, SUB_STATUSES } from "@/lib/constants";
 import { RejectionReasonDialog } from "./rejection-reason-dialog";
 import { HiredDetailsDialog } from "./hired-details-dialog";
 import { InterviewDialog } from "./interview-dialog";
+import { FollowupDialog } from "./followup-dialog";
 
 const NOT_RELEVANT = LEAD_STATUSES.NOT_RELEVANT;
 const ACCEPTED = LEAD_STATUSES.ACCEPTED;
 const INTERVIEW = LEAD_STATUSES.INTERVIEW;
+const FOLLOWUP = LEAD_STATUSES.FOLLOWUP;
 
 const QUICK_STATUSES = [
   { value: LEAD_STATUSES.NEW, label: "חדש", color: "bg-blue-100 text-blue-800", dot: "bg-blue-500" },
@@ -37,6 +39,7 @@ export function StatusSelect({ leadId, currentStatus, currentSubStatus }: { lead
   const [rejectionDialogOpen, setRejectionDialogOpen] = useState(false);
   const [hiredDialogOpen, setHiredDialogOpen] = useState(false);
   const [interviewDialogOpen, setInterviewDialogOpen] = useState(false);
+  const [followupDialogOpen, setFollowupDialogOpen] = useState(false);
 
   const ref = useRef<HTMLDivElement>(null);
 
@@ -76,6 +79,11 @@ export function StatusSelect({ leadId, currentStatus, currentSubStatus }: { lead
 
     if (newStatus === INTERVIEW) {
       setInterviewDialogOpen(true);
+      return;
+    }
+
+    if (newStatus === FOLLOWUP) {
+      setFollowupDialogOpen(true);
       return;
     }
 
@@ -132,6 +140,21 @@ export function StatusSelect({ leadId, currentStatus, currentSubStatus }: { lead
       setToast(`שגיאה: ${result.error}`);
     } else {
       setStatus(INTERVIEW);
+      setSubStatus(null);
+      setToast("הסטטוס עודכן");
+    }
+  }
+
+  async function handleFollowupConfirm(notes: string) {
+    setLoading(true);
+    const result = await updateLeadStatus(leadId, FOLLOWUP, { followupNotes: notes });
+    setLoading(false);
+    setFollowupDialogOpen(false);
+
+    if (result.error) {
+      setToast(`שגיאה: ${result.error}`);
+    } else {
+      setStatus(FOLLOWUP);
       setSubStatus(null);
       setToast("הסטטוס עודכן");
     }
@@ -225,6 +248,13 @@ export function StatusSelect({ leadId, currentStatus, currentSubStatus }: { lead
         open={interviewDialogOpen}
         onOpenChange={setInterviewDialogOpen}
         onConfirm={handleInterviewConfirm}
+        loading={loading}
+      />
+
+      <FollowupDialog
+        open={followupDialogOpen}
+        onOpenChange={setFollowupDialogOpen}
+        onConfirm={handleFollowupConfirm}
         loading={loading}
       />
     </>

@@ -48,6 +48,7 @@ export interface SheetLead {
   hired_position: string | null;
   interview_date: string | null;
   interview_notes: string | null;
+  followup_notes: string | null;
   preferences: Record<string, unknown> | null;
 }
 

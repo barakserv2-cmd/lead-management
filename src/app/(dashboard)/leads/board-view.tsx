@@ -6,10 +6,12 @@ import { LEAD_STATUSES } from "@/lib/constants";
 import { RejectionReasonDialog } from "./rejection-reason-dialog";
 import { HiredDetailsDialog } from "./hired-details-dialog";
 import { InterviewDialog } from "./interview-dialog";
+import { FollowupDialog } from "./followup-dialog";
 
 const NOT_RELEVANT = LEAD_STATUSES.NOT_RELEVANT;
 const ACCEPTED = LEAD_STATUSES.ACCEPTED;
 const INTERVIEW = LEAD_STATUSES.INTERVIEW;
+const FOLLOWUP = LEAD_STATUSES.FOLLOWUP;
 
 interface LeadCard {
   id: string;
@@ -22,6 +24,7 @@ interface LeadCard {
   hired_position: string | null;
   interview_date: string | null;
   interview_notes: string | null;
+  followup_notes: string | null;
 }
 
 const BOARD_COLUMNS = [
@@ -55,6 +58,7 @@ export function BoardView({ leads: initialLeads, onSelectLead }: { leads: LeadCa
   const [rejectionDialogOpen, setRejectionDialogOpen] = useState(false);
   const [hiredDialogOpen, setHiredDialogOpen] = useState(false);
   const [interviewDialogOpen, setInterviewDialogOpen] = useState(false);
+  const [followupDialogOpen, setFollowupDialogOpen] = useState(false);
   const [pendingDrop, setPendingDrop] = useState<{ leadId: string; previousStatus: string } | null>(null);
   const [dialogLoading, setDialogLoading] = useState(false);
 
@@ -79,6 +83,13 @@ export function BoardView({ leads: initialLeads, onSelectLead }: { leads: LeadCa
     setLeads((prev) =>
       prev.map((l) => (l.id === dragging ? { ...l, status: columnValue, rejection_reason: null, hired_client: null, hired_position: null, interview_date: null, interview_notes: null } : l))
     );
+
+    if (columnValue === FOLLOWUP) {
+      setPendingDrop({ leadId: dragging, previousStatus: lead.status });
+      setDragging(null);
+      setFollowupDialogOpen(true);
+      return;
+    }
 
     if (columnValue === INTERVIEW) {
       setPendingDrop({ leadId: dragging, previousStatus: lead.status });
@@ -181,6 +192,28 @@ export function BoardView({ leads: initialLeads, onSelectLead }: { leads: LeadCa
     setTimeout(() => setToast(null), 2500);
   }
 
+  async function handleFollowupConfirm(notes: string) {
+    if (!pendingDrop) return;
+    setDialogLoading(true);
+    const result = await updateLeadStatus(pendingDrop.leadId, FOLLOWUP, { followupNotes: notes });
+    setDialogLoading(false);
+    setFollowupDialogOpen(false);
+
+    if (result.error) {
+      setLeads((prev) =>
+        prev.map((l) => (l.id === pendingDrop.leadId ? { ...l, status: pendingDrop.previousStatus } : l))
+      );
+      setToast(`שגיאה: ${result.error}`);
+    } else {
+      setLeads((prev) =>
+        prev.map((l) => (l.id === pendingDrop.leadId ? { ...l, followup_notes: notes } : l))
+      );
+      setToast("הסטטוס עודכן");
+    }
+    setPendingDrop(null);
+    setTimeout(() => setToast(null), 2500);
+  }
+
   function handleDialogCancel() {
     if (pendingDrop) {
       setLeads((prev) =>
@@ -191,6 +224,7 @@ export function BoardView({ leads: initialLeads, onSelectLead }: { leads: LeadCa
     setRejectionDialogOpen(false);
     setHiredDialogOpen(false);
     setInterviewDialogOpen(false);
+    setFollowupDialogOpen(false);
   }
 
   return (
@@ -256,6 +290,15 @@ export function BoardView({ leads: initialLeads, onSelectLead }: { leads: LeadCa
                             <span className="font-medium">לקוח:</span> {lead.hired_client} | <span className="font-medium">משרה:</span> {lead.hired_position}
                           </p>
                         )}
+                        {lead.followup_notes && (
+                          <div className="mt-1.5 flex items-start gap-1 text-[10px] text-orange-700 bg-orange-50 border border-orange-200 rounded-lg px-2 py-1" title={lead.followup_notes}>
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-3 h-3 flex-shrink-0 mt-px">
+                              <path d="M16 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V8Z" />
+                              <path d="M15 3v4a2 2 0 0 0 2 2h4" />
+                            </svg>
+                            <span className="line-clamp-2">{lead.followup_notes}</span>
+                          </div>
+                        )}
                         {lead.interview_date && (
                           <p className="mt-1.5 text-[10px] text-purple-700 bg-purple-50 border border-purple-200 rounded-lg px-2 py-1">
                             <span className="font-medium">ראיון:</span>{" "}
@@ -297,6 +340,13 @@ export function BoardView({ leads: initialLeads, onSelectLead }: { leads: LeadCa
         open={interviewDialogOpen}
         onOpenChange={(open) => { if (!open) handleDialogCancel(); }}
         onConfirm={handleInterviewConfirm}
+        loading={dialogLoading}
+      />
+
+      <FollowupDialog
+        open={followupDialogOpen}
+        onOpenChange={(open) => { if (!open) handleDialogCancel(); }}
+        onConfirm={handleFollowupConfirm}
         loading={dialogLoading}
       />
     </>

@@ -101,6 +101,7 @@ export function LeadsContent({ leads }: { leads: Lead[] }) {
     hired_position: l.hired_position,
     interview_date: l.interview_date,
     interview_notes: l.interview_notes,
+    followup_notes: l.followup_notes,
   }));
 
   const tableView = (

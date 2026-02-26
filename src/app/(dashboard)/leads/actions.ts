@@ -33,7 +33,7 @@ export async function getStatusHistory(leadId: string) {
 export async function updateLeadStatus(
   leadId: string,
   newStatus: string,
-  extra?: { rejectionReason?: string; hiredClient?: string; hiredPosition?: string; interviewDate?: string; interviewNotes?: string }
+  extra?: { rejectionReason?: string; hiredClient?: string; hiredPosition?: string; interviewDate?: string; interviewNotes?: string; followupNotes?: string }
 ) {
   const supabase = getSupabase();
 
@@ -55,6 +55,11 @@ export async function updateLeadStatus(
     interview_date: newStatus === LEAD_STATUSES.INTERVIEW ? (extra?.interviewDate ?? null) : null,
     interview_notes: newStatus === LEAD_STATUSES.INTERVIEW ? (extra?.interviewNotes ?? null) : null,
   };
+
+  // followup_notes: only write when entering מעקב, never clear
+  if (newStatus === LEAD_STATUSES.FOLLOWUP && extra?.followupNotes) {
+    updateData.followup_notes = extra.followupNotes;
+  }
 
   const { error } = await supabase
     .from("leads")
