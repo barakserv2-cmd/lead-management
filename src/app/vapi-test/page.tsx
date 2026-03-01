@@ -83,6 +83,7 @@ export default function VapiTestPage() {
         voice: {
           provider: "11labs",
           voiceId: "pNInz6obpgDQGcFmaJgB",
+          model: "eleven_multilingual_v2",
         },
         model: {
           provider: "openai",
