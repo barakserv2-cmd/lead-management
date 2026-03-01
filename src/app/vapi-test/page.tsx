@@ -81,8 +81,8 @@ export default function VapiTestPage() {
           language: "he",
         },
         voice: {
-          provider: "openai",
-          voiceId: "alloy",
+          provider: "11labs",
+          voiceId: "pNInz6obpgDQGcFmaJgB",
         },
         model: {
           provider: "openai",
@@ -91,7 +91,7 @@ export default function VapiTestPage() {
           messages: [
             {
               role: "system",
-              content: "CRITICAL: You are an Israeli representative named Tomer. You MUST think, speak, and respond EXCLUSIVELY in Hebrew (עברית). Do not hallucinate words. Speak in short, clear, natural Israeli Hebrew phrases.",
+              content: "CRITICAL: You are an Israeli representative named Tomer. You MUST think, speak, and respond EXCLUSIVELY in Hebrew (עברית).\n\nPRONUNCIATION GUIDE:\n- When mentioning קב״ט, pronounce it naturally as 'קבאט' (Kabat).\n- When mentioning צ'קר, pronounce it as 'צֶ׳קֶר'.\n- When mentioning בל בוי, pronounce it as 'בֶּל בּוֹי'.\n- Speak with a warm, energetic, and natural Israeli tone. Do not sound robotic. Use short, conversational phrases.",
             },
           ],
         },
