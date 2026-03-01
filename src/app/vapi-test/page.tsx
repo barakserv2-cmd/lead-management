@@ -42,17 +42,9 @@ export default function VapiTestPage() {
       setVolume(level);
     });
 
-    vapi.on("error", (err) => {
-      console.error("Vapi error event:", err);
-      let msg: string;
-      if (typeof err === "string") {
-        msg = err;
-      } else if (err && typeof err === "object") {
-        const e = err as Record<string, unknown>;
-        msg = (e.errorMessage ?? e.message ?? e.error ?? JSON.stringify(err)) as string;
-      } else {
-        msg = String(err);
-      }
+    vapi.on("error", (e) => {
+      console.error("Vapi Error Detail:", JSON.stringify(e), e);
+      const msg = typeof e === "string" ? e : JSON.stringify(e);
       setError(msg);
       setStatus("idle");
     });
@@ -73,22 +65,7 @@ export default function VapiTestPage() {
     setStatus("connecting");
     try {
       console.log("Starting call with Public Key:", PUBLIC_KEY);
-      console.log("Starting call with Assistant ID:", assistantId.trim());
-      await vapiRef.current.start(assistantId.trim(), {
-        transcriber: {
-          provider: "openai",
-          model: "whisper-1",
-          language: "he",
-        },
-        voice: {
-          provider: "openai",
-          voiceId: "echo",
-        },
-        model: {
-          systemPrompt: "CRITICAL DIRECTIVE: You are 'תומר', an Israeli recruitment agent for 'ברק שירותים' in Eilat. \nYOU MUST SPEAK, THINK, AND RESPOND EXCLUSIVELY IN HEBREW (עברית). \nDO NOT USE A SINGLE WORD OF ENGLISH. \n\nחוקי הגייה:\n- קב״ט קרא כ-'קבאט'.\n- צ'קר קרא כ-'צֶ׳קֶר'.\n- בל בוי קרא כ-'בֶּל בּוֹי'.\n\nדבר בטון טבעי, קצר, חברי וישראלי.",
-        },
-        firstMessage: "היי, מדבר תומר מברק שירותים, מה שלומך?",
-      } as any);
+      await vapiRef.current.start("e15b3a24-5ae6-4747-95d4-690b2f3cb885");
     } catch (err) {
       console.error("Vapi start error:", err);
       setError(err instanceof Error ? err.message : JSON.stringify(err));
