@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import Vapi from "@vapi-ai/web";
 
-const PUBLIC_KEY = "ae93dc6a-a162-4357-b9c2-dfb0561fe3d1";
+const PUBLIC_KEY = process.env.NEXT_PUBLIC_VAPI_PUBLIC_KEY ?? "";
 
 export default function VapiTestPage() {
   const vapiRef = useRef<Vapi | null>(null);
@@ -11,10 +11,14 @@ export default function VapiTestPage() {
   const [transcript, setTranscript] = useState<{ role: string; text: string }[]>([]);
   const [volume, setVolume] = useState(0);
   const [error, setError] = useState<string | null>(null);
-  const [assistantId, setAssistantId] = useState("");
+  const [assistantId, setAssistantId] = useState("ae93dc6a-a162-4357-b9c2-dfb0561fe3d1");
   const transcriptEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
+    if (!PUBLIC_KEY) {
+      setError("NEXT_PUBLIC_VAPI_PUBLIC_KEY is not set in .env.local");
+      return;
+    }
     const vapi = new Vapi(PUBLIC_KEY);
     vapiRef.current = vapi;
 
