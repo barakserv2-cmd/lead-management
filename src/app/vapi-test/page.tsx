@@ -77,27 +77,20 @@ export default function VapiTestPage() {
       await vapiRef.current.start(assistantId.trim(), {
         transcriber: {
           provider: "openai",
-          model: "gpt-4o-transcribe",
+          model: "whisper-1",
           language: "he",
         },
         voice: {
-          provider: "11labs",
+          provider: "elevenlabs",
           voiceId: "pNInz6obpgDQGcFmaJgB",
           model: "eleven_multilingual_v2",
         },
         model: {
-          provider: "openai",
-          model: "gpt-4o",
           temperature: 0.3,
-          messages: [
-            {
-              role: "system",
-              content: "CRITICAL: You are an Israeli representative named Tomer. You MUST think, speak, and respond EXCLUSIVELY in Hebrew (עברית).\n\nPRONUNCIATION GUIDE:\n- When mentioning קב״ט, pronounce it naturally as 'קבאט' (Kabat).\n- When mentioning צ'קר, pronounce it as 'צֶ׳קֶר'.\n- When mentioning בל בוי, pronounce it as 'בֶּל בּוֹי'.\n- Speak with a warm, energetic, and natural Israeli tone. Do not sound robotic. Use short, conversational phrases.",
-            },
-          ],
+          systemPrompt: "CRITICAL DIRECTIVE: You are 'תומר', an Israeli recruitment agent for 'ברק שירותים' in Eilat. \nYOU MUST SPEAK, THINK, AND RESPOND EXCLUSIVELY IN HEBREW (עברית). \nDO NOT USE A SINGLE WORD OF ENGLISH. \n\nחוקי הגייה:\n- קב״ט קרא כ-'קבאט'.\n- צ'קר קרא כ-'צֶ׳קֶר'.\n- בל בוי קרא כ-'בֶּל בּוֹי'.\n\nדבר בטון טבעי, קצר, חברי וישראלי.",
         },
-        firstMessage: "היי, מדבר תומר מחברת ברק שירותים. מה נשמע?",
-      });
+        firstMessage: "היי, מדבר תומר מברק שירותים, מה שלומך?",
+      } as any);
     } catch (err) {
       console.error("Vapi start error:", err);
       setError(err instanceof Error ? err.message : JSON.stringify(err));
