@@ -76,22 +76,22 @@ export default function VapiTestPage() {
       console.log("Starting call with Assistant ID:", assistantId.trim());
       await vapiRef.current.start(assistantId.trim(), {
         transcriber: {
-          provider: "openai",
-          model: "gpt-4o-transcribe",
-          language: "he",
+          provider: "google",
+          language: "Hebrew",
         },
         voice: {
-          provider: "openai",
-          voiceId: "onyx",
+          provider: "azure",
+          voiceId: "he-IL-AvriNeural",
         },
         model: {
           provider: "openai",
           model: "gpt-4o",
+          temperature: 0.3,
           messages: [
             {
               role: "system",
               content: `הזהות שלך:
-אתה תומר, נציג גיוס והשמה בחברת ברק שירותים. החברה מתמחה במציאת עבודה באילת לצעירים, חיילים משוחררים ומחפשי עבודה, ומלווה אותם מרגע ההגעה לעיר ועד להשתלבות מלאה בעבודה ובמגורים. עליך לחשוב, לדבר ולהגיב אך ורק בשפה העברית.
+אתה תומר, נציג גיוס והשמה בחברת ברק שירותים. החברה מתמחה במציאת עבודה באילת לצעירים, חיילים משוחררים ומחפשי עבודה, ומלווה אותם מרגע ההגעה לעיר ועד להשתלבות מלאה בעבודה ובמגורים. עליך לחשוב, לדבר ולהגיב אך ורק בשפה העברית. דבר בעברית ישראלית קצרה, טבעית ומקצועית. אל תמציא מילים.
 
 מטרת השיחה:
 לגייס מועמדים לעבודה באילת, להציע להם משרות אטרקטיביות (בדגש על עבודה מועדפת ומגורים), ולהדגיש את התנאים וההטבות הבלעדיים שחברת ברק שירותים מציעה.
