@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import Vapi from "@vapi-ai/web";
 
-const PUBLIC_KEY = process.env.NEXT_PUBLIC_VAPI_PUBLIC_KEY ?? "";
+const PUBLIC_KEY = "ae93dc6a-a162-4357-b9c2-dfb0561fe3d1";
 
 export default function VapiTestPage() {
   const vapiRef = useRef<Vapi | null>(null);
@@ -72,6 +72,8 @@ export default function VapiTestPage() {
     setTranscript([]);
     setStatus("connecting");
     try {
+      console.log("Starting call with Public Key:", PUBLIC_KEY);
+      console.log("Starting call with Assistant ID:", assistantId.trim());
       await vapiRef.current.start(assistantId.trim());
     } catch (err) {
       console.error("Vapi start error:", err);
