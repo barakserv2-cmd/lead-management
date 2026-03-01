@@ -74,7 +74,22 @@ export default function VapiTestPage() {
     try {
       console.log("Starting call with Public Key:", PUBLIC_KEY);
       console.log("Starting call with Assistant ID:", assistantId.trim());
-      await vapiRef.current.start(assistantId.trim());
+      await vapiRef.current.start(assistantId.trim(), {
+        transcriber: {
+          provider: "openai",
+          model: "whisper-1",
+          language: "he",
+        },
+        voice: {
+          provider: "openai",
+          voiceId: "onyx",
+        },
+        model: {
+          systemPrompt:
+            "CRITICAL: You are an Israeli representative named Tomer. You MUST think, speak, and respond EXCLUSIVELY in Hebrew (עברית). Keep your answers short, natural, and conversational.",
+        },
+        firstMessage: "היי, מדבר תומר, מה שלומך?",
+      });
     } catch (err) {
       console.error("Vapi start error:", err);
       setError(err instanceof Error ? err.message : JSON.stringify(err));
