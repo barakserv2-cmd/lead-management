@@ -39,7 +39,17 @@ export default function VapiTestPage() {
     });
 
     vapi.on("error", (err) => {
-      setError(typeof err === "string" ? err : (err as { message?: string })?.message ?? "שגיאה לא ידועה");
+      console.error("Vapi error event:", err);
+      let msg: string;
+      if (typeof err === "string") {
+        msg = err;
+      } else if (err && typeof err === "object") {
+        const e = err as Record<string, unknown>;
+        msg = (e.errorMessage ?? e.message ?? e.error ?? JSON.stringify(err)) as string;
+      } else {
+        msg = String(err);
+      }
+      setError(msg);
       setStatus("idle");
     });
 
@@ -60,7 +70,8 @@ export default function VapiTestPage() {
     try {
       await vapiRef.current.start(assistantId.trim());
     } catch (err) {
-      setError(err instanceof Error ? err.message : "שגיאה בהתחלת השיחה");
+      console.error("Vapi start error:", err);
+      setError(err instanceof Error ? err.message : JSON.stringify(err));
       setStatus("idle");
     }
   }, [assistantId]);
