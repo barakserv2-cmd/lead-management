@@ -77,7 +77,7 @@ export default function VapiTestPage() {
       await vapiRef.current.start(assistantId.trim(), {
         transcriber: {
           provider: "openai",
-          model: "whisper-1",
+          model: "gpt-4o-transcribe",
           language: "he",
         },
         voice: {
@@ -85,7 +85,12 @@ export default function VapiTestPage() {
           voiceId: "onyx",
         },
         model: {
-          systemPrompt: `הזהות שלך:
+          provider: "openai",
+          model: "gpt-4o",
+          messages: [
+            {
+              role: "system",
+              content: `הזהות שלך:
 אתה תומר, נציג גיוס והשמה בחברת ברק שירותים. החברה מתמחה במציאת עבודה באילת לצעירים, חיילים משוחררים ומחפשי עבודה, ומלווה אותם מרגע ההגעה לעיר ועד להשתלבות מלאה בעבודה ובמגורים. עליך לחשוב, לדבר ולהגיב אך ורק בשפה העברית.
 
 מטרת השיחה:
@@ -105,6 +110,8 @@ export default function VapiTestPage() {
 
 סגנון הדיבור שלך (תומר):
 דבר בגובה העיניים, בצורה חברית, קלילה, צעירה ומזמינה (אבל מקצועית). הקהל שלך הוא לרוב צעירים וחיילים משוחררים. תן להם תחושה של ביטחון, ש"יש מי שדואג להם" ברגע שהם יורדים לאילת. אל תשתמש במילים באנגלית, רק עברית טבעית.`,
+            },
+          ],
         },
         firstMessage: "היי, מדבר תומר מחברת ברק שירותים. מה נשמע?",
       });
