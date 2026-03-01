@@ -11,7 +11,7 @@ export default function VapiTestPage() {
   const [transcript, setTranscript] = useState<{ role: string; text: string }[]>([]);
   const [volume, setVolume] = useState(0);
   const [error, setError] = useState<string | null>(null);
-  const [assistantId, setAssistantId] = useState(process.env.NEXT_PUBLIC_VAPI_ASSISTANT_ID ?? "");
+  const [assistantId, setAssistantId] = useState("e15b3a24-5ae6-4747-95d4-690b2f3cb885");
   const transcriptEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
