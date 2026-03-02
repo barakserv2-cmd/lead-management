@@ -2,6 +2,7 @@
 
 import { Suspense, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
+import Link from "next/link";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
@@ -149,14 +150,23 @@ function SettingsInner() {
           </CardContent>
         </Card>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>ניהול משתמשים</CardTitle>
-            <CardDescription>
-              הוספה ועריכה של מגייסים ואדמינים.
-            </CardDescription>
-          </CardHeader>
-        </Card>
+        <Link href="/settings/users">
+          <Card className="cursor-pointer hover:shadow-md transition-shadow">
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle>ניהול משתמשים</CardTitle>
+                  <CardDescription>
+                    הוספה ועריכה של מגייסים ואדמינים.
+                  </CardDescription>
+                </div>
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5 text-gray-400">
+                  <path d="m15 18-6-6 6-6" />
+                </svg>
+              </div>
+            </CardHeader>
+          </Card>
+        </Link>
 
         <Card>
           <CardHeader>
