@@ -45,7 +45,7 @@ export async function POST(request: NextRequest) {
         phone: phone || null,
         job_title: role || "כללי",
         source: source || "אחר",
-        status: "חדש",
+        status: "NEW_LEAD",
       })
       .select("id, name, phone, job_title")
       .single();

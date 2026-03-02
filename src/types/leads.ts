@@ -35,6 +35,8 @@ export interface Lead {
   interview_date: string | null;
   interview_notes: string | null;
   followup_notes: string | null;
+  screening_score: number | null;
+  human_approval: boolean;
   tags: string[] | null;
   preferences: Record<string, unknown> | null;
 }
@@ -44,9 +46,9 @@ export interface StatusChange {
   lead_id: string;
   from_status: LeadStatus;
   to_status: LeadStatus;
-  changed_by: string;
+  changed_by: string | null;
   changed_at: string;
-  reason: string | null;
+  notes: string | null;
 }
 
 export interface AIParseResult {

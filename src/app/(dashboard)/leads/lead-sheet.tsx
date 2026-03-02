@@ -24,6 +24,11 @@ import { Textarea } from "@/components/ui/textarea";
 import { getLeadNotes, updateLeadNotes, updateLeadDetails } from "./actions";
 import { ConversationSheet } from "./[id]/conversation-sheet";
 import type { Lead } from "@/types/leads";
+import {
+  STATUS_COLORS as SM_STATUS_COLORS,
+  STATUS_LABELS,
+  type LeadStatusValue,
+} from "@/lib/stateMachine";
 
 export interface SheetLead {
   id: string;
@@ -52,13 +57,15 @@ export interface SheetLead {
   preferences: Record<string, unknown> | null;
 }
 
-const STATUS_COLORS: Record<string, string> = {
-  "חדש": "bg-blue-100 text-blue-800",
-  "מעקב": "bg-orange-100 text-orange-800",
-  "ראיון במשרד": "bg-purple-100 text-purple-800",
-  "התקבל": "bg-green-100 text-green-800",
-  "לא רלוונטי": "bg-gray-200 text-gray-700",
-};
+function getStatusColor(status: string): string {
+  const colors = SM_STATUS_COLORS[status as LeadStatusValue];
+  if (colors) return `${colors.bg} ${colors.text}`;
+  return "bg-gray-100 text-gray-800";
+}
+
+function getStatusLabel(status: string): string {
+  return STATUS_LABELS[status as LeadStatusValue] ?? status;
+}
 
 const SOURCE_COLORS: Record<string, string> = {
   AllJobs: "bg-blue-100 text-blue-700",
@@ -153,7 +160,7 @@ export function LeadSheet({
   if (!lead) return null;
 
   const intlPhone = formatPhone(displayPhone);
-  const statusColor = STATUS_COLORS[lead.status] ?? "bg-gray-100 text-gray-800";
+  const statusColor = getStatusColor(lead.status);
   const sourceColor = SOURCE_COLORS[lead.source] ?? "bg-gray-100 text-gray-600";
 
   async function handleSaveNotes() {
@@ -249,7 +256,7 @@ export function LeadSheet({
               </div>
               <SheetDescription className="flex items-center gap-2 mt-1">
                 <span className={"inline-block px-2 py-0.5 rounded-full text-[10px] font-semibold " + statusColor}>
-                  {lead.status}
+                  {getStatusLabel(lead.status)}
                 </span>
                 <span className={"inline-block px-2 py-0.5 rounded-full text-[10px] font-medium " + sourceColor}>
                   {lead.source}

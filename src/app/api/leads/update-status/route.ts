@@ -1,15 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
-import { validateApiKey, unauthorizedResponse, getSupabaseAdmin } from "@/lib/api-auth";
-import { LEAD_STATUSES } from "@/lib/constants";
-
-const VALID_STATUSES = Object.values(LEAD_STATUSES);
+import { validateApiKey, unauthorizedResponse } from "@/lib/api-auth";
+import { changeLeadStatus } from "@/lib/actions/changeLeadStatus";
+import { isValidStatus, ALL_STATUSES, type LeadStatusValue } from "@/lib/stateMachine";
 
 export async function POST(request: NextRequest) {
   if (!validateApiKey(request)) return unauthorizedResponse();
 
   try {
     const body = await request.json();
-    const { lead_id, status } = body;
+    const { lead_id, status, notes, user_id } = body;
 
     if (!lead_id || !status) {
       return NextResponse.json(
@@ -18,56 +17,30 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    if (!VALID_STATUSES.includes(status)) {
+    if (!isValidStatus(status)) {
       return NextResponse.json(
-        { error: `Invalid status. Valid values: ${VALID_STATUSES.join(", ")}` },
+        { error: `Invalid status. Valid values: ${ALL_STATUSES.join(", ")}` },
         { status: 400 }
       );
     }
 
-    const supabase = getSupabaseAdmin();
-
-    // Get current lead to log the status change
-    const { data: lead, error: fetchError } = await supabase
-      .from("leads")
-      .select("id, name, status")
-      .eq("id", lead_id)
-      .single();
-
-    if (fetchError || !lead) {
-      return NextResponse.json(
-        { error: `Lead not found: ${lead_id}` },
-        { status: 404 }
-      );
-    }
-
-    const previousStatus = lead.status;
-
-    // Update the status
-    const { error: updateError } = await supabase
-      .from("leads")
-      .update({ status })
-      .eq("id", lead_id);
-
-    if (updateError) {
-      return NextResponse.json(
-        { error: `Update failed: ${updateError.message}` },
-        { status: 500 }
-      );
-    }
-
-    // Log the status change
-    await supabase.from("lead_status_history").insert({
-      lead_id,
-      from_status: previousStatus,
-      to_status: status,
+    const result = await changeLeadStatus({
+      leadId: lead_id,
+      newStatus: status as LeadStatusValue,
+      userId: user_id ?? "api",
+      notes: notes ?? undefined,
     });
+
+    if (!result.success) {
+      return NextResponse.json(
+        { error: result.error },
+        { status: 422 }
+      );
+    }
 
     return NextResponse.json({
       success: true,
       lead_id,
-      name: lead.name,
-      previous_status: previousStatus,
       new_status: status,
     });
   } catch (error) {

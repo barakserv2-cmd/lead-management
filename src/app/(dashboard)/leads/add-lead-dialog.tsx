@@ -13,7 +13,8 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import { LEAD_STATUSES, LEAD_SOURCES } from "@/lib/constants";
+import { LEAD_SOURCES } from "@/lib/constants";
+import { ALL_STATUSES, STATUS_LABELS, LeadStatus } from "@/lib/stateMachine";
 import { createLead } from "./actions";
 
 export function AddLeadDialog() {
@@ -96,12 +97,12 @@ export function AddLeadDialog() {
             <select
               id="status"
               name="status"
-              defaultValue={LEAD_STATUSES.NEW}
+              defaultValue={LeadStatus.NEW_LEAD}
               className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
             >
-              {Object.values(LEAD_STATUSES).map((s) => (
+              {ALL_STATUSES.map((s) => (
                 <option key={s} value={s}>
-                  {s}
+                  {STATUS_LABELS[s]}
                 </option>
               ))}
             </select>

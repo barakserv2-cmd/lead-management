@@ -31,7 +31,23 @@ import {
   updateLeadDetails,
   getStatusHistory,
 } from "../actions";
-import { STATUS_COLORS as GLOBAL_STATUS_COLORS } from "@/lib/constants";
+import { STATUS_COLORS as SM_COLORS, STATUS_LABELS, type LeadStatusValue } from "@/lib/stateMachine";
+
+function getStatusColorClasses(status: string): string {
+  const c = SM_COLORS[status as LeadStatusValue];
+  if (c) return `${c.bg} ${c.text}`;
+  return "bg-gray-100 text-gray-800";
+}
+
+function getStatusDotColor(status: string): string {
+  const c = SM_COLORS[status as LeadStatusValue];
+  if (c) return c.dot;
+  return "bg-gray-500";
+}
+
+function getStatusLabel(status: string): string {
+  return STATUS_LABELS[status as LeadStatusValue] ?? status;
+}
 import { ConversationSheet } from "./conversation-sheet";
 
 // ── Label / Color maps ──────────────────────────────────────
@@ -280,8 +296,8 @@ function HistoryTimeline({
 
       {/* Status change entries */}
       {hasEntries ? entries.map((entry) => {
-        const statusColor = (GLOBAL_STATUS_COLORS as Record<string, string>)[entry.to_status] ?? "bg-gray-100 text-gray-800";
-        const dotColor = statusColor.split(" ")[0].replace("bg-", "bg-");
+        const statusColor = getStatusColorClasses(entry.to_status);
+        const dotColor = getStatusDotColor(entry.to_status);
 
         return (
           <div key={entry.id} className="relative flex items-start gap-3 pb-4">
@@ -290,14 +306,14 @@ function HistoryTimeline({
               <div className="flex items-center gap-1.5 flex-wrap">
                 {entry.from_status && (
                   <>
-                    <span className={`inline-block px-1.5 py-0.5 rounded text-[10px] font-semibold ${(GLOBAL_STATUS_COLORS as Record<string, string>)[entry.from_status] ?? "bg-gray-100 text-gray-800"}`}>
-                      {entry.from_status}
+                    <span className={`inline-block px-1.5 py-0.5 rounded text-[10px] font-semibold ${getStatusColorClasses(entry.from_status)}`}>
+                      {getStatusLabel(entry.from_status)}
                     </span>
                     <span className="text-gray-400 text-xs">&larr;</span>
                   </>
                 )}
                 <span className={`inline-block px-1.5 py-0.5 rounded text-[10px] font-semibold ${statusColor}`}>
-                  {entry.to_status}
+                  {getStatusLabel(entry.to_status)}
                 </span>
               </div>
               <p className="text-xs text-gray-400 mt-0.5">

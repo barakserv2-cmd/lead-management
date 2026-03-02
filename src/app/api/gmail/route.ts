@@ -123,7 +123,7 @@ async function handleFetchEmails() {
           age: aiResult.age,
           job_title,
           source: "AllJobs",
-          status: LEAD_STATUSES.NEW,
+          status: LEAD_STATUSES.NEW_LEAD,
           original_email_id: email.id,
           original_email_body: email.body,
           ai_confidence: aiResult.confidence,

@@ -1,23 +1,11 @@
-export const LEAD_STATUSES = {
-  NEW: "חדש",
-  FOLLOWUP: "מעקב",
-  INTERVIEW: "ראיון במשרד",
-  ACCEPTED: "התקבל",
-  NOT_RELEVANT: "לא רלוונטי",
-} as const;
-
-export type LeadStatus = (typeof LEAD_STATUSES)[keyof typeof LEAD_STATUSES];
-
-export const STATUS_COLORS: Record<LeadStatus, string> = {
-  [LEAD_STATUSES.NEW]: "bg-blue-100 text-blue-800",
-  [LEAD_STATUSES.FOLLOWUP]: "bg-orange-100 text-orange-800",
-  [LEAD_STATUSES.INTERVIEW]: "bg-purple-100 text-purple-800",
-  [LEAD_STATUSES.ACCEPTED]: "bg-green-100 text-green-800",
-  [LEAD_STATUSES.NOT_RELEVANT]: "bg-gray-200 text-gray-700",
-};
-
-// Sub-statuses keyed by main status — scalable for future statuses
-export const SUB_STATUSES: Record<string, string[]> = {};
+// Re-export the state machine as the single source of truth for statuses
+export {
+  LeadStatus as LEAD_STATUSES,
+  type LeadStatusValue as LeadStatus,
+  STATUS_LABELS,
+  STATUS_COLORS,
+  ALL_STATUSES,
+} from "./stateMachine";
 
 export const LEAD_SOURCES = [
   "AllJobs",
@@ -28,6 +16,9 @@ export const LEAD_SOURCES = [
 ] as const;
 
 export type LeadSource = (typeof LEAD_SOURCES)[number];
+
+// Sub-statuses keyed by main status — scalable for future statuses
+export const SUB_STATUSES: Record<string, string[]> = {};
 
 // --- CRM enums ---
 
@@ -60,7 +51,7 @@ export const RECRUITMENT_STATUSES = {
 export type RecruitmentStatus =
   (typeof RECRUITMENT_STATUSES)[keyof typeof RECRUITMENT_STATUSES];
 
-// ── Rejection reasons for "לא רלוונטי" ──────────────────────
+// ── Rejection reasons for "נדחה" ──────────────────────────
 export const REJECTION_REASONS = [
   "אין מענה 3",
   "לא מתאים",

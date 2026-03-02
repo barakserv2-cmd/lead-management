@@ -2,21 +2,13 @@
 
 import { createClient as createServerClient } from "@supabase/supabase-js";
 import { revalidatePath } from "next/cache";
-import { LEAD_STATUSES } from "@/lib/constants";
+import { LeadStatus } from "@/lib/stateMachine";
 
 function getSupabase() {
   return createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.SUPABASE_SERVICE_ROLE_KEY!
   );
-}
-
-async function logStatusChange(leadId: string, fromStatus: string | null, toStatus: string) {
-  await getSupabase().from("lead_status_history").insert({
-    lead_id: leadId,
-    from_status: fromStatus,
-    to_status: toStatus,
-  });
 }
 
 export async function getStatusHistory(leadId: string) {
@@ -30,87 +22,11 @@ export async function getStatusHistory(leadId: string) {
   return { history: data ?? [], error: null };
 }
 
-export async function updateLeadStatus(
-  leadId: string,
-  newStatus: string,
-  extra?: { rejectionReason?: string; hiredClient?: string; hiredPosition?: string; interviewDate?: string; interviewNotes?: string; followupNotes?: string }
-) {
-  const supabase = getSupabase();
-
-  // Fetch current status before update
-  const { data: current } = await supabase
-    .from("leads")
-    .select("status")
-    .eq("id", leadId)
-    .single();
-
-  const previousStatus = current?.status ?? null;
-
-  const updateData: Record<string, unknown> = {
-    status: newStatus,
-    sub_status: null,
-    rejection_reason: newStatus === LEAD_STATUSES.NOT_RELEVANT ? (extra?.rejectionReason ?? null) : null,
-    hired_client: newStatus === LEAD_STATUSES.ACCEPTED ? (extra?.hiredClient ?? null) : null,
-    hired_position: newStatus === LEAD_STATUSES.ACCEPTED ? (extra?.hiredPosition ?? null) : null,
-    interview_date: newStatus === LEAD_STATUSES.INTERVIEW ? (extra?.interviewDate ?? null) : null,
-    interview_notes: newStatus === LEAD_STATUSES.INTERVIEW ? (extra?.interviewNotes ?? null) : null,
-  };
-
-  // followup_notes: only write when entering מעקב, never clear
-  if (newStatus === LEAD_STATUSES.FOLLOWUP && extra?.followupNotes) {
-    updateData.followup_notes = extra.followupNotes;
-  }
-
-  const { error } = await supabase
-    .from("leads")
-    .update(updateData)
-    .eq("id", leadId);
-
-  if (!error) {
-    await logStatusChange(leadId, previousStatus, newStatus);
-  }
-
-  return { error: error?.message ?? null };
-}
-
 export async function updateLeadSubStatus(leadId: string, subStatus: string | null) {
   const { error } = await getSupabase()
     .from("leads")
     .update({ sub_status: subStatus })
     .eq("id", leadId);
-
-  return { error: error?.message ?? null };
-}
-
-export async function updateLeadStatusWithRole(leadId: string, newStatus: string, role: string, clientName?: string) {
-  const supabase = getSupabase();
-
-  // Fetch current status + preferences before update
-  const { data: current } = await supabase
-    .from("leads")
-    .select("status, preferences")
-    .eq("id", leadId)
-    .single();
-
-  const previousStatus = current?.status ?? null;
-
-  // Merge matched_client into existing preferences
-  let prefs: Record<string, unknown> = {};
-  if (clientName) {
-    prefs = { ...(current?.preferences as Record<string, unknown> ?? {}), matched_client: clientName };
-  }
-
-  const updateData: Record<string, unknown> = { status: newStatus, job_title: role };
-  if (clientName) updateData.preferences = prefs;
-
-  const { error } = await supabase
-    .from("leads")
-    .update(updateData)
-    .eq("id", leadId);
-
-  if (!error) {
-    await logStatusChange(leadId, previousStatus, newStatus);
-  }
 
   return { error: error?.message ?? null };
 }
@@ -265,7 +181,7 @@ export async function createLead(data: {
       phone: data.phone || null,
       job_title: data.job_title || null,
       source: data.source || "אחר",
-      status: data.status || "חדש",
+      status: data.status || LeadStatus.NEW_LEAD,
     })
     .select()
     .single();

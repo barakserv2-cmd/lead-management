@@ -1,5 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
-import { LEAD_STATUSES } from "@/lib/constants";
+import { LEAD_STATUSES, STATUS_LABELS } from "@/lib/constants";
 import { LeadsPerDayChart, LeadsBySourceChart } from "./charts";
 
 export default async function DashboardPage() {
@@ -12,27 +12,32 @@ export default async function DashboardPage() {
   const { count: newCount } = await supabase
     .from("leads")
     .select("*", { count: "exact", head: true })
-    .eq("status", LEAD_STATUSES.NEW);
+    .eq("status", LEAD_STATUSES.NEW_LEAD);
 
-  const { count: followupCount } = await supabase
+  const { count: contactedCount } = await supabase
     .from("leads")
     .select("*", { count: "exact", head: true })
-    .eq("status", LEAD_STATUSES.FOLLOWUP);
+    .eq("status", LEAD_STATUSES.CONTACTED);
 
-  const { count: interviewCount } = await supabase
+  const { count: screeningCount } = await supabase
     .from("leads")
     .select("*", { count: "exact", head: true })
-    .eq("status", LEAD_STATUSES.INTERVIEW);
+    .eq("status", LEAD_STATUSES.SCREENING_IN_PROGRESS);
 
-  const { count: acceptedCount } = await supabase
+  const { count: interviewBookedCount } = await supabase
     .from("leads")
     .select("*", { count: "exact", head: true })
-    .eq("status", LEAD_STATUSES.ACCEPTED);
+    .eq("status", LEAD_STATUSES.INTERVIEW_BOOKED);
 
-  const { count: notRelevantCount } = await supabase
+  const { count: hiredCount } = await supabase
     .from("leads")
     .select("*", { count: "exact", head: true })
-    .eq("status", LEAD_STATUSES.NOT_RELEVANT);
+    .eq("status", LEAD_STATUSES.HIRED);
+
+  const { count: rejectedCount } = await supabase
+    .from("leads")
+    .select("*", { count: "exact", head: true })
+    .eq("status", LEAD_STATUSES.REJECTED);
 
   // Leads per day — last 7 days
   const sevenDaysAgo = new Date();
@@ -75,17 +80,18 @@ export default async function DashboardPage() {
 
   const cards = [
     { label: "סה״כ לידים", value: totalCount ?? 0, color: "bg-purple-50 text-purple-700" },
-    { label: "חדשים", value: newCount ?? 0, color: "bg-blue-50 text-blue-700" },
-    { label: "מעקב", value: followupCount ?? 0, color: "bg-orange-50 text-orange-700" },
-    { label: "ראיון במשרד", value: interviewCount ?? 0, color: "bg-purple-50 text-purple-700" },
-    { label: "התקבל", value: acceptedCount ?? 0, color: "bg-green-50 text-green-700" },
-    { label: "לא רלוונטי", value: notRelevantCount ?? 0, color: "bg-gray-100 text-gray-700" },
+    { label: STATUS_LABELS[LEAD_STATUSES.NEW_LEAD], value: newCount ?? 0, color: "bg-blue-50 text-blue-700" },
+    { label: STATUS_LABELS[LEAD_STATUSES.CONTACTED], value: contactedCount ?? 0, color: "bg-cyan-50 text-cyan-700" },
+    { label: STATUS_LABELS[LEAD_STATUSES.SCREENING_IN_PROGRESS], value: screeningCount ?? 0, color: "bg-orange-50 text-orange-700" },
+    { label: STATUS_LABELS[LEAD_STATUSES.INTERVIEW_BOOKED], value: interviewBookedCount ?? 0, color: "bg-purple-50 text-purple-700" },
+    { label: STATUS_LABELS[LEAD_STATUSES.HIRED], value: hiredCount ?? 0, color: "bg-green-50 text-green-700" },
+    { label: STATUS_LABELS[LEAD_STATUSES.REJECTED], value: rejectedCount ?? 0, color: "bg-gray-100 text-gray-700" },
   ];
 
   return (
     <div>
       <h1 className="text-2xl font-bold mb-6">דשבורד</h1>
-      <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-7 gap-4">
         {cards.map((card) => (
           <div
             key={card.label}

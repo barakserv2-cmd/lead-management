@@ -2,15 +2,18 @@
 
 import { useState, useRef, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { LEAD_STATUSES } from "@/lib/constants";
+import {
+  ALL_STATUSES,
+  STATUS_LABELS,
+  STATUS_COLORS,
+  type LeadStatusValue,
+} from "@/lib/stateMachine";
 
-const STATUS_OPTIONS = [
-  { value: LEAD_STATUSES.NEW, label: "חדש", dot: "bg-blue-500" },
-  { value: LEAD_STATUSES.FOLLOWUP, label: "מעקב", dot: "bg-orange-500" },
-  { value: LEAD_STATUSES.INTERVIEW, label: "ראיון במשרד", dot: "bg-purple-500" },
-  { value: LEAD_STATUSES.ACCEPTED, label: "התקבל", dot: "bg-green-500" },
-  { value: LEAD_STATUSES.NOT_RELEVANT, label: "לא רלוונטי", dot: "bg-gray-500" },
-];
+const STATUS_OPTIONS = ALL_STATUSES.map((value) => ({
+  value,
+  label: STATUS_LABELS[value],
+  dot: STATUS_COLORS[value].dot,
+}));
 
 function FilterIcon() {
   return (
@@ -32,14 +35,6 @@ function XIcon() {
   return (
     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-3 h-3">
       <path d="M18 6 6 18" /><path d="m6 6 12 12" />
-    </svg>
-  );
-}
-
-function CheckIcon() {
-  return (
-    <svg className="w-3.5 h-3.5 text-blue-600" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
-      <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
     </svg>
   );
 }
@@ -97,7 +92,7 @@ function MultiSelectDropdown({
       </button>
 
       {open && (
-        <div className="absolute z-50 mt-1 right-0 w-52 bg-white rounded-lg shadow-lg border border-gray-200 py-1 animate-in fade-in">
+        <div className="absolute z-50 mt-1 right-0 w-52 bg-white rounded-lg shadow-lg border border-gray-200 py-1 animate-in fade-in max-h-72 overflow-y-auto">
           {options.map((opt) => {
             const isSelected = selected.has(opt.value);
             return (

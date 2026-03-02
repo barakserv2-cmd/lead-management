@@ -1,25 +1,24 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { updateLeadStatus, updateLeadSubStatus } from "./actions";
-import { LEAD_STATUSES, SUB_STATUSES } from "@/lib/constants";
-import { RejectionReasonDialog } from "./rejection-reason-dialog";
-import { HiredDetailsDialog } from "./hired-details-dialog";
-import { InterviewDialog } from "./interview-dialog";
-import { FollowupDialog } from "./followup-dialog";
+import { changeLeadStatus } from "@/lib/actions/changeLeadStatus";
+import { updateLeadSubStatus } from "./actions";
+import {
+  LeadStatus,
+  STATUS_LABELS,
+  STATUS_COLORS,
+  ALL_STATUSES,
+  getAllowedTransitions,
+  type LeadStatusValue,
+} from "@/lib/stateMachine";
+import { SUB_STATUSES } from "@/lib/constants";
 
-const NOT_RELEVANT = LEAD_STATUSES.NOT_RELEVANT;
-const ACCEPTED = LEAD_STATUSES.ACCEPTED;
-const INTERVIEW = LEAD_STATUSES.INTERVIEW;
-const FOLLOWUP = LEAD_STATUSES.FOLLOWUP;
-
-const QUICK_STATUSES = [
-  { value: LEAD_STATUSES.NEW, label: "חדש", color: "bg-blue-100 text-blue-800", dot: "bg-blue-500" },
-  { value: LEAD_STATUSES.FOLLOWUP, label: "מעקב", color: "bg-orange-100 text-orange-800", dot: "bg-orange-500" },
-  { value: LEAD_STATUSES.INTERVIEW, label: "ראיון במשרד", color: "bg-purple-100 text-purple-800", dot: "bg-purple-500" },
-  { value: LEAD_STATUSES.ACCEPTED, label: "התקבל", color: "bg-green-100 text-green-800", dot: "bg-green-500" },
-  { value: LEAD_STATUSES.NOT_RELEVANT, label: "לא רלוונטי", color: "bg-gray-200 text-gray-700", dot: "bg-gray-500" },
-];
+const QUICK_STATUSES = ALL_STATUSES.map((value) => ({
+  value,
+  label: STATUS_LABELS[value],
+  color: `${STATUS_COLORS[value].bg} ${STATUS_COLORS[value].text}`,
+  dot: STATUS_COLORS[value].dot,
+}));
 
 function getStatusStyle(status: string) {
   return QUICK_STATUSES.find((s) => s.value === status) ?? {
@@ -34,12 +33,8 @@ export function StatusSelect({ leadId, currentStatus, currentSubStatus }: { lead
   const [status, setStatus] = useState(currentStatus);
   const [subStatus, setSubStatus] = useState<string | null>(currentSubStatus ?? null);
   const [open, setOpen] = useState(false);
-  const [toast, setToast] = useState<string | null>(null);
+  const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(null);
   const [loading, setLoading] = useState(false);
-  const [rejectionDialogOpen, setRejectionDialogOpen] = useState(false);
-  const [hiredDialogOpen, setHiredDialogOpen] = useState(false);
-  const [interviewDialogOpen, setInterviewDialogOpen] = useState(false);
-  const [followupDialogOpen, setFollowupDialogOpen] = useState(false);
 
   const ref = useRef<HTMLDivElement>(null);
 
@@ -53,11 +48,17 @@ export function StatusSelect({ leadId, currentStatus, currentSubStatus }: { lead
 
   useEffect(() => {
     if (!toast) return;
-    const t = setTimeout(() => setToast(null), 2500);
+    const t = setTimeout(() => setToast(null), 3000);
     return () => clearTimeout(t);
   }, [toast]);
 
   const current = getStatusStyle(status);
+
+  // Only show allowed transitions from the current status
+  const allowedTargets = getAllowedTransitions(status as LeadStatusValue);
+  const availableStatuses = QUICK_STATUSES.filter(
+    (s) => s.value === status || allowedTargets.includes(s.value)
+  );
 
   async function handleSelect(newStatus: string) {
     if (newStatus === status) {
@@ -66,97 +67,23 @@ export function StatusSelect({ leadId, currentStatus, currentSubStatus }: { lead
     }
 
     setOpen(false);
-
-    if (newStatus === NOT_RELEVANT) {
-      setRejectionDialogOpen(true);
-      return;
-    }
-
-    if (newStatus === ACCEPTED) {
-      setHiredDialogOpen(true);
-      return;
-    }
-
-    if (newStatus === INTERVIEW) {
-      setInterviewDialogOpen(true);
-      return;
-    }
-
-    if (newStatus === FOLLOWUP) {
-      setFollowupDialogOpen(true);
-      return;
-    }
-
     setLoading(true);
-    const result = await updateLeadStatus(leadId, newStatus);
+
+    const result = await changeLeadStatus({
+      leadId,
+      newStatus: newStatus as LeadStatusValue,
+      userId: "user",
+      notes: "שינוי ידני מהטבלה",
+    });
+
     setLoading(false);
 
-    if (result.error) {
-      setToast(`שגיאה: ${result.error}`);
+    if (!result.success) {
+      setToast({ message: result.error ?? "שגיאה בעדכון", type: "error" });
     } else {
       setStatus(newStatus);
       setSubStatus(null);
-      setToast("הסטטוס עודכן");
-    }
-  }
-
-  async function handleRejectionConfirm(reason: string) {
-    setLoading(true);
-    const result = await updateLeadStatus(leadId, NOT_RELEVANT, { rejectionReason: reason });
-    setLoading(false);
-    setRejectionDialogOpen(false);
-
-    if (result.error) {
-      setToast(`שגיאה: ${result.error}`);
-    } else {
-      setStatus(NOT_RELEVANT);
-      setSubStatus(null);
-      setToast("הסטטוס עודכן");
-    }
-  }
-
-  async function handleHiredConfirm(client: string, position: string) {
-    setLoading(true);
-    const result = await updateLeadStatus(leadId, ACCEPTED, { hiredClient: client, hiredPosition: position });
-    setLoading(false);
-    setHiredDialogOpen(false);
-
-    if (result.error) {
-      setToast(`שגיאה: ${result.error}`);
-    } else {
-      setStatus(ACCEPTED);
-      setSubStatus(null);
-      setToast("הסטטוס עודכן");
-    }
-  }
-
-  async function handleInterviewConfirm(date: string, notes: string) {
-    setLoading(true);
-    const result = await updateLeadStatus(leadId, INTERVIEW, { interviewDate: date, interviewNotes: notes });
-    setLoading(false);
-    setInterviewDialogOpen(false);
-
-    if (result.error) {
-      setToast(`שגיאה: ${result.error}`);
-    } else {
-      setStatus(INTERVIEW);
-      setSubStatus(null);
-      setToast("הסטטוס עודכן");
-    }
-  }
-
-  async function handleFollowupConfirm(notes: string) {
-    setLoading(true);
-    const result = await updateLeadStatus(leadId, FOLLOWUP, { followupNotes: notes });
-    setLoading(false);
-    setFollowupDialogOpen(false);
-
-    if (result.error) {
-      setToast(`שגיאה: ${result.error}`);
-    } else {
-      setStatus(FOLLOWUP);
-      setSubStatus(null);
-      setToast("הסטטוס עודכן");
+      setToast({ message: "הסטטוס עודכן", type: "success" });
     }
   }
 
@@ -165,7 +92,7 @@ export function StatusSelect({ leadId, currentStatus, currentSubStatus }: { lead
     setSubStatus(newSub);
     const result = await updateLeadSubStatus(leadId, newSub);
     if (result.error) {
-      setToast(`שגיאה: ${result.error}`);
+      setToast({ message: `שגיאה: ${result.error}`, type: "error" });
     }
   }
 
@@ -186,15 +113,17 @@ export function StatusSelect({ leadId, currentStatus, currentSubStatus }: { lead
         </button>
 
         {open && (
-          <div className="absolute z-50 mt-1 right-0 w-40 bg-white rounded-lg shadow-lg border border-gray-200 py-1 animate-in fade-in">
-            {QUICK_STATUSES.map((s) => {
+          <div className="absolute z-50 mt-1 right-0 w-44 bg-white rounded-lg shadow-lg border border-gray-200 py-1 animate-in fade-in max-h-72 overflow-y-auto">
+            {availableStatuses.map((s) => {
               const isActive = s.value === status;
+              const isAllowed = allowedTargets.includes(s.value);
               return (
                 <button
                   key={s.value}
                   type="button"
                   onClick={() => handleSelect(s.value)}
-                  className={`w-full flex items-center gap-2 px-3 py-2 text-xs text-right hover:bg-gray-50 transition-colors ${isActive ? "bg-gray-50 font-semibold" : ""}`}
+                  disabled={isActive}
+                  className={`w-full flex items-center gap-2 px-3 py-2 text-xs text-right hover:bg-gray-50 transition-colors ${isActive ? "bg-gray-50 font-semibold" : ""} ${!isActive && !isAllowed ? "opacity-40 cursor-not-allowed" : ""}`}
                 >
                   <span className={`w-2 h-2 rounded-full flex-shrink-0 ${s.dot}`} />
                   {s.label}
@@ -224,39 +153,13 @@ export function StatusSelect({ leadId, currentStatus, currentSubStatus }: { lead
         )}
 
         {toast && (
-          <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[100] px-4 py-2.5 bg-gray-900 text-white text-sm rounded-lg shadow-lg animate-in fade-in slide-in-from-bottom-4">
-            {toast}
+          <div className={`fixed bottom-6 left-1/2 -translate-x-1/2 z-[100] px-4 py-2.5 text-white text-sm rounded-lg shadow-lg animate-in fade-in slide-in-from-bottom-4 ${
+            toast.type === "error" ? "bg-red-600" : "bg-gray-900"
+          }`}>
+            {toast.message}
           </div>
         )}
       </div>
-
-      <RejectionReasonDialog
-        open={rejectionDialogOpen}
-        onOpenChange={setRejectionDialogOpen}
-        onConfirm={handleRejectionConfirm}
-        loading={loading}
-      />
-
-      <HiredDetailsDialog
-        open={hiredDialogOpen}
-        onOpenChange={setHiredDialogOpen}
-        onConfirm={handleHiredConfirm}
-        loading={loading}
-      />
-
-      <InterviewDialog
-        open={interviewDialogOpen}
-        onOpenChange={setInterviewDialogOpen}
-        onConfirm={handleInterviewConfirm}
-        loading={loading}
-      />
-
-      <FollowupDialog
-        open={followupDialogOpen}
-        onOpenChange={setFollowupDialogOpen}
-        onConfirm={handleFollowupConfirm}
-        loading={loading}
-      />
     </>
   );
 }

@@ -9,7 +9,7 @@ export async function GET(request: NextRequest) {
     const supabase = getSupabaseAdmin();
 
     const limit = parseInt(request.nextUrl.searchParams.get("limit") || "50");
-    const status = request.nextUrl.searchParams.get("status") || LEAD_STATUSES.NEW;
+    const status = request.nextUrl.searchParams.get("status") || LEAD_STATUSES.NEW_LEAD;
 
     const { data: leads, error } = await supabase
       .from("leads")
