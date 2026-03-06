@@ -500,7 +500,7 @@ export function LeadDetailDrawer({
                         onChange={(e) => setClientPrefs(e.target.value)}
                         rows={3}
                         className="resize-none text-sm"
-                        placeholder='לדוגמה: "מעדיף עובדים עם ניסיון של 3+ שנים"'
+                        placeholder='לדוגמה: "מחפש עבודה במלונאות כולל מגורים, זמין למשמרות בוקר בלבד"'
                       />
                     </div>
                     <div>
@@ -510,7 +510,7 @@ export function LeadDetailDrawer({
                         onChange={(e) => setPastIssues(e.target.value)}
                         rows={3}
                         className="resize-none text-sm"
-                        placeholder='לדוגמה: "עיכובים בתשלום ברבעון 3"'
+                        placeholder='לדוגמה: "לא הופיע לראיון שנקבע בעבר, עזב עבודה קודמת ללא התראה"'
                       />
                     </div>
                     <Button onClick={handleSavePreferences} disabled={savingPrefs} className="w-full" size="sm">

@@ -1,13 +1,16 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { changeLeadStatus } from "@/lib/actions/changeLeadStatus";
+import { calcTimer, timerColor } from "@/lib/employmentTimer";
 import {
   LeadStatus,
   STATUS_LABELS,
   getAllowedTransitions,
   type LeadStatusValue,
 } from "@/lib/stateMachine";
+import { InterviewScheduleDialog } from "./interview-schedule-dialog";
 
 interface LeadCard {
   id: string;
@@ -22,6 +25,7 @@ interface LeadCard {
   interview_notes: string | null;
   followup_notes: string | null;
   screening_score: number | null;
+  start_date: string | null;
 }
 
 const BOARD_COLUMNS: { value: LeadStatusValue; label: string; headerColor: string }[] = [
@@ -58,6 +62,9 @@ export function BoardView({ leads: initialLeads, onSelectLead }: { leads: LeadCa
   const [leads, setLeads] = useState(initialLeads);
   const [dragging, setDragging] = useState<string | null>(null);
   const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(null);
+  const [interviewDialog, setInterviewDialog] = useState<{ open: boolean; leadId: string | null; loading: boolean }>({
+    open: false, leadId: null, loading: false,
+  });
 
   function showToast(message: string, type: "success" | "error" = "success") {
     setToast({ message, type });
@@ -94,6 +101,13 @@ export function BoardView({ leads: initialLeads, onSelectLead }: { leads: LeadCa
       return;
     }
 
+    // Intercept INTERVIEW_BOOKED — show scheduling dialog, don't move card yet
+    if (columnValue === LeadStatus.INTERVIEW_BOOKED) {
+      setDragging(null);
+      setInterviewDialog({ open: true, leadId: lead.id, loading: false });
+      return;
+    }
+
     // Optimistically move the card
     setLeads((prev) =>
       prev.map((l) => (l.id === dragging ? { ...l, status: columnValue } : l))
@@ -116,6 +130,44 @@ export function BoardView({ leads: initialLeads, onSelectLead }: { leads: LeadCa
       showToast(result.error ?? "שגיאה בעדכון הסטטוס", "error");
     } else {
       showToast("הסטטוס עודכן");
+    }
+  }
+
+  async function handleInterviewConfirm(data: { interviewDate: string; designatedRole: string }) {
+    const leadId = interviewDialog.leadId;
+    if (!leadId) return;
+
+    const lead = leads.find((l) => l.id === leadId);
+    if (!lead) return;
+
+    setInterviewDialog((prev) => ({ ...prev, loading: true }));
+
+    // Optimistically move the card
+    setLeads((prev) =>
+      prev.map((l) => (l.id === leadId ? { ...l, status: LeadStatus.INTERVIEW_BOOKED, interview_date: data.interviewDate, hired_position: data.designatedRole || l.hired_position } : l))
+    );
+
+    const result = await changeLeadStatus({
+      leadId,
+      newStatus: LeadStatus.INTERVIEW_BOOKED,
+      userId: "user",
+      notes: "קביעת ראיון מלוח הקנבן",
+      extra: {
+        interviewDate: data.interviewDate,
+        hiredPosition: data.designatedRole || undefined,
+      },
+    });
+
+    setInterviewDialog({ open: false, leadId: null, loading: false });
+
+    if (!result.success) {
+      // Revert on error
+      setLeads((prev) =>
+        prev.map((l) => (l.id === leadId ? { ...l, status: lead.status } : l))
+      );
+      showToast(result.error ?? "שגיאה בעדכון הסטטוס", "error");
+    } else {
+      showToast("ראיון נקבע בהצלחה");
     }
   }
 
@@ -174,9 +226,24 @@ export function BoardView({ leads: initialLeads, onSelectLead }: { leads: LeadCa
                           ) : (
                             <span className="text-[10px] text-gray-300">—</span>
                           )}
-                          <span className={`inline-block px-1.5 py-0.5 rounded-full text-[9px] font-medium ${srcColor}`}>
-                            {lead.source}
-                          </span>
+                          <div className="flex items-center gap-1">
+                            <Link
+                              href={`/leads/${lead.id}`}
+                              className="p-0.5 rounded text-gray-400 hover:text-cyan-600 hover:bg-cyan-50 transition-colors"
+                              title="פרופיל מלא"
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-3 h-3">
+                                <path d="M15 3h6v6" />
+                                <path d="M9 21H3v-6" />
+                                <path d="m21 3-7 7" />
+                                <path d="m3 21 7-7" />
+                              </svg>
+                            </Link>
+                            <span className={`inline-block px-1.5 py-0.5 rounded-full text-[9px] font-medium ${srcColor}`}>
+                              {lead.source}
+                            </span>
+                          </div>
                         </div>
                         {lead.rejection_reason && (
                           <span className="mt-1 inline-block px-1.5 py-0.5 rounded-full text-[9px] font-medium bg-red-50 text-red-600 border border-red-200">
@@ -207,8 +274,24 @@ export function BoardView({ leads: initialLeads, onSelectLead }: { leads: LeadCa
                             <span className="font-medium">ראיון:</span>{" "}
                             {new Date(lead.interview_date).toLocaleDateString("he-IL", { day: "numeric", month: "numeric" })}{" "}
                             בשעה {new Date(lead.interview_date).toLocaleTimeString("he-IL", { hour: "2-digit", minute: "2-digit" })}
+                            {lead.hired_position && (
+                              <> | <span className="font-medium">תפקיד:</span> {lead.hired_position}</>
+                            )}
                           </p>
                         )}
+                        {lead.start_date && (() => {
+                          const timer = calcTimer(lead.start_date);
+                          if (!timer) return null;
+                          const color = timerColor(timer);
+                          const badgeBg = color === "green" ? "bg-emerald-50 border-emerald-200 text-emerald-700" : color === "amber" ? "bg-amber-50 border-amber-200 text-amber-700" : "bg-red-50 border-red-200 text-red-700";
+                          return (
+                            <p className={`mt-1 text-[9px] ${badgeBg} border rounded-lg px-1.5 py-0.5`}>
+                              {timer.expired
+                                ? "⚠ תקופת העסקה הסתיימה"
+                                : `⏳ נותרו ${timer.remainingDays} ימים`}
+                            </p>
+                          );
+                        })()}
                       </div>
                     );
                   })
@@ -226,6 +309,13 @@ export function BoardView({ leads: initialLeads, onSelectLead }: { leads: LeadCa
           {toast.message}
         </div>
       )}
+
+      <InterviewScheduleDialog
+        open={interviewDialog.open}
+        onConfirm={handleInterviewConfirm}
+        onCancel={() => setInterviewDialog({ open: false, leadId: null, loading: false })}
+        loading={interviewDialog.loading}
+      />
     </>
   );
 }

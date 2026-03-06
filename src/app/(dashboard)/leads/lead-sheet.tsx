@@ -45,8 +45,7 @@ export interface SheetLead {
   notes: string | null;
   created_at: string;
   client_type: string | null;
-  active_jobs_count: number;
-  active_employees_count: number;
+  start_date: string | null;
   recruitment_status: string;
   rejection_reason: string | null;
   hired_client: string | null;

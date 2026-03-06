@@ -7,6 +7,7 @@ import { toast } from "sonner";
 import type { Lead } from "@/types/leads";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { calcTimer, timerColor } from "@/lib/employmentTimer";
 import {
   Card,
   CardContent,
@@ -29,6 +30,7 @@ import {
   updateLeadPreferences,
   updateLeadDetails,
   getStatusHistory,
+  normalizeEmployer,
 } from "../actions";
 import { STATUS_COLORS as SM_COLORS, STATUS_LABELS, type LeadStatusValue } from "@/lib/stateMachine";
 
@@ -266,6 +268,9 @@ export function LeadDetail({ lead }: { lead: Lead }) {
   const [editLocation, setEditLocation] = useState(lead.location ?? "");
   const [editExperience, setEditExperience] = useState(lead.experience ?? "");
   const [editAge, setEditAge] = useState(lead.age?.toString() ?? "");
+  const [editStartDate, setEditStartDate] = useState(lead.start_date ?? "");
+  const [editHiredClient, setEditHiredClient] = useState(lead.hired_client ?? "");
+  const [employerHint, setEmployerHint] = useState<string | null>(null);
   const [savingEdit, setSavingEdit] = useState(false);
 
   // History state
@@ -289,6 +294,10 @@ export function LeadDetail({ lead }: { lead: Lead }) {
 
   const intlPhone = formatPhone(displayPhone);
 
+  const isHiredOrStarted = lead.status === "HIRED" || lead.status === "STARTED";
+  const hasEmployer = Boolean(lead.hired_client);
+  const canSetStartDate = isHiredOrStarted && hasEmployer;
+
   function openEditDialog() {
     setEditName(displayName);
     setEditPhone(displayPhone ?? "");
@@ -297,6 +306,9 @@ export function LeadDetail({ lead }: { lead: Lead }) {
     setEditLocation(lead.location ?? "");
     setEditExperience(lead.experience ?? "");
     setEditAge(lead.age?.toString() ?? "");
+    setEditStartDate(lead.start_date ?? "");
+    setEditHiredClient(lead.hired_client ?? "");
+    setEmployerHint(null);
     setEditOpen(true);
   }
 
@@ -314,11 +326,16 @@ export function LeadDetail({ lead }: { lead: Lead }) {
       location: editLocation.trim(),
       experience: editExperience.trim(),
       age: editAge.trim(),
+      start_date: editStartDate.trim(),
+      hired_client: editHiredClient.trim(),
     });
     setSavingEdit(false);
     if (result.error) {
       toast.error("שגיאה בעדכון הפרטים");
     } else {
+      if (result.normalizedEmployer && editHiredClient.trim() && result.normalizedEmployer !== editHiredClient.trim()) {
+        toast.success(`שם מעסיק תוקן אוטומטית ל: "${result.normalizedEmployer}"`);
+      }
       setDisplayName(editName.trim());
       setDisplayPhone(editPhone.trim() || null);
       setDisplayEmail(editEmail.trim() || null);
@@ -328,6 +345,24 @@ export function LeadDetail({ lead }: { lead: Lead }) {
       router.refresh();
     }
   }
+
+  // Debounced employer name normalization preview
+  useEffect(() => {
+    const trimmed = editHiredClient.trim();
+    if (!trimmed || trimmed.length < 2) {
+      setEmployerHint(null);
+      return;
+    }
+    const timer = setTimeout(async () => {
+      const result = await normalizeEmployer(trimmed);
+      if (result.wasNormalized && result.bestMatch && result.bestMatch !== trimmed) {
+        setEmployerHint(`יתוקן ל: "${result.bestMatch}" (דמיון: ${Math.round((result.score ?? 0) * 100)}%)`);
+      } else {
+        setEmployerHint(null);
+      }
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [editHiredClient]);
 
   async function handleSaveNotes() {
     setSavingNotes(true);
@@ -450,6 +485,80 @@ export function LeadDetail({ lead }: { lead: Lead }) {
         </div>
       </div>
 
+      {/* ═══ EMPLOYMENT TIMER ═══════════════════════════════ */}
+      {(() => {
+        const timer = calcTimer(lead.start_date);
+        if (!timer) {
+          return (
+            <div className="bg-gray-50 rounded-xl border border-dashed border-gray-300 px-6 py-4 flex items-center gap-3">
+              <div className="flex-shrink-0 w-10 h-10 rounded-full bg-gray-200 flex items-center justify-center text-gray-400">
+                <ClipboardIcon className="w-5 h-5" />
+              </div>
+              <div className="flex-1">
+                <p className="text-sm font-medium text-gray-500">טיימר העסקה</p>
+                {canSetStartDate ? (
+                  <p className="text-xs text-gray-400">הגדר תאריך תחילת עבודה כדי להפעיל את הטיימר (6 חודשים).</p>
+                ) : (
+                  <p className="text-xs text-amber-600">ניתן לקבוע תאריך תחילת עבודה רק לאחר עדכון סטטוס ל&quot;התקבל&quot; ובחירת מעסיק.</p>
+                )}
+              </div>
+              {canSetStartDate && (
+                <Button variant="outline" size="sm" className="mr-auto text-xs flex-shrink-0" onClick={openEditDialog}>
+                  הגדר תאריך
+                </Button>
+              )}
+            </div>
+          );
+        }
+
+        const color = timerColor(timer);
+        const barColor = color === "green" ? "bg-emerald-500" : color === "amber" ? "bg-amber-500" : "bg-red-500";
+        const bgColor = color === "green" ? "bg-emerald-50 border-emerald-200" : color === "amber" ? "bg-amber-50 border-amber-200" : "bg-red-50 border-red-200";
+        const textColor = color === "green" ? "text-emerald-700" : color === "amber" ? "text-amber-700" : "text-red-700";
+
+        return (
+          <div className={`rounded-xl border px-6 py-4 ${bgColor}`}>
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2">
+                <span className={`text-lg ${textColor}`}>&#9203;</span>
+                <span className={`text-sm font-bold ${textColor}`}>טיימר העסקה (6 חודשים)</span>
+              </div>
+              <div className="flex items-center gap-3 text-xs text-gray-500">
+                <span>התחלה: {timer.startDate.toLocaleDateString("he-IL")}</span>
+                <span>סיום: {timer.endDate.toLocaleDateString("he-IL")}</span>
+              </div>
+            </div>
+
+            {/* Progress bar */}
+            <div className="w-full h-3 rounded-full bg-white/80 border border-gray-200/60 overflow-hidden mb-3">
+              <div
+                className={`h-full rounded-full transition-all duration-500 ${barColor}`}
+                style={{ width: `${Math.min(timer.percentUsed, 100)}%` }}
+              />
+            </div>
+
+            {timer.expired ? (
+              <div className="flex items-center gap-2">
+                <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-red-600 text-white text-sm font-bold">
+                  &#9888; תקופת ההעסקה (6 חודשים) הסתיימה!
+                </span>
+              </div>
+            ) : (
+              <div className="flex items-center justify-between">
+                <span className={`text-sm font-semibold ${textColor}`}>
+                  {timer.remainingMonths > 0
+                    ? `נשארו ${timer.remainingMonths} חודשים ו-${timer.remainingExtraDays} ימים`
+                    : `נשארו ${timer.remainingDays} ימים`}
+                </span>
+                <span className="text-xs text-gray-500">
+                  {Math.round(timer.percentUsed)}% מהתקופה חלפו
+                </span>
+              </div>
+            )}
+          </div>
+        );
+      })()}
+
       {/* ═══ TWO-PANEL LAYOUT ════════════════════════════════ */}
       <div className="flex flex-col lg:flex-row gap-4" style={{ minHeight: "calc(100vh - 220px)" }}>
 
@@ -508,18 +617,20 @@ export function LeadDetail({ lead }: { lead: Lead }) {
                     </p>
                   </div>
                 </div>
-              </div>
 
-              {/* Stats row (folded from removed Operations Stats card) */}
-              <div className="border-t pt-3 flex items-center gap-4 text-xs text-gray-500">
-                <span className="flex items-center gap-1">
-                  <BriefcaseIcon className="w-3.5 h-3.5 text-blue-500" />
-                  <span className="font-medium text-gray-700">{lead.active_jobs_count}</span> משרות
-                </span>
-                <span className="flex items-center gap-1">
-                  <UsersIcon className="w-3.5 h-3.5 text-emerald-500" />
-                  <span className="font-medium text-gray-700">{lead.active_employees_count}</span> עובדים
-                </span>
+                <div className="flex items-center gap-3">
+                  <div className="flex-shrink-0 w-9 h-9 rounded-lg bg-emerald-50 flex items-center justify-center text-emerald-600">
+                    <ClipboardIcon className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <p className="text-[11px] text-gray-400 font-medium">תאריך תחילת עבודה</p>
+                    <p className="text-sm font-semibold text-gray-800">
+                      {lead.start_date
+                        ? new Date(lead.start_date).toLocaleDateString("he-IL")
+                        : "לא הוגדר"}
+                    </p>
+                  </div>
+                </div>
               </div>
             </CardContent>
           </Card>
@@ -582,7 +693,7 @@ export function LeadDetail({ lead }: { lead: Lead }) {
                       onChange={(e) => setClientPrefs(e.target.value)}
                       rows={3}
                       className="resize-none text-sm"
-                      placeholder='לדוגמה: "מעדיף עובדים עם ניסיון של 3+ שנים"'
+                      placeholder='לדוגמה: "מחפש עבודה במלונאות כולל מגורים, זמין למשמרות בוקר בלבד"'
                     />
                   </div>
                   <div>
@@ -594,7 +705,7 @@ export function LeadDetail({ lead }: { lead: Lead }) {
                       onChange={(e) => setPastIssues(e.target.value)}
                       rows={3}
                       className="resize-none text-sm"
-                      placeholder='לדוגמה: "עיכובים בתשלום ברבעון 3"'
+                      placeholder='לדוגמה: "לא הופיע לראיון שנקבע בעבר, עזב עבודה קודמת ללא התראה"'
                     />
                   </div>
                   <Button
@@ -707,6 +818,41 @@ export function LeadDetail({ lead }: { lead: Lead }) {
                 onChange={(e) => setEditExperience(e.target.value)}
                 placeholder="שנות ניסיון / תיאור"
               />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="edit-hired-client">מעסיק</Label>
+              <Input
+                id="edit-hired-client"
+                value={editHiredClient}
+                onChange={(e) => setEditHiredClient(e.target.value)}
+                placeholder="שם המעסיק / החברה"
+              />
+              {employerHint && (
+                <p className="text-[11px] text-cyan-600 flex items-center gap-1">
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-3 h-3 flex-shrink-0">
+                    <path d="M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z" />
+                    <path d="m9 12 2 2 4-4" />
+                  </svg>
+                  {employerHint}
+                </p>
+              )}
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="edit-start-date" className={canSetStartDate ? "" : "text-gray-400"}>תאריך תחילת עבודה</Label>
+              <Input
+                id="edit-start-date"
+                type="date"
+                value={editStartDate}
+                onChange={(e) => setEditStartDate(e.target.value)}
+                disabled={!canSetStartDate}
+                dir="ltr"
+                className={canSetStartDate ? "" : "opacity-50 cursor-not-allowed"}
+              />
+              {!canSetStartDate && (
+                <p className="text-[11px] text-amber-600">
+                  ניתן לקבוע תאריך תחילת עבודה רק לאחר עדכון סטטוס ל&quot;התקבל&quot; ובחירת מעסיק.
+                </p>
+              )}
             </div>
           </div>
           <DialogFooter>

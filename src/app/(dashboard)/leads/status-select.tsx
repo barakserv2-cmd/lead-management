@@ -12,6 +12,7 @@ import {
   type LeadStatusValue,
 } from "@/lib/stateMachine";
 import { SUB_STATUSES } from "@/lib/constants";
+import { InterviewScheduleDialog } from "./interview-schedule-dialog";
 
 const QUICK_STATUSES = ALL_STATUSES.map((value) => ({
   value,
@@ -35,6 +36,7 @@ export function StatusSelect({ leadId, currentStatus, currentSubStatus }: { lead
   const [open, setOpen] = useState(false);
   const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(null);
   const [loading, setLoading] = useState(false);
+  const [showInterviewDialog, setShowInterviewDialog] = useState(false);
 
   const ref = useRef<HTMLDivElement>(null);
 
@@ -67,6 +69,13 @@ export function StatusSelect({ leadId, currentStatus, currentSubStatus }: { lead
     }
 
     setOpen(false);
+
+    // Intercept INTERVIEW_BOOKED — open scheduling dialog instead
+    if (newStatus === LeadStatus.INTERVIEW_BOOKED) {
+      setShowInterviewDialog(true);
+      return;
+    }
+
     setLoading(true);
 
     const result = await changeLeadStatus({
@@ -84,6 +93,32 @@ export function StatusSelect({ leadId, currentStatus, currentSubStatus }: { lead
       setStatus(newStatus);
       setSubStatus(null);
       setToast({ message: "הסטטוס עודכן", type: "success" });
+    }
+  }
+
+  async function handleInterviewConfirm(data: { interviewDate: string; designatedRole: string }) {
+    setLoading(true);
+
+    const result = await changeLeadStatus({
+      leadId,
+      newStatus: LeadStatus.INTERVIEW_BOOKED,
+      userId: "user",
+      notes: "קביעת ראיון ידנית",
+      extra: {
+        interviewDate: data.interviewDate,
+        hiredPosition: data.designatedRole || undefined,
+      },
+    });
+
+    setLoading(false);
+    setShowInterviewDialog(false);
+
+    if (!result.success) {
+      setToast({ message: result.error ?? "שגיאה בעדכון", type: "error" });
+    } else {
+      setStatus(LeadStatus.INTERVIEW_BOOKED);
+      setSubStatus(null);
+      setToast({ message: "ראיון נקבע בהצלחה", type: "success" });
     }
   }
 
@@ -160,6 +195,13 @@ export function StatusSelect({ leadId, currentStatus, currentSubStatus }: { lead
           </div>
         )}
       </div>
+
+      <InterviewScheduleDialog
+        open={showInterviewDialog}
+        onConfirm={handleInterviewConfirm}
+        onCancel={() => setShowInterviewDialog(false)}
+        loading={loading}
+      />
     </>
   );
 }

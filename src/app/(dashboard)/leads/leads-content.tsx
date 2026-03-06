@@ -7,6 +7,7 @@ import { ViewToggle } from "./view-toggle";
 import { BoardView } from "./board-view";
 import { LeadWindowManager } from "./lead-mini-windows";
 import { BulkWhatsAppDialog } from "./bulk-whatsapp-dialog";
+import { BulkImportDialog } from "./bulk-import-dialog";
 import { Button } from "@/components/ui/button";
 
 function getInitials(name: string) {
@@ -66,6 +67,7 @@ export function LeadsContent({ leads }: { leads: Lead[] }) {
   const [openLeadIds, setOpenLeadIds] = useState<string[]>([]);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [waDialogOpen, setWaDialogOpen] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
 
   function openLeadWindow(id: string) {
     setOpenLeadIds((prev) => {
@@ -115,6 +117,7 @@ export function LeadsContent({ leads }: { leads: Lead[] }) {
     interview_notes: l.interview_notes,
     followup_notes: l.followup_notes,
     screening_score: l.screening_score ?? null,
+    start_date: l.start_date ?? null,
   }));
 
   const tableView = (
@@ -274,6 +277,23 @@ export function LeadsContent({ leads }: { leads: Lead[] }) {
         </div>
       )}
 
+      <div className="flex items-center justify-between mb-3">
+        <div />
+        <Button
+          size="sm"
+          variant="outline"
+          className="gap-1.5"
+          onClick={() => setImportOpen(true)}
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+            <polyline points="17 8 12 3 7 8" />
+            <line x1="12" x2="12" y1="3" y2="15" />
+          </svg>
+          ייבוא מ-Excel
+        </Button>
+      </div>
+
       <ViewToggle
         listView={tableView}
         boardView={<BoardView leads={boardLeads} onSelectLead={(id) => openLeadWindow(id)} />}
@@ -290,6 +310,11 @@ export function LeadsContent({ leads }: { leads: Lead[] }) {
         onOpenChange={setWaDialogOpen}
         recipients={selectedRecipients}
         onSuccess={() => setSelectedIds(new Set())}
+      />
+
+      <BulkImportDialog
+        open={importOpen}
+        onClose={() => setImportOpen(false)}
       />
     </>
   );

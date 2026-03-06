@@ -4,6 +4,7 @@ import { createClient as createServerClient } from "@supabase/supabase-js";
 import { revalidatePath } from "next/cache";
 import { LeadStatus } from "@/lib/stateMachine";
 import { sendWelcomeMessage } from "@/lib/whatsappWelcome";
+import { normalizeEmployerName, type NormalizationResult } from "@/lib/employerNormalization";
 
 function getSupabase() {
   return createServerClient(
@@ -198,6 +199,14 @@ export async function createLead(data: {
   return { lead, error: null };
 }
 
+/**
+ * Server action: normalize an employer name against existing employers.
+ * Called from client components to show normalization feedback.
+ */
+export async function normalizeEmployer(name: string): Promise<NormalizationResult> {
+  return normalizeEmployerName(name);
+}
+
 export async function updateLeadDetails(
   leadId: string,
   details: {
@@ -208,25 +217,114 @@ export async function updateLeadDetails(
     location: string;
     experience: string;
     age: string;
+    start_date?: string;
+    hired_client?: string;
   }
 ) {
   const ageNum = details.age ? parseInt(details.age, 10) : null;
+
+  // Normalize employer name if provided
+  let hiredClient: string | null = null;
+  if (details.hired_client?.trim()) {
+    const norm = await normalizeEmployerName(details.hired_client);
+    hiredClient = norm.normalized;
+  }
+
+  const updateData: Record<string, unknown> = {
+    name: details.name,
+    phone: details.phone || null,
+    email: details.email || null,
+    job_title: details.job_title || null,
+    location: details.location || null,
+    experience: details.experience || null,
+    age: ageNum && ageNum > 0 && ageNum < 120 ? ageNum : null,
+    start_date: details.start_date || null,
+  };
+
+  // Only update hired_client if explicitly provided (avoid clearing it when not in the form)
+  if (details.hired_client !== undefined) {
+    updateData.hired_client = hiredClient;
+  }
+
   const { error } = await getSupabase()
     .from("leads")
-    .update({
-      name: details.name,
-      phone: details.phone || null,
-      email: details.email || null,
-      job_title: details.job_title || null,
-      location: details.location || null,
-      experience: details.experience || null,
-      age: ageNum && ageNum > 0 && ageNum < 120 ? ageNum : null,
-    })
+    .update(updateData)
     .eq("id", leadId);
 
   if (!error) {
     revalidatePath(`/leads/${leadId}`);
   }
 
-  return { error: error?.message ?? null };
+  return { error: error?.message ?? null, normalizedEmployer: hiredClient };
+}
+
+// ── Bulk Import ─────────────────────────────────────────────
+
+export interface BulkImportRow {
+  name: string;
+  phone?: string;
+  email?: string;
+  job_title?: string;
+  hired_client?: string;
+  location?: string;
+}
+
+export interface BulkImportResult {
+  total: number;
+  imported: number;
+  skipped: number;
+  normalized: number;
+  errors: string[];
+}
+
+export async function bulkImportLeads(
+  rows: BulkImportRow[],
+  options?: { source?: string }
+): Promise<BulkImportResult> {
+  const supabase = getSupabase();
+  const source = options?.source ?? "ייבוא Excel";
+  const result: BulkImportResult = {
+    total: rows.length,
+    imported: 0,
+    skipped: 0,
+    normalized: 0,
+    errors: [],
+  };
+
+  for (const row of rows) {
+    const name = row.name?.trim();
+    if (!name) {
+      result.skipped++;
+      continue;
+    }
+
+    // Normalize employer name if provided
+    let hiredClient: string | null = null;
+    if (row.hired_client?.trim()) {
+      const norm = await normalizeEmployerName(row.hired_client);
+      hiredClient = norm.normalized;
+      if (norm.wasNormalized) result.normalized++;
+    }
+
+    const { error } = await supabase.from("leads").insert({
+      name,
+      phone: row.phone?.trim() || null,
+      email: row.email?.trim() || null,
+      job_title: row.job_title?.trim() || null,
+      hired_client: hiredClient,
+      location: row.location?.trim() || null,
+      source,
+      status: LeadStatus.FIT_FOR_INTERVIEW,
+    });
+
+    if (error) {
+      result.errors.push(`${name}: ${error.message}`);
+      result.skipped++;
+    } else {
+      result.imported++;
+    }
+  }
+
+  revalidatePath("/leads");
+  return result;
 }

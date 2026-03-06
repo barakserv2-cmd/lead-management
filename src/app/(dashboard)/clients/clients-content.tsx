@@ -367,23 +367,6 @@ function ClientCard({ client, onEdit }: { client: Client; onEdit: (client: Clien
       </div>
 
       {/* Metrics Row */}
-      <div className="px-4 py-2.5 border-t border-gray-100 flex items-center gap-4">
-        <div className="flex items-center gap-1.5">
-          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-3.5 h-3.5 text-blue-500">
-            <path d="M16 20V4a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16" />
-            <rect width="20" height="14" x="2" y="6" rx="2" />
-          </svg>
-          <span className="text-xs text-gray-500">0 משרות</span>
-        </div>
-        <div className="flex items-center gap-1.5">
-          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-3.5 h-3.5 text-emerald-500">
-            <path d="M18 21a8 8 0 0 0-16 0" /><circle cx="10" cy="8" r="5" />
-            <path d="M22 20c0-3.37-2-6.5-4-8a5 5 0 0 0-.45-8.3" />
-          </svg>
-          <span className="text-xs text-gray-500">0 עובדים</span>
-        </div>
-      </div>
-
       {/* Actions Row */}
       <div className="px-4 py-3 border-t border-gray-100 flex gap-2">
         <button

@@ -2,8 +2,9 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { createClient } from '@/lib/supabase/client';
-import { Calendar, PlusCircle, X, Search, UserPlus, CheckCircle, Clock, AlertTriangle, MapPin, FileSpreadsheet, Trash2 } from 'lucide-react';
+import { Calendar, PlusCircle, X, Search, UserPlus, CheckCircle, Clock, AlertTriangle, MapPin, FileSpreadsheet, Trash2, Upload } from 'lucide-react';
 import * as XLSX from 'xlsx';
+import { BulkImportDialog } from '../leads/bulk-import-dialog';
 
 export default function ExtrasPage() {
   const supabase = createClient();
@@ -31,6 +32,7 @@ export default function ExtrasPage() {
 
   const [loading, setLoading] = useState(false);
   const [importing, setImporting] = useState(false);
+  const [bulkImportOpen, setBulkImportOpen] = useState(false);
 
   // --- Init ---
   useEffect(() => { fetchCampaignsAndClients(); }, []);
@@ -311,6 +313,7 @@ export default function ExtrasPage() {
           <div><h1 className="text-2xl font-bold">{selectedCampaign.name}</h1></div>
         </div>
         <div className="flex gap-2">
+            <button onClick={() => setBulkImportOpen(true)} className="bg-emerald-600 text-white px-4 py-2 rounded-lg font-bold hover:bg-emerald-700 flex items-center gap-2"><Upload size={18} /> ייבוא מ-Excel</button>
             <button onClick={() => { setCampFormData({ name: '', start_date: '', end_date: '' }); setSelectedCampaign(null); setIsCampModalOpen(true); }} className="bg-purple-600 text-white px-4 py-2 rounded-lg font-bold hover:bg-purple-700 flex items-center gap-2"><PlusCircle size={18} /> פרויקט חדש</button>
             <select className="border rounded p-2 bg-gray-50" value={selectedCampaign.id} onChange={(e) => { const c = campaigns.find(x => x.id === e.target.value); if(c) setSelectedCampaign(c); }}>
               {campaigns.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
@@ -469,6 +472,12 @@ export default function ExtrasPage() {
             </div>
          </div>
       )}
+
+      <BulkImportDialog
+        open={bulkImportOpen}
+        onClose={() => setBulkImportOpen(false)}
+        source="אקסטרות"
+      />
     </div>
   );
 }

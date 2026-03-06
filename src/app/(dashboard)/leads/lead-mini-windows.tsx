@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import type { Lead } from "@/types/leads";
 import { StatusSelect } from "./status-select";
 import { ChatHistory } from "./[id]/chat-history";
@@ -54,6 +55,17 @@ function WhatsAppSmallIcon() {
   );
 }
 
+function ExpandIcon() {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-3.5 h-3.5">
+      <path d="M15 3h6v6" />
+      <path d="M9 21H3v-6" />
+      <path d="m21 3-7 7" />
+      <path d="m3 21 7-7" />
+    </svg>
+  );
+}
+
 function PhoneSmallIcon() {
   return (
     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-3.5 h-3.5">
@@ -78,6 +90,7 @@ function LeadMiniWindow({
   onClose: () => void;
   onToggleMinimize: () => void;
 }) {
+  const router = useRouter();
   const statusColor = STATUS_COLORS[lead.status as LeadStatusValue];
   const statusLabel = STATUS_LABELS[lead.status as LeadStatusValue] ?? lead.status;
   const intlPhone = formatPhone(lead.phone);
@@ -125,6 +138,14 @@ function LeadMiniWindow({
               </a>
             </>
           )}
+          <button
+            type="button"
+            onClick={(e) => { e.stopPropagation(); router.push(`/leads/${lead.id}`); }}
+            className="p-1 rounded hover:bg-white/20 transition-colors"
+            title="פתח פרופיל מלא"
+          >
+            <ExpandIcon />
+          </button>
           <button
             type="button"
             onClick={(e) => { e.stopPropagation(); onToggleMinimize(); }}

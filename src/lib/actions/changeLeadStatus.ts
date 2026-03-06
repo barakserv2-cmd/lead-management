@@ -9,6 +9,7 @@ import {
   validateTransition,
   type LeadGuardrailData,
 } from "@/lib/stateMachine";
+import { normalizeEmployerName } from "@/lib/employerNormalization";
 
 function getSupabase() {
   return createServerClient(
@@ -93,7 +94,10 @@ export async function changeLeadStatus(input: ChangeStatusInput): Promise<Change
   }
 
   if (newStatus === LeadStatus.HIRED) {
-    if (extra?.hiredClient) updateData.hired_client = extra.hiredClient;
+    if (extra?.hiredClient) {
+      const norm = await normalizeEmployerName(extra.hiredClient);
+      updateData.hired_client = norm.normalized;
+    }
     if (extra?.hiredPosition) updateData.hired_position = extra.hiredPosition;
     updateData.human_approval = true;
   }
@@ -101,6 +105,7 @@ export async function changeLeadStatus(input: ChangeStatusInput): Promise<Change
   if (newStatus === LeadStatus.INTERVIEW_BOOKED) {
     if (extra?.interviewDate) updateData.interview_date = extra.interviewDate;
     if (extra?.interviewNotes) updateData.interview_notes = extra.interviewNotes;
+    if (extra?.hiredPosition) updateData.hired_position = extra.hiredPosition;
   }
 
   if (newStatus === LeadStatus.FIT_FOR_INTERVIEW && extra?.screeningScore != null) {
