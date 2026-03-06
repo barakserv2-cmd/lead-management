@@ -5,7 +5,7 @@ import type { Lead } from "@/types/leads";
 import { StatusSelect } from "./status-select";
 import { ViewToggle } from "./view-toggle";
 import { BoardView } from "./board-view";
-import { LeadSheet, type SheetLead } from "./lead-sheet";
+import { LeadWindowManager } from "./lead-mini-windows";
 import { BulkWhatsAppDialog } from "./bulk-whatsapp-dialog";
 import { Button } from "@/components/ui/button";
 
@@ -63,9 +63,21 @@ function formatShortDate(dateStr: string) {
 }
 
 export function LeadsContent({ leads }: { leads: Lead[] }) {
-  const [selectedLead, setSelectedLead] = useState<SheetLead | null>(null);
+  const [openLeadIds, setOpenLeadIds] = useState<string[]>([]);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [waDialogOpen, setWaDialogOpen] = useState(false);
+
+  function openLeadWindow(id: string) {
+    setOpenLeadIds((prev) => {
+      if (prev.includes(id)) return prev; // already open
+      if (prev.length >= 4) return [...prev.slice(1), id]; // evict oldest
+      return [...prev, id];
+    });
+  }
+
+  function closeLeadWindow(id: string) {
+    setOpenLeadIds((prev) => prev.filter((x) => x !== id));
+  }
 
   const allSelected = leads.length > 0 && selectedIds.size === leads.length;
 
@@ -108,7 +120,7 @@ export function LeadsContent({ leads }: { leads: Lead[] }) {
   const tableView = (
     <div className="bg-white rounded-xl shadow-sm border overflow-hidden">
       <table className="w-full text-sm">
-        <thead className="bg-gray-50 border-b">
+        <thead className="bg-slate-50/80 border-b border-slate-200">
           <tr>
             <th className="px-3 py-3 w-10">
               <input
@@ -140,7 +152,7 @@ export function LeadsContent({ leads }: { leads: Lead[] }) {
               const sourceColor = SOURCE_COLORS[lead.source] ?? "bg-gray-100 text-gray-600";
               const isSelected = selectedIds.has(lead.id);
               return (
-                <tr key={lead.id} className={"border-b border-gray-100 transition-colors duration-150 " + (isSelected ? "bg-blue-50/60" : "hover:bg-blue-50/40")}>
+                <tr key={lead.id} className={"border-b border-gray-100 transition-colors duration-150 " + (isSelected ? "bg-cyan-50/60" : "hover:bg-cyan-50/40")}>
                   <td className="px-3 py-3">
                     <input
                       type="checkbox"
@@ -152,13 +164,13 @@ export function LeadsContent({ leads }: { leads: Lead[] }) {
                   <td className="px-4 py-3">
                     <button
                       type="button"
-                      onClick={() => setSelectedLead(lead)}
+                      onClick={() => openLeadWindow(lead.id)}
                       className="flex items-center gap-2.5 hover:opacity-80 text-right"
                     >
-                      <span className="flex-shrink-0 w-8 h-8 rounded-full bg-blue-600 text-white flex items-center justify-center text-xs font-bold">
+                      <span className="flex-shrink-0 w-8 h-8 rounded-full bg-cyan-600 text-white flex items-center justify-center text-xs font-bold">
                         {getInitials(lead.name)}
                       </span>
-                      <span className="text-gray-900 hover:text-blue-600 font-semibold">
+                      <span className="text-gray-900 hover:text-cyan-600 font-semibold">
                         {lead.name}
                       </span>
                     </button>
@@ -194,7 +206,7 @@ export function LeadsContent({ leads }: { leads: Lead[] }) {
                     <div className="flex items-center gap-1">
                       <button
                         type="button"
-                        onClick={() => setSelectedLead(lead)}
+                        onClick={() => openLeadWindow(lead.id)}
                         className="p-1.5 rounded-lg text-gray-400 hover:text-amber-600 hover:bg-amber-50 transition-colors"
                         title="הערות ופרטים"
                       >
@@ -204,7 +216,7 @@ export function LeadsContent({ leads }: { leads: Lead[] }) {
                         <>
                           <a
                             href={"tel:" + lead.phone}
-                            className="p-1.5 rounded-lg text-gray-400 hover:text-blue-600 hover:bg-blue-50 transition-colors"
+                            className="p-1.5 rounded-lg text-gray-400 hover:text-cyan-600 hover:bg-cyan-50 transition-colors"
                             title="התקשר"
                           >
                             <PhoneIcon />
@@ -264,12 +276,14 @@ export function LeadsContent({ leads }: { leads: Lead[] }) {
 
       <ViewToggle
         listView={tableView}
-        boardView={<BoardView leads={boardLeads} onSelectLead={(id) => {
-          const lead = leads.find((l) => l.id === id);
-          if (lead) setSelectedLead(lead);
-        }} />}
+        boardView={<BoardView leads={boardLeads} onSelectLead={(id) => openLeadWindow(id)} />}
       />
-      <LeadSheet lead={selectedLead} onClose={() => setSelectedLead(null)} />
+      <LeadWindowManager
+        leads={leads}
+        openLeadIds={openLeadIds}
+        onOpenLead={openLeadWindow}
+        onCloseLead={closeLeadWindow}
+      />
 
       <BulkWhatsAppDialog
         open={waDialogOpen}

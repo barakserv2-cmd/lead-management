@@ -33,10 +33,10 @@ export type FinancialStatus =
   (typeof FINANCIAL_STATUSES)[keyof typeof FINANCIAL_STATUSES];
 
 export const CLIENT_TYPES = {
-  HOTEL: "hotel",
-  RESTAURANT: "restaurant",
-  CONSTRUCTION: "construction",
-  OFFICE: "office",
+  HOTELS: "hotels",
+  FASHION: "fashion",
+  RETAIL: "retail",
+  PHARMA: "pharma",
   OTHER: "other",
 } as const;
 

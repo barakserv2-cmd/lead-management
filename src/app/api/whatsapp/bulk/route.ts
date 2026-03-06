@@ -1,18 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-
-const GREEN_API_INSTANCE = process.env.GREEN_API_INSTANCE_ID!;
-const GREEN_API_TOKEN = process.env.GREEN_API_TOKEN!;
-const GREEN_API_URL = `https://api.green-api.com/waInstance${GREEN_API_INSTANCE}/sendMessage/${GREEN_API_TOKEN}`;
-
-function formatChatId(phone: string): string {
-  // Strip everything except digits
-  let digits = phone.replace(/\D/g, "");
-  // Convert local Israeli format (05x) to international (9725x)
-  if (digits.startsWith("0")) {
-    digits = "972" + digits.slice(1);
-  }
-  return digits + "@c.us";
-}
+import { sendWhatsAppMessage } from "@/lib/whatsappService";
 
 export async function POST(req: NextRequest) {
   const body = await req.json();
@@ -32,34 +19,15 @@ export async function POST(req: NextRequest) {
 
   for (const r of recipients) {
     const personalizedMessage = message.replace(/\{name\}/g, r.name);
-    const chatId = formatChatId(r.phone);
 
-    const payload = { chatId, message: personalizedMessage };
+    console.log(`[WhatsApp Bulk] Sending to ${r.phone}`);
 
-    console.log(`[WhatsApp Bulk] Phone: ${r.phone} -> chatId: ${chatId}`);
-    console.log(`[WhatsApp Bulk] Payload:`, JSON.stringify(payload));
-
-    try {
-      const res = await fetch(GREEN_API_URL, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-
-      const responseBody = await res.text();
-      console.log(`[WhatsApp Bulk] Green-API response status: ${res.status}`);
-      console.log(`[WhatsApp Bulk] Green-API response body: ${responseBody}`);
-
-      if (res.ok) {
-        results.push({ phone: r.phone, success: true });
-      } else {
-        results.push({ phone: r.phone, success: false, error: responseBody });
-      }
-    } catch (err) {
-      const errMsg = err instanceof Error ? err.message : String(err);
-      console.log(`[WhatsApp Bulk] Fetch error for ${r.phone}: ${errMsg}`);
-      results.push({ phone: r.phone, success: false, error: errMsg });
-    }
+    const sendResult = await sendWhatsAppMessage(r.phone, personalizedMessage);
+    results.push({
+      phone: r.phone,
+      success: sendResult.success,
+      error: sendResult.error,
+    });
   }
 
   const sent = results.filter((r) => r.success).length;

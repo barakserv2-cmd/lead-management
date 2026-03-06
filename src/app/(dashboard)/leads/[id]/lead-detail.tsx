@@ -27,7 +27,6 @@ import { Textarea } from "@/components/ui/textarea";
 import {
   updateLeadNotes,
   updateLeadPreferences,
-  updateLeadField,
   updateLeadDetails,
   getStatusHistory,
 } from "../actions";
@@ -49,23 +48,7 @@ function getStatusLabel(status: string): string {
   return STATUS_LABELS[status as LeadStatusValue] ?? status;
 }
 import { ConversationSheet } from "./conversation-sheet";
-
-// ── Label / Color maps ──────────────────────────────────────
-
-const FINANCIAL_OPTIONS = [
-  { value: "balanced", label: "מאוזן", badge: "bg-emerald-500 text-white", alert: "" },
-  { value: "delayed_payment", label: "עיכוב תשלום", badge: "bg-amber-500 text-white", alert: "bg-amber-50 border-amber-300 text-amber-800" },
-  { value: "debt", label: "חוב", badge: "bg-red-600 text-white", alert: "bg-red-50 border-red-300 text-red-800" },
-  { value: "bad_debt", label: "חוב אבוד", badge: "bg-red-800 text-white", alert: "bg-red-100 border-red-400 text-red-900" },
-];
-
-const CLIENT_TYPE_OPTIONS = [
-  { value: "hotel", label: "מלון", badge: "bg-sky-100 text-sky-800" },
-  { value: "restaurant", label: "מסעדה", badge: "bg-orange-100 text-orange-800" },
-  { value: "construction", label: "בנייה", badge: "bg-yellow-100 text-yellow-800" },
-  { value: "office", label: "משרד", badge: "bg-indigo-100 text-indigo-800" },
-  { value: "other", label: "אחר", badge: "bg-gray-100 text-gray-700" },
-];
+import { ChatHistory } from "./chat-history";
 
 // ── Helpers ──────────────────────────────────────────────────
 
@@ -78,77 +61,6 @@ function getInitials(name: string) {
   const parts = name.trim().split(/\s+/);
   if (parts.length >= 2) return parts[0][0] + parts[1][0];
   return name.slice(0, 2);
-}
-
-// ── Editable Badge Dropdown ─────────────────────────────────
-
-function EditableBadge({
-  value,
-  options,
-  field,
-  leadId,
-}: {
-  value: string | null;
-  options: { value: string; label: string; badge: string }[];
-  field: string;
-  leadId: string;
-}) {
-  const [current, setCurrent] = useState(value);
-  const [open, setOpen] = useState(false);
-  const [saving, setSaving] = useState(false);
-
-  const selected = options.find((o) => o.value === current);
-  const label = selected?.label ?? (current || "בחר");
-  const color = selected?.badge ?? "bg-gray-100 text-gray-600";
-
-  async function handleSelect(newValue: string) {
-    setOpen(false);
-    if (newValue === current) return;
-    setCurrent(newValue);
-    setSaving(true);
-    const result = await updateLeadField(leadId, field, newValue);
-    setSaving(false);
-    if (result.error) {
-      toast.error("שגיאה בעדכון");
-      setCurrent(value);
-    } else {
-      toast.success("עודכן בהצלחה");
-    }
-  }
-
-  return (
-    <div className="relative inline-block">
-      <button
-        type="button"
-        onClick={() => setOpen(!open)}
-        className={`inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-semibold transition-all cursor-pointer ${color} ${saving ? "opacity-50" : "hover:opacity-80"}`}
-        disabled={saving}
-      >
-        {label}
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="w-3 h-3">
-          <path d="m6 9 6 6 6-6" />
-        </svg>
-      </button>
-      {open && (
-        <>
-          <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
-          <div className="absolute top-full mt-1 right-0 z-50 bg-white rounded-lg border shadow-lg py-1 min-w-[140px]">
-            {options.map((opt) => (
-              <button
-                key={opt.value}
-                type="button"
-                onClick={() => handleSelect(opt.value)}
-                className={`w-full text-right px-3 py-1.5 text-xs hover:bg-gray-50 flex items-center gap-2 ${opt.value === current ? "font-bold" : ""}`}
-              >
-                <span className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${opt.badge.split(" ")[0]}`} />
-                {opt.label}
-              </button>
-            ))}
-          </div>
-        </>
-      )}
-    </div>
-  );
 }
 
 // ── Icons ────────────────────────────────────────────────────
@@ -192,15 +104,6 @@ function MapPinIcon({ className = "w-4 h-4" }: { className?: string }) {
     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
       <path d="M20 10c0 4.993-5.539 10.193-7.399 11.799a1 1 0 0 1-1.202 0C9.539 20.193 4 14.993 4 10a8 8 0 0 1 16 0" />
       <circle cx="12" cy="10" r="3" />
-    </svg>
-  );
-}
-
-function AlertTriangleIcon({ className = "w-4 h-4" }: { className?: string }) {
-  return (
-    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
-      <path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3" />
-      <path d="M12 9v4" /><path d="M12 17h.01" />
     </svg>
   );
 }
@@ -386,10 +289,6 @@ export function LeadDetail({ lead }: { lead: Lead }) {
 
   const intlPhone = formatPhone(displayPhone);
 
-  const financialOption = FINANCIAL_OPTIONS.find((o) => o.value === lead.financial_status);
-  const isDebt = lead.financial_status === "debt" || lead.financial_status === "bad_debt";
-  const isFinancialAlert = lead.financial_status !== "balanced";
-
   function openEditDialog() {
     setEditName(displayName);
     setEditPhone(displayPhone ?? "");
@@ -451,325 +350,284 @@ export function LeadDetail({ lead }: { lead: Lead }) {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       {/* Back link */}
       <Link
         href="/leads"
-        className="inline-flex items-center gap-1.5 text-sm text-gray-500 hover:text-blue-600 transition-colors"
+        className="inline-flex items-center gap-1.5 text-sm text-gray-500 hover:text-cyan-600 transition-colors"
       >
         <ArrowRightIcon className="w-4 h-4" />
         חזרה לרשימה
       </Link>
 
-      {/* ═══ HEADER ═══════════════════════════════════════════ */}
-      <div className="bg-white rounded-xl border shadow-sm p-6">
-        <div className="flex items-start gap-4">
-          <span className="flex-shrink-0 w-14 h-14 rounded-full bg-blue-600 text-white flex items-center justify-center text-xl font-bold">
+      {/* ═══ COMPACT HEADER ═══════════════════════════════════ */}
+      <div className="bg-white rounded-xl border shadow-sm px-6 py-4">
+        <div className="flex items-center gap-4">
+          <span className="flex-shrink-0 w-12 h-12 rounded-full bg-cyan-600 text-white flex items-center justify-center text-lg font-bold">
             {getInitials(displayName)}
           </span>
           <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2">
-              <h1 className="text-3xl font-bold text-gray-900 truncate">
+            <div className="flex items-center gap-2 flex-wrap">
+              <h1 className="text-2xl font-bold text-gray-900 truncate">
                 {displayName}
               </h1>
+              <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold ${getStatusColorClasses(lead.status)}`}>
+                <span className={`w-1.5 h-1.5 rounded-full ${getStatusDotColor(lead.status)}`} />
+                {getStatusLabel(lead.status)}
+              </span>
               <Button
                 variant="ghost"
                 size="sm"
                 onClick={openEditDialog}
-                className="text-gray-400 hover:text-blue-600 hover:bg-blue-50 flex-shrink-0 gap-1"
+                className="text-gray-400 hover:text-cyan-600 hover:bg-cyan-50 flex-shrink-0 gap-1"
                 title="ערוך פרטים"
               >
                 <PencilIcon className="w-4 h-4" />
                 <span className="text-xs">עריכה</span>
               </Button>
             </div>
-            <div className="flex flex-wrap items-center gap-2 mt-3">
-              <EditableBadge
-                value={lead.client_type}
-                options={CLIENT_TYPE_OPTIONS}
-                field="client_type"
-                leadId={lead.id}
-              />
-              <EditableBadge
-                value={lead.financial_status}
-                options={FINANCIAL_OPTIONS}
-                field="financial_status"
-                leadId={lead.id}
-              />
+            <div className="flex flex-wrap items-center gap-2 mt-2">
+              {/* Inline action buttons */}
+              {intlPhone ? (
+                <Button
+                  size="sm"
+                  className="bg-green-600 hover:bg-green-700 text-white h-7 px-2.5 text-xs"
+                  onClick={() => {
+                    setSheetMode("whatsapp");
+                    setSheetOpen(true);
+                    setTimeout(() => {
+                      window.open("https://api.whatsapp.com/send?phone=" + intlPhone, "_blank", "noopener,noreferrer");
+                    }, 300);
+                  }}
+                >
+                  <WhatsAppIcon className="w-3.5 h-3.5" />
+                  <span className="hidden xl:inline mr-1">WhatsApp</span>
+                </Button>
+              ) : (
+                <Button size="sm" disabled className="bg-green-600 text-white h-7 px-2.5 text-xs">
+                  <WhatsAppIcon className="w-3.5 h-3.5" />
+                  <span className="hidden xl:inline mr-1">WhatsApp</span>
+                </Button>
+              )}
+              {lead.phone ? (
+                <Button
+                  size="sm"
+                  className="bg-cyan-600 hover:bg-cyan-700 text-white h-7 px-2.5 text-xs"
+                  onClick={() => {
+                    setSheetMode("call");
+                    setSheetOpen(true);
+                    setTimeout(() => {
+                      const a = document.createElement("a");
+                      a.href = "tel:" + lead.phone;
+                      a.click();
+                    }, 300);
+                  }}
+                >
+                  <PhoneIcon className="w-3.5 h-3.5" />
+                  <span className="hidden xl:inline mr-1">התקשר</span>
+                </Button>
+              ) : (
+                <Button size="sm" disabled className="bg-cyan-600 text-white h-7 px-2.5 text-xs">
+                  <PhoneIcon className="w-3.5 h-3.5" />
+                  <span className="hidden xl:inline mr-1">התקשר</span>
+                </Button>
+              )}
+              {lead.email ? (
+                <Button asChild size="sm" className="bg-gray-600 hover:bg-gray-700 text-white h-7 px-2.5 text-xs">
+                  <a href={"mailto:" + lead.email}>
+                    <MailIcon className="w-3.5 h-3.5" />
+                    <span className="hidden xl:inline mr-1">אימייל</span>
+                  </a>
+                </Button>
+              ) : (
+                <Button size="sm" disabled className="bg-gray-600 text-white h-7 px-2.5 text-xs">
+                  <MailIcon className="w-3.5 h-3.5" />
+                  <span className="hidden xl:inline mr-1">אימייל</span>
+                </Button>
+              )}
             </div>
           </div>
         </div>
       </div>
 
-      {/* ═══ ACTION BAR ═══════════════════════════════════════ */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        {/* WhatsApp — Green */}
-        {intlPhone ? (
-          <Button
-            size="lg"
-            className="h-14 text-base bg-green-600 hover:bg-green-700 text-white"
-            onClick={() => {
-              setSheetMode("whatsapp");
-              setSheetOpen(true);
-              setTimeout(() => {
-                window.open("https://api.whatsapp.com/send?phone=" + intlPhone, "_blank", "noopener,noreferrer");
-              }, 300);
-            }}
-          >
-            <WhatsAppIcon className="w-5 h-5 ml-2" />
-            WhatsApp
-          </Button>
-        ) : (
-          <Button size="lg" disabled className="h-14 text-base bg-green-600 text-white">
-            <WhatsAppIcon className="w-5 h-5 ml-2" />
-            WhatsApp
-          </Button>
-        )}
+      {/* ═══ TWO-PANEL LAYOUT ════════════════════════════════ */}
+      <div className="flex flex-col lg:flex-row gap-4" style={{ minHeight: "calc(100vh - 220px)" }}>
 
-        {/* Call — Blue */}
-        {lead.phone ? (
-          <Button
-            size="lg"
-            className="h-14 text-base bg-blue-600 hover:bg-blue-700 text-white"
-            onClick={() => {
-              setSheetMode("call");
-              setSheetOpen(true);
-              setTimeout(() => {
-                const a = document.createElement("a");
-                a.href = "tel:" + lead.phone;
-                a.click();
-              }, 300);
-            }}
-          >
-            <PhoneIcon className="w-5 h-5 ml-2" />
-            התקשר
-          </Button>
-        ) : (
-          <Button size="lg" disabled className="h-14 text-base bg-blue-600 text-white">
-            <PhoneIcon className="w-5 h-5 ml-2" />
-            התקשר
-          </Button>
-        )}
-
-        {/* Email — Gray */}
-        {lead.email ? (
-          <Button asChild size="lg" className="h-14 text-base bg-gray-600 hover:bg-gray-700 text-white">
-            <a href={"mailto:" + lead.email}>
-              <MailIcon className="w-5 h-5 ml-2" />
-              אימייל
-            </a>
-          </Button>
-        ) : (
-          <Button size="lg" disabled className="h-14 text-base bg-gray-600 text-white">
-            <MailIcon className="w-5 h-5 ml-2" />
-            אימייל
-          </Button>
-        )}
-
-        {/* New Job — Purple */}
-        <Button size="lg" className="h-14 text-base bg-purple-600 hover:bg-purple-700 text-white">
-          <BriefcaseIcon className="w-5 h-5 ml-2" />
-          משרה חדשה
-        </Button>
-      </div>
-
-      {/* ═══ MAIN 3-COLUMN GRID ══════════════════════════════ */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-
-        {/* ── LEFT: Contact Info + Financial Alert ────────── */}
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-base">פרטי קשר</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="space-y-3">
-              <div className="flex items-center gap-3">
-                <div className="flex-shrink-0 w-9 h-9 rounded-lg bg-blue-50 flex items-center justify-center text-blue-600">
-                  <PhoneIcon className="w-4 h-4" />
-                </div>
-                <div>
-                  <p className="text-[11px] text-gray-400 font-medium">טלפון</p>
-                  <p className="text-sm font-semibold text-gray-800" dir="ltr">
-                    {displayPhone ?? "—"}
-                  </p>
-                </div>
-              </div>
-
-              <div className="flex items-center gap-3">
-                <div className="flex-shrink-0 w-9 h-9 rounded-lg bg-violet-50 flex items-center justify-center text-violet-600">
-                  <MailIcon className="w-4 h-4" />
-                </div>
-                <div>
-                  <p className="text-[11px] text-gray-400 font-medium">אימייל</p>
-                  <p className="text-sm font-semibold text-gray-800" dir="ltr">
-                    {displayEmail ?? "—"}
-                  </p>
-                </div>
-              </div>
-
-              <div className="flex items-center gap-3">
-                <div className="flex-shrink-0 w-9 h-9 rounded-lg bg-teal-50 flex items-center justify-center text-teal-600">
-                  <MapPinIcon className="w-4 h-4" />
-                </div>
-                <div>
-                  <p className="text-[11px] text-gray-400 font-medium">מיקום</p>
-                  <p className="text-sm font-semibold text-gray-800">
-                    {lead.location ?? "—"}
-                  </p>
-                </div>
-              </div>
-
-              <div className="flex items-center gap-3">
-                <div className="flex-shrink-0 w-9 h-9 rounded-lg bg-purple-50 flex items-center justify-center text-purple-600">
-                  <BuildingIcon className="w-4 h-4" />
-                </div>
-                <div>
-                  <p className="text-[11px] text-gray-400 font-medium">לקוח</p>
-                  <p className="text-sm font-semibold text-gray-800">
-                    {(lead.preferences as Record<string, unknown>)?.matched_client as string ?? "—"}
-                  </p>
-                </div>
-              </div>
-            </div>
-
-            {/* Financial Alert Box */}
-            {isFinancialAlert && (
-              <div className={`rounded-lg border-2 p-4 ${isDebt ? "bg-red-50 border-red-400" : "bg-amber-50 border-amber-300"}`}>
-                <div className="flex items-start gap-3">
-                  <div className={`flex-shrink-0 w-9 h-9 rounded-full flex items-center justify-center ${isDebt ? "bg-red-200 text-red-700" : "bg-amber-200 text-amber-700"}`}>
-                    <AlertTriangleIcon className="w-5 h-5" />
+        {/* ── LEFT PANEL: Contact Info + Tabs ────────────── */}
+        <div className="w-full lg:w-[420px] flex-shrink-0 space-y-4">
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base">פרטי קשר</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="space-y-3">
+                <div className="flex items-center gap-3">
+                  <div className="flex-shrink-0 w-9 h-9 rounded-lg bg-cyan-50 flex items-center justify-center text-cyan-600">
+                    <PhoneIcon className="w-4 h-4" />
                   </div>
                   <div>
-                    <p className={`text-sm font-bold ${isDebt ? "text-red-800" : "text-amber-800"}`}>
-                      {isDebt ? "התראת חוב" : "התראה פיננסית"}
+                    <p className="text-[11px] text-gray-400 font-medium">טלפון</p>
+                    <p className="text-sm font-semibold text-gray-800" dir="ltr">
+                      {displayPhone ?? "—"}
                     </p>
-                    <p className={`text-xs mt-1 ${isDebt ? "text-red-700" : "text-amber-700"}`}>
-                      מצב פיננסי: {financialOption?.label ?? lead.financial_status}
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-3">
+                  <div className="flex-shrink-0 w-9 h-9 rounded-lg bg-violet-50 flex items-center justify-center text-violet-600">
+                    <MailIcon className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <p className="text-[11px] text-gray-400 font-medium">אימייל</p>
+                    <p className="text-sm font-semibold text-gray-800" dir="ltr">
+                      {displayEmail ?? "—"}
                     </p>
-                    {isDebt && (
-                      <p className="text-xs text-red-600 mt-1 font-medium">
-                        יש לטפל בחוב לפני המשך שיבוצים
-                      </p>
-                    )}
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-3">
+                  <div className="flex-shrink-0 w-9 h-9 rounded-lg bg-teal-50 flex items-center justify-center text-teal-600">
+                    <MapPinIcon className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <p className="text-[11px] text-gray-400 font-medium">מיקום</p>
+                    <p className="text-sm font-semibold text-gray-800">
+                      {lead.location ?? "—"}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-3">
+                  <div className="flex-shrink-0 w-9 h-9 rounded-lg bg-purple-50 flex items-center justify-center text-purple-600">
+                    <BuildingIcon className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <p className="text-[11px] text-gray-400 font-medium">מעסיק</p>
+                    <p className="text-sm font-semibold text-gray-800">
+                      {(lead.preferences as Record<string, unknown>)?.matched_client as string ?? "—"}
+                    </p>
                   </div>
                 </div>
               </div>
-            )}
-          </CardContent>
-        </Card>
 
-        {/* ── MIDDLE: Operations Stats ───────────────────── */}
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-base">נתונים תפעוליים</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              <div className="rounded-xl bg-blue-50 border border-blue-200 p-5 text-center">
-                <BriefcaseIcon className="w-8 h-8 text-blue-600 mx-auto mb-2" />
-                <p className="text-4xl font-extrabold text-blue-700">
-                  {lead.active_jobs_count}
-                </p>
-                <p className="text-sm text-blue-600 font-medium mt-1">משרות פעילות</p>
+              {/* Stats row (folded from removed Operations Stats card) */}
+              <div className="border-t pt-3 flex items-center gap-4 text-xs text-gray-500">
+                <span className="flex items-center gap-1">
+                  <BriefcaseIcon className="w-3.5 h-3.5 text-blue-500" />
+                  <span className="font-medium text-gray-700">{lead.active_jobs_count}</span> משרות
+                </span>
+                <span className="flex items-center gap-1">
+                  <UsersIcon className="w-3.5 h-3.5 text-emerald-500" />
+                  <span className="font-medium text-gray-700">{lead.active_employees_count}</span> עובדים
+                </span>
               </div>
+            </CardContent>
+          </Card>
 
-              <div className="rounded-xl bg-emerald-50 border border-emerald-200 p-5 text-center">
-                <UsersIcon className="w-8 h-8 text-emerald-600 mx-auto mb-2" />
-                <p className="text-4xl font-extrabold text-emerald-700">
-                  {lead.active_employees_count}
-                </p>
-                <p className="text-sm text-emerald-600 font-medium mt-1">עובדים פעילים</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base">מידע נוסף</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <Tabs defaultValue="notes" dir="rtl">
+                <TabsList className="w-full">
+                  <TabsTrigger value="notes" className="flex-1 text-xs">
+                    הערות
+                  </TabsTrigger>
+                  <TabsTrigger value="history" className="flex-1 text-xs">
+                    היסטוריה
+                  </TabsTrigger>
+                  <TabsTrigger value="preferences" className="flex-1 text-xs">
+                    העדפות
+                  </TabsTrigger>
+                </TabsList>
 
-        {/* ── RIGHT: Tabs — Notes / History / Preferences ─ */}
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-base">מידע נוסף</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <Tabs defaultValue="notes" dir="rtl">
-              <TabsList className="w-full">
-                <TabsTrigger value="notes" className="flex-1 text-xs">
-                  הערות
-                </TabsTrigger>
-                <TabsTrigger value="history" className="flex-1 text-xs">
-                  היסטוריה
-                </TabsTrigger>
-                <TabsTrigger value="preferences" className="flex-1 text-xs">
-                  העדפות
-                </TabsTrigger>
-              </TabsList>
-
-              {/* Notes */}
-              <TabsContent value="notes" className="mt-3 space-y-3">
-                <Textarea
-                  value={notes}
-                  onChange={(e) => setNotes(e.target.value)}
-                  rows={7}
-                  className="resize-none text-sm"
-                  placeholder="הערות כלליות על הלקוח..."
-                />
-                <Button
-                  onClick={handleSaveNotes}
-                  disabled={savingNotes}
-                  className="w-full"
-                  size="sm"
-                >
-                  {savingNotes ? "שומר..." : "שמור הערות"}
-                </Button>
-              </TabsContent>
-
-              {/* History */}
-              <TabsContent value="history" className="mt-3">
-                <HistoryTimeline
-                  entries={historyEntries}
-                  loading={historyLoading}
-                  createdAt={lead.created_at}
-                  onLoad={loadHistory}
-                />
-              </TabsContent>
-
-              {/* Preferences */}
-              <TabsContent value="preferences" className="mt-3 space-y-3">
-                <div>
-                  <label className="text-xs font-medium text-gray-500 mb-1 block">
-                    העדפות לקוח
-                  </label>
+                {/* Notes */}
+                <TabsContent value="notes" className="mt-3 space-y-3">
                   <Textarea
-                    value={clientPrefs}
-                    onChange={(e) => setClientPrefs(e.target.value)}
-                    rows={3}
+                    value={notes}
+                    onChange={(e) => setNotes(e.target.value)}
+                    rows={7}
                     className="resize-none text-sm"
-                    placeholder='לדוגמה: "מעדיף עובדים עם ניסיון של 3+ שנים"'
+                    placeholder="הערות כלליות על המועמד..."
                   />
-                </div>
-                <div>
-                  <label className="text-xs font-medium text-gray-500 mb-1 block">
-                    בעיות קודמות
-                  </label>
-                  <Textarea
-                    value={pastIssues}
-                    onChange={(e) => setPastIssues(e.target.value)}
-                    rows={3}
-                    className="resize-none text-sm"
-                    placeholder='לדוגמה: "עיכובים בתשלום ברבעון 3"'
+                  <Button
+                    onClick={handleSaveNotes}
+                    disabled={savingNotes}
+                    className="w-full"
+                    size="sm"
+                  >
+                    {savingNotes ? "שומר..." : "שמור הערות"}
+                  </Button>
+                </TabsContent>
+
+                {/* History */}
+                <TabsContent value="history" className="mt-3">
+                  <HistoryTimeline
+                    entries={historyEntries}
+                    loading={historyLoading}
+                    createdAt={lead.created_at}
+                    onLoad={loadHistory}
                   />
-                </div>
-                <Button
-                  onClick={handleSavePreferences}
-                  disabled={savingPrefs}
-                  className="w-full"
-                  size="sm"
-                >
-                  {savingPrefs ? "שומר..." : "שמור העדפות"}
-                </Button>
-              </TabsContent>
-            </Tabs>
-          </CardContent>
-        </Card>
+                </TabsContent>
+
+                {/* Preferences */}
+                <TabsContent value="preferences" className="mt-3 space-y-3">
+                  <div>
+                    <label className="text-xs font-medium text-gray-500 mb-1 block">
+                      העדפות מועמד
+                    </label>
+                    <Textarea
+                      value={clientPrefs}
+                      onChange={(e) => setClientPrefs(e.target.value)}
+                      rows={3}
+                      className="resize-none text-sm"
+                      placeholder='לדוגמה: "מעדיף עובדים עם ניסיון של 3+ שנים"'
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs font-medium text-gray-500 mb-1 block">
+                      בעיות קודמות
+                    </label>
+                    <Textarea
+                      value={pastIssues}
+                      onChange={(e) => setPastIssues(e.target.value)}
+                      rows={3}
+                      className="resize-none text-sm"
+                      placeholder='לדוגמה: "עיכובים בתשלום ברבעון 3"'
+                    />
+                  </div>
+                  <Button
+                    onClick={handleSavePreferences}
+                    disabled={savingPrefs}
+                    className="w-full"
+                    size="sm"
+                  >
+                    {savingPrefs ? "שומר..." : "שמור העדפות"}
+                  </Button>
+                </TabsContent>
+              </Tabs>
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* ── RIGHT PANEL: WhatsApp Chat ─────────────────── */}
+        <div className="flex-1 min-w-0">
+          <Card className="h-full flex flex-col">
+            <CardHeader className="pb-3 border-b">
+              <CardTitle className="text-base flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
+                {lead.status === "SCREENING_IN_PROGRESS" ? "שיחת סינון AI" : "שיחת WhatsApp"}
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="flex-1 p-0 min-h-0">
+              <ChatHistory
+                leadId={lead.id}
+                leadStatus={lead.status as LeadStatusValue}
+              />
+            </CardContent>
+          </Card>
+        </div>
       </div>
 
       {/* ═══ EDIT DETAILS DIALOG ═══════════════════════════════ */}

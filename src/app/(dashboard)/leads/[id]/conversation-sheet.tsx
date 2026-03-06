@@ -77,29 +77,15 @@ const RECRUITMENT_COLORS: Record<string, string> = {
 };
 
 const CLIENT_TYPE_LABELS: Record<string, string> = {
-  hotel: "מלון",
-  restaurant: "מסעדה",
-  construction: "בנייה",
-  office: "משרד",
+  hotels: "מלונאות",
+  fashion: "אופנה וביגוד",
+  retail: "קמעונאות וסופרים",
+  pharma: "פארם וקוסמטיקה",
   other: "אחר",
 };
 
-const FINANCIAL_LABELS: Record<string, string> = {
-  balanced: "מאוזן",
-  delayed_payment: "עיכוב תשלום",
-  debt: "חוב",
-  bad_debt: "חוב אבוד",
-};
-
-const FINANCIAL_COLORS: Record<string, string> = {
-  balanced: "bg-emerald-100 text-emerald-800",
-  delayed_payment: "bg-amber-100 text-amber-800",
-  debt: "bg-red-100 text-red-800",
-  bad_debt: "bg-red-200 text-red-900",
-};
-
 const PREF_LABELS: Record<string, string> = {
-  client_preferences: "העדפות לקוח",
+  client_preferences: "העדפות מועמד",
   past_issues: "בעיות קודמות",
 };
 
@@ -209,13 +195,9 @@ export function ConversationSheet({
   }
 
   // Derived values
-  const isDebt = lead.financial_status === "debt" || lead.financial_status === "bad_debt";
-  const isDelayed = lead.financial_status === "delayed_payment";
   const recruitLabel = RECRUITMENT_LABELS[lead.recruitment_status] ?? lead.recruitment_status;
   const recruitColor = RECRUITMENT_COLORS[lead.recruitment_status] ?? "bg-gray-100 text-gray-700";
   const clientLabel = lead.client_type ? CLIENT_TYPE_LABELS[lead.client_type] ?? lead.client_type : null;
-  const financialLabel = FINANCIAL_LABELS[lead.financial_status] ?? lead.financial_status;
-  const financialColor = FINANCIAL_COLORS[lead.financial_status] ?? "bg-gray-100 text-gray-700";
   const prefs = (lead.preferences ?? {}) as Record<string, string>;
   const prefEntries = Object.entries(prefs).filter(([, v]) => v);
 
@@ -245,23 +227,7 @@ export function ConversationSheet({
             {clientLabel && (
               <Badge variant="secondary" className="text-[11px]">{clientLabel}</Badge>
             )}
-            <Badge className={`text-[11px] ${financialColor}`}>{financialLabel}</Badge>
           </div>
-
-          {/* Debt / Payment alert banner */}
-          {(isDebt || isDelayed) && (
-            <div className={`flex items-center gap-2 rounded-lg px-3 py-2 text-xs font-medium ${
-              isDebt
-                ? "bg-red-50 border border-red-300 text-red-800"
-                : "bg-amber-50 border border-amber-300 text-amber-800"
-            }`}>
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4 flex-shrink-0">
-                <path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3" />
-                <path d="M12 9v4" /><path d="M12 17h.01" />
-              </svg>
-              {isDebt ? "לקוח עם חוב — יש לטפל לפני המשך שיבוצים" : "עיכוב תשלום — שים לב בעת שיחה"}
-            </div>
-          )}
         </SheetHeader>
 
         {/* ═══ 2–4. SCROLLABLE CONTENT ═════════════════════════ */}
@@ -338,7 +304,7 @@ export function ConversationSheet({
                     >
                       <input
                         type="checkbox"
-                        className="mt-1 rounded border-gray-300 accent-blue-600"
+                        className="mt-1 rounded border-gray-300 accent-cyan-600"
                         onChange={() => handleCompleteReminder(r.id)}
                       />
                       <div className="flex-1 min-w-0">
@@ -369,8 +335,8 @@ export function ConversationSheet({
             ) : (
               <div className="space-y-2">
                 {prefEntries.map(([key, value]) => (
-                  <div key={key} className="rounded-lg bg-blue-50 border border-blue-100 p-3">
-                    <p className="text-[10px] font-bold text-blue-500 uppercase tracking-wide mb-0.5">
+                  <div key={key} className="rounded-lg bg-cyan-50 border border-cyan-100 p-3">
+                    <p className="text-[10px] font-bold text-cyan-500 uppercase tracking-wide mb-0.5">
                       {PREF_LABELS[key] ?? key}
                     </p>
                     <p className="text-xs text-gray-700 leading-relaxed">{value}</p>

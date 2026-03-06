@@ -196,7 +196,7 @@ export function JobsContent({
       return;
     }
     if (!editingJob && !formClientId) {
-      setFormError("לקוח הוא שדה חובה");
+      setFormError("מעסיק הוא שדה חובה");
       return;
     }
     const neededNum = parseInt(formNeeded, 10);
@@ -239,7 +239,7 @@ export function JobsContent({
           <Input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="חיפוש כותרת / מיקום / לקוח..."
+            placeholder="חיפוש כותרת / מיקום / מעסיק..."
             className="w-72 text-sm"
           />
           <Button onClick={openAddDialog} className="gap-1.5">
@@ -284,14 +284,14 @@ export function JobsContent({
           <div className="space-y-4 py-2">
             {!editingJob && (
               <div className="space-y-2">
-                <Label htmlFor="job-client">לקוח *</Label>
+                <Label htmlFor="job-client">מעסיק *</Label>
                 <select
                   id="job-client"
                   value={formClientId}
                   onChange={(e) => setFormClientId(e.target.value)}
                   className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm"
                 >
-                  <option value="" disabled>בחר לקוח...</option>
+                  <option value="" disabled>בחר מעסיק...</option>
                   {clients.map((c) => (
                     <option key={c.id} value={c.id}>{c.name}</option>
                   ))}
@@ -420,7 +420,7 @@ function JobCard({ job, onEdit }: { job: JobWithClient; onEdit: (job: JobWithCli
       <button
         type="button"
         onClick={(e) => { e.stopPropagation(); onEdit(job); }}
-        className="absolute top-3 left-3 p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-full transition-colors"
+        className="absolute top-3 left-3 p-1.5 text-gray-400 hover:text-cyan-600 hover:bg-cyan-50 rounded-full transition-colors"
         title="ערוך משרה"
       >
         <Pencil size={16} />
@@ -491,7 +491,7 @@ function JobCard({ job, onEdit }: { job: JobWithClient; onEdit: (job: JobWithCli
               className="w-full flex items-center justify-center gap-1.5 py-1.5 px-3 rounded bg-green-50 text-green-700 text-xs font-medium hover:bg-green-100 transition-colors"
             >
               <WhatsAppIcon className="w-3.5 h-3.5" />
-              WhatsApp ללקוח
+              WhatsApp למעסיק
             </button>
           )}
         </div>

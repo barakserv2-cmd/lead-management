@@ -3,8 +3,8 @@ import { Toaster } from "@/components/ui/sonner";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "EilatJobs — ניהול לידים",
-  description: "מערכת ניהול לידים חכמה לחברות כוח אדם",
+  title: "ברק שירותים — מערכת גיוס",
+  description: "מערכת ניהול גיוס חכמה — ברק שירותים",
 };
 
 export default function RootLayout({

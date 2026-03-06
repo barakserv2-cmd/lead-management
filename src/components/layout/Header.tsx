@@ -14,11 +14,11 @@ export default function Header() {
   }
 
   return (
-    <header className="h-16 bg-white border-b border-gray-200 flex items-center justify-between px-6">
+    <header className="h-16 bg-white/80 backdrop-blur-sm border-b border-gray-200 border-t-2 border-t-cyan-600 flex items-center justify-between px-6">
       <div />
       <div className="flex items-center gap-4">
         <span className="text-sm text-gray-600">אדמין</span>
-        <div className="w-8 h-8 rounded-full bg-blue-600 text-white flex items-center justify-center text-sm font-medium">
+        <div className="w-8 h-8 rounded-full bg-gradient-to-br from-cyan-500 to-cyan-700 text-white flex items-center justify-center text-sm font-medium">
           א
         </div>
         <button

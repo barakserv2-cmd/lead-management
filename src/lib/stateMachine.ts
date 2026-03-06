@@ -149,7 +149,7 @@ export function isValidStatus(status: string): status is LeadStatusValue {
 }
 
 export function getAllowedTransitions(currentStatus: LeadStatusValue): LeadStatusValue[] {
-  return TRANSITION_MAP[currentStatus] ?? [];
+  return ALL_STATUSES.filter((s) => s !== currentStatus);
 }
 
 export interface TransitionValidation {
@@ -160,29 +160,11 @@ export interface TransitionValidation {
 export function validateTransition(
   fromStatus: LeadStatusValue,
   toStatus: LeadStatusValue,
-  guardrailData?: LeadGuardrailData
+  _guardrailData?: LeadGuardrailData
 ): TransitionValidation {
-  // 1. Check if target status is valid
+  // Only check if target status is a valid status value
   if (!isValidStatus(toStatus)) {
     return { valid: false, error: `סטטוס לא חוקי: ${toStatus}` };
-  }
-
-  // 2. Check if transition is allowed
-  const allowed = TRANSITION_MAP[fromStatus];
-  if (!allowed || !allowed.includes(toStatus)) {
-    return {
-      valid: false,
-      error: `מעבר לא חוקי: ${STATUS_LABELS[fromStatus]} → ${STATUS_LABELS[toStatus]}`,
-    };
-  }
-
-  // 3. Check guardrails
-  const guardrailFn = GUARDRAILS[toStatus];
-  if (guardrailFn) {
-    const guardrailError = guardrailFn(guardrailData ?? {});
-    if (guardrailError) {
-      return { valid: false, error: guardrailError };
-    }
   }
 
   return { valid: true };

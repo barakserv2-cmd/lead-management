@@ -1,4 +1,4 @@
-export type ClientType = "Hotel" | "Restaurant" | "Construction" | "Other";
+export type ClientType = "Hotels" | "Fashion" | "Retail" | "Pharma" | "Other";
 export type ClientStatus = "Active" | "Frozen" | "Debt";
 
 export interface Client {

@@ -77,14 +77,14 @@ function MultiSelectDropdown({
         onClick={() => setOpen(!open)}
         className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-medium transition-all hover:border-gray-400 ${
           selected.size > 0
-            ? "border-blue-300 bg-blue-50 text-blue-700"
+            ? "border-cyan-300 bg-cyan-50 text-cyan-700"
             : "border-gray-200 bg-white text-gray-600"
         }`}
       >
         <FilterIcon />
         {label}
         {selected.size > 0 && (
-          <span className="bg-blue-600 text-white text-[10px] font-bold rounded-full w-4 h-4 flex items-center justify-center">
+          <span className="bg-cyan-600 text-white text-[10px] font-bold rounded-full w-4 h-4 flex items-center justify-center">
             {selected.size}
           </span>
         )}
@@ -100,9 +100,9 @@ function MultiSelectDropdown({
                 key={opt.value}
                 type="button"
                 onClick={() => toggle(opt.value)}
-                className={`w-full flex items-center gap-2 px-3 py-2 text-xs text-right hover:bg-gray-50 transition-colors ${isSelected ? "bg-blue-50/60" : ""}`}
+                className={`w-full flex items-center gap-2 px-3 py-2 text-xs text-right hover:bg-gray-50 transition-colors ${isSelected ? "bg-cyan-50/60" : ""}`}
               >
-                <span className={`w-4 h-4 rounded border flex items-center justify-center flex-shrink-0 ${isSelected ? "bg-blue-600 border-blue-600" : "border-gray-300"}`}>
+                <span className={`w-4 h-4 rounded border flex items-center justify-center flex-shrink-0 ${isSelected ? "bg-cyan-600 border-cyan-600" : "border-gray-300"}`}>
                   {isSelected && (
                     <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" strokeWidth="3" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
@@ -236,7 +236,7 @@ export function FilterBar({ allTags }: { allTags: string[] }) {
             {Array.from(selectedStatuses).map((s) => {
               const statusDef = STATUS_OPTIONS.find((st) => st.value === s);
               return (
-                <span key={`s-${s}`} className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-[11px] font-medium bg-blue-50 text-blue-700 border border-blue-200">
+                <span key={`s-${s}`} className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-[11px] font-medium bg-cyan-50 text-cyan-700 border border-cyan-200">
                   <span className={`w-1.5 h-1.5 rounded-full ${statusDef?.dot ?? "bg-gray-400"}`} />
                   {statusDef?.label ?? s}
                   <button type="button" onClick={() => removeStatus(s)} className="hover:text-red-600 transition-colors">

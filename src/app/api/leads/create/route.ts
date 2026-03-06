@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { validateApiKey, unauthorizedResponse, getSupabaseAdmin } from "@/lib/api-auth";
+import { sendWelcomeMessage } from "@/lib/whatsappWelcome";
 
 export async function POST(request: NextRequest) {
   if (!validateApiKey(request)) return unauthorizedResponse();
@@ -55,6 +56,11 @@ export async function POST(request: NextRequest) {
         { error: `Insert failed: ${insertError.message}` },
         { status: 500 }
       );
+    }
+
+    // Fire-and-forget: send WhatsApp welcome if phone exists
+    if (lead.phone) {
+      sendWelcomeMessage(lead.id, lead.phone).catch(console.error);
     }
 
     return NextResponse.json({

@@ -50,18 +50,18 @@ export function HiredContent({ leads }: { leads: Lead[] }) {
       <h1 className="text-2xl font-bold mb-6">דוח מועסקים</h1>
 
       {/* Summary Card */}
-      <div className="bg-purple-50 border border-purple-200 rounded-xl px-6 py-4 mb-6 flex items-center gap-3">
-        <span className="text-3xl font-bold text-purple-700">
+      <div className="bg-cyan-50 border border-cyan-200 rounded-xl px-6 py-4 mb-6 flex items-center gap-3">
+        <span className="text-3xl font-bold text-cyan-700">
           {filtered.length}
         </span>
-        <span className="text-purple-700 font-medium">סה&quot;כ התקבלו</span>
+        <span className="text-cyan-700 font-medium">סה&quot;כ התקבלו</span>
       </div>
 
       {/* Filters */}
       <div className="flex flex-wrap items-end gap-4 mb-6">
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">
-            לקוח
+            מעסיק
           </label>
           <select
             value={clientFilter}
@@ -115,7 +115,7 @@ export function HiredContent({ leads }: { leads: Lead[] }) {
               <tr className="bg-gray-50 border-b text-right">
                 <th className="px-4 py-3 font-semibold text-gray-700">שם</th>
                 <th className="px-4 py-3 font-semibold text-gray-700">טלפון</th>
-                <th className="px-4 py-3 font-semibold text-gray-700">לקוח</th>
+                <th className="px-4 py-3 font-semibold text-gray-700">מעסיק</th>
                 <th className="px-4 py-3 font-semibold text-gray-700">תפקיד</th>
                 <th className="px-4 py-3 font-semibold text-gray-700">תאריך</th>
               </tr>

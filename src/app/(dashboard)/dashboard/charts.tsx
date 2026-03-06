@@ -15,7 +15,7 @@ import {
 } from "recharts";
 
 const PIE_COLORS = [
-  "#3b82f6", // blue
+  "#0891b2", // cyan
   "#10b981", // emerald
   "#f59e0b", // amber
   "#8b5cf6", // violet
@@ -57,7 +57,7 @@ export function LeadsPerDayChart({
               }}
               labelStyle={{ fontWeight: 600 }}
             />
-            <Bar dataKey="count" name="לידים" fill="#3b82f6" radius={[6, 6, 0, 0]} />
+            <Bar dataKey="count" name="לידים" fill="#0891b2" radius={[6, 6, 0, 0]} />
           </BarChart>
         </ResponsiveContainer>
       </div>

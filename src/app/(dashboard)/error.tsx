@@ -14,7 +14,7 @@ export default function DashboardError({
         <p className="text-sm text-gray-500">{error.message}</p>
         <button
           onClick={reset}
-          className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700"
+          className="px-4 py-2 bg-cyan-600 text-white rounded-lg text-sm hover:bg-cyan-700"
         >
           נסה שוב
         </button>

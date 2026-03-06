@@ -168,7 +168,7 @@ export function UsersContent({ users: initialUsers }: { users: UserProfile[] }) 
                       <button
                         type="button"
                         onClick={() => openEditDialog(user)}
-                        className="p-1.5 rounded-md text-gray-400 hover:text-blue-600 hover:bg-blue-50 transition-colors"
+                        className="p-1.5 rounded-md text-gray-400 hover:text-cyan-600 hover:bg-cyan-50 transition-colors"
                         title="ערוך"
                       >
                         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4">

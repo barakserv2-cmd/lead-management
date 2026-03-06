@@ -3,6 +3,7 @@
 import { createClient as createServerClient } from "@supabase/supabase-js";
 import { revalidatePath } from "next/cache";
 import { LeadStatus } from "@/lib/stateMachine";
+import { sendWelcomeMessage } from "@/lib/whatsappWelcome";
 
 function getSupabase() {
   return createServerClient(
@@ -187,6 +188,11 @@ export async function createLead(data: {
     .single();
 
   if (error) return { lead: null, error: error.message };
+
+  // Fire-and-forget: send WhatsApp welcome if phone exists
+  if (lead.phone) {
+    sendWelcomeMessage(lead.id, lead.phone).catch(console.error);
+  }
 
   revalidatePath("/leads");
   return { lead, error: null };

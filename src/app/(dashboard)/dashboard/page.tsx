@@ -79,18 +79,19 @@ export default async function DashboardPage() {
     .sort((a, b) => b.count - a.count);
 
   const cards = [
-    { label: "סה״כ לידים", value: totalCount ?? 0, color: "bg-purple-50 text-purple-700" },
-    { label: STATUS_LABELS[LEAD_STATUSES.NEW_LEAD], value: newCount ?? 0, color: "bg-blue-50 text-blue-700" },
-    { label: STATUS_LABELS[LEAD_STATUSES.CONTACTED], value: contactedCount ?? 0, color: "bg-cyan-50 text-cyan-700" },
-    { label: STATUS_LABELS[LEAD_STATUSES.SCREENING_IN_PROGRESS], value: screeningCount ?? 0, color: "bg-orange-50 text-orange-700" },
-    { label: STATUS_LABELS[LEAD_STATUSES.INTERVIEW_BOOKED], value: interviewBookedCount ?? 0, color: "bg-purple-50 text-purple-700" },
-    { label: STATUS_LABELS[LEAD_STATUSES.HIRED], value: hiredCount ?? 0, color: "bg-green-50 text-green-700" },
-    { label: STATUS_LABELS[LEAD_STATUSES.REJECTED], value: rejectedCount ?? 0, color: "bg-gray-100 text-gray-700" },
+    { label: "סה״כ לידים", value: totalCount ?? 0, color: "bg-gradient-to-br from-purple-50 to-purple-100 text-purple-700" },
+    { label: STATUS_LABELS[LEAD_STATUSES.NEW_LEAD], value: newCount ?? 0, color: "bg-gradient-to-br from-blue-50 to-blue-100 text-blue-700" },
+    { label: STATUS_LABELS[LEAD_STATUSES.CONTACTED], value: contactedCount ?? 0, color: "bg-gradient-to-br from-cyan-50 to-cyan-100 text-cyan-700" },
+    { label: STATUS_LABELS[LEAD_STATUSES.SCREENING_IN_PROGRESS], value: screeningCount ?? 0, color: "bg-gradient-to-br from-orange-50 to-orange-100 text-orange-700" },
+    { label: STATUS_LABELS[LEAD_STATUSES.INTERVIEW_BOOKED], value: interviewBookedCount ?? 0, color: "bg-gradient-to-br from-purple-50 to-purple-100 text-purple-700" },
+    { label: STATUS_LABELS[LEAD_STATUSES.HIRED], value: hiredCount ?? 0, color: "bg-gradient-to-br from-green-50 to-green-100 text-green-700" },
+    { label: STATUS_LABELS[LEAD_STATUSES.REJECTED], value: rejectedCount ?? 0, color: "bg-gradient-to-br from-gray-50 to-gray-100 text-gray-700" },
   ];
 
   return (
     <div>
-      <h1 className="text-2xl font-bold mb-6">דשבורד</h1>
+      <h1 className="text-2xl font-bold mb-1">דשבורד</h1>
+      <p className="text-sm text-gray-500 mb-6">סיכום פעילות הגיוס</p>
       <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-7 gap-4">
         {cards.map((card) => (
           <div

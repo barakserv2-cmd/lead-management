@@ -26,9 +26,10 @@ const STATUS_CONFIG: Record<ClientStatus, { label: string; color: string }> = {
 };
 
 const TYPE_LABELS: Record<string, string> = {
-  Hotel: "מלון",
-  Restaurant: "מסעדה",
-  Construction: "בנייה",
+  Hotels: "מלונאות",
+  Fashion: "אופנה וביגוד",
+  Retail: "קמעונאות וסופרים",
+  Pharma: "פארם וקוסמטיקה",
   Other: "אחר",
 };
 
@@ -168,7 +169,7 @@ export function ClientsContent({ clients: initialClients }: { clients: Client[] 
     if (result.error) {
       setFormError(result.error);
     } else {
-      toast.success(editingClient ? "לקוח עודכן בהצלחה!" : "לקוח נוסף בהצלחה!");
+      toast.success(editingClient ? "מעסיק עודכן בהצלחה!" : "מעסיק נוסף בהצלחה!");
       setDialogOpen(false);
       router.refresh();
     }
@@ -178,7 +179,7 @@ export function ClientsContent({ clients: initialClients }: { clients: Client[] 
     <div>
       {/* ═══ HEADER ═══════════════════════════════════════════ */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
-        <h1 className="text-2xl font-bold">לקוחות</h1>
+        <h1 className="text-2xl font-bold">מעסיקים</h1>
         <div className="flex items-center gap-3">
           <Input
             value={search}
@@ -188,7 +189,7 @@ export function ClientsContent({ clients: initialClients }: { clients: Client[] 
           />
           <Button onClick={openAddDialog} className="gap-1.5">
             <PlusIcon className="w-4 h-4" />
-            לקוח חדש
+            מעסיק חדש
           </Button>
         </div>
       </div>
@@ -223,12 +224,12 @@ export function ClientsContent({ clients: initialClients }: { clients: Client[] 
             <span className="text-2xl">🏢</span>
           </div>
           <p className="text-gray-500 font-medium">
-            {search ? "לא נמצאו תוצאות" : "אין לקוחות עדיין"}
+            {search ? "לא נמצאו תוצאות" : "אין מעסיקים עדיין"}
           </p>
           {!search && (
             <Button onClick={openAddDialog} variant="outline" className="mt-4 gap-1.5">
               <PlusIcon className="w-4 h-4" />
-              הוסף לקוח ראשון
+              הוסף מעסיק ראשון
             </Button>
           )}
         </div>
@@ -244,16 +245,16 @@ export function ClientsContent({ clients: initialClients }: { clients: Client[] 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent className="sm:max-w-md" dir="rtl">
           <DialogHeader>
-            <DialogTitle>{editingClient ? "עריכת לקוח" : "הוספת לקוח חדש"}</DialogTitle>
+            <DialogTitle>{editingClient ? "עריכת מעסיק" : "הוספת מעסיק חדש"}</DialogTitle>
           </DialogHeader>
           <div className="space-y-4 py-2">
             <div className="space-y-2">
-              <Label htmlFor="client-name">שם החברה / הלקוח *</Label>
+              <Label htmlFor="client-name">שם החברה / המעסיק *</Label>
               <Input
                 id="client-name"
                 value={formName}
                 onChange={(e) => setFormName(e.target.value)}
-                placeholder="שם הלקוח"
+                placeholder="שם המעסיק"
               />
             </div>
             <div className="space-y-2">
@@ -287,16 +288,17 @@ export function ClientsContent({ clients: initialClients }: { clients: Client[] 
               </div>
             </div>
             <div className="space-y-2">
-              <Label htmlFor="client-type">סוג לקוח</Label>
+              <Label htmlFor="client-type">סוג מעסיק</Label>
               <select
                 id="client-type"
                 value={formType}
                 onChange={(e) => setFormType(e.target.value)}
                 className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm"
               >
-                <option value="Hotel">מלון</option>
-                <option value="Restaurant">מסעדה</option>
-                <option value="Construction">בנייה</option>
+                <option value="Hotels">מלונאות</option>
+                <option value="Fashion">אופנה וביגוד</option>
+                <option value="Retail">קמעונאות וסופרים</option>
+                <option value="Pharma">פארם וקוסמטיקה</option>
                 <option value="Other">אחר</option>
               </select>
             </div>
@@ -322,7 +324,7 @@ export function ClientsContent({ clients: initialClients }: { clients: Client[] 
               ביטול
             </Button>
             <Button onClick={handleSave} disabled={saving || !formName.trim() || !formPhone.trim()}>
-              {saving ? "שומר..." : editingClient ? "שמור שינויים" : "הוסף לקוח"}
+              {saving ? "שומר..." : editingClient ? "שמור שינויים" : "הוסף מעסיק"}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -393,7 +395,7 @@ function ClientCard({ client, onEdit }: { client: Client; onEdit: (client: Clien
               a.click();
             }, 100);
           }}
-          className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg bg-blue-50 text-blue-700 text-xs font-medium hover:bg-blue-100 transition-colors"
+          className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg bg-cyan-50 text-cyan-700 text-xs font-medium hover:bg-cyan-100 transition-colors"
         >
           <PhoneIcon className="w-3.5 h-3.5" />
           התקשר

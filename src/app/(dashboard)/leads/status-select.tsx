@@ -128,7 +128,7 @@ export function StatusSelect({ leadId, currentStatus, currentSubStatus }: { lead
                   <span className={`w-2 h-2 rounded-full flex-shrink-0 ${s.dot}`} />
                   {s.label}
                   {isActive && (
-                    <svg className="w-3 h-3 mr-auto text-blue-600" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
+                    <svg className="w-3 h-3 mr-auto text-cyan-600" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
                     </svg>
                   )}

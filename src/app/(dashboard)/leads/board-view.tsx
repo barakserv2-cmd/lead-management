@@ -127,7 +127,7 @@ export function BoardView({ leads: initialLeads, onSelectLead }: { leads: LeadCa
           return (
             <div
               key={col.value}
-              className="flex-shrink-0 w-60 bg-gray-50 rounded-xl border border-gray-200 flex flex-col"
+              className="flex-shrink-0 w-64 bg-gray-50/80 rounded-xl border border-gray-200/60 flex flex-col"
               onDragOver={handleDragOver}
               onDrop={() => handleDrop(col.value)}
             >
@@ -148,20 +148,26 @@ export function BoardView({ leads: initialLeads, onSelectLead }: { leads: LeadCa
                         key={lead.id}
                         draggable
                         onDragStart={() => handleDragStart(lead.id)}
-                        className={`bg-white rounded-lg border border-gray-200 p-2.5 shadow-sm hover:shadow-md transition-shadow cursor-grab active:cursor-grabbing ${dragging === lead.id ? "opacity-40" : ""}`}
+                        className={`bg-white rounded-xl border border-gray-200/80 p-3 shadow-sm hover:shadow-md transition-all duration-200 cursor-grab active:cursor-grabbing active:scale-[0.98] ${dragging === lead.id ? "opacity-40 scale-95" : ""}`}
                       >
                         <button
                           type="button"
                           onClick={() => onSelectLead?.(lead.id)}
                           className="flex items-center gap-2 mb-1.5 hover:opacity-80 text-right w-full"
                         >
-                          <span className="flex-shrink-0 w-6 h-6 rounded-full bg-blue-600 text-white flex items-center justify-center text-[9px] font-bold">
+                          <span className="flex-shrink-0 w-6 h-6 rounded-full bg-cyan-600 text-white flex items-center justify-center text-[9px] font-bold">
                             {getInitials(lead.name)}
                           </span>
-                          <span className="text-xs font-semibold text-gray-900 truncate">
+                          <span className="text-[13px] font-semibold text-gray-900 truncate">
                             {lead.name}
                           </span>
                         </button>
+                        {lead.status === "SCREENING_IN_PROGRESS" && (
+                          <div className="flex items-center gap-1 mb-1 px-1">
+                            <span className="w-1.5 h-1.5 rounded-full bg-orange-500 animate-pulse" />
+                            <span className="text-[10px] font-medium text-orange-600">סינון AI פעיל</span>
+                          </div>
+                        )}
                         <div className="flex items-center justify-between">
                           {lead.phone ? (
                             <span className="text-[10px] text-gray-500" dir="ltr">{lead.phone}</span>
@@ -179,7 +185,7 @@ export function BoardView({ leads: initialLeads, onSelectLead }: { leads: LeadCa
                         )}
                         {lead.hired_client && lead.hired_position && (
                           <p className="mt-1 text-[9px] text-green-700 bg-green-50 border border-green-200 rounded-lg px-1.5 py-0.5">
-                            <span className="font-medium">לקוח:</span> {lead.hired_client} | <span className="font-medium">משרה:</span> {lead.hired_position}
+                            <span className="font-medium">מעסיק:</span> {lead.hired_client} | <span className="font-medium">משרה:</span> {lead.hired_position}
                           </p>
                         )}
                         {lead.screening_score != null && (

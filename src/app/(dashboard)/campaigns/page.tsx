@@ -323,7 +323,7 @@ export default function ExtrasPage() {
         <table className="w-full text-center border-collapse">
           <thead>
             <tr>
-              <th className="p-4 bg-gray-50 text-right min-w-[180px] border-b border-l font-bold sticky right-0 z-10">לקוח</th>
+              <th className="p-4 bg-gray-50 text-right min-w-[180px] border-b border-l font-bold sticky right-0 z-10">מעסיק</th>
               {dates.map(date => {
                 const d = new Date(date);
                 return (

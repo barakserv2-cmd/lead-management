@@ -103,7 +103,7 @@ export function HiredDetailsDialog({
         </DialogHeader>
         <div className="flex flex-col gap-4 py-2">
           <div className="space-y-2">
-            <Label htmlFor="hired-client">לקוח *</Label>
+            <Label htmlFor="hired-client">מעסיק *</Label>
             <select
               id="hired-client"
               value={selectedClientId}
@@ -111,7 +111,7 @@ export function HiredDetailsDialog({
               disabled={fetching}
               className="w-full rounded-md border border-gray-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent"
             >
-              <option value="">{fetching ? "טוען..." : "— בחר לקוח —"}</option>
+              <option value="">{fetching ? "טוען..." : "— בחר מעסיק —"}</option>
               {clients.map((c) => (
                 <option key={c.id} value={c.id}>
                   {c.name}
@@ -129,7 +129,7 @@ export function HiredDetailsDialog({
               className="w-full rounded-md border border-gray-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <option value="">
-                {!selectedClientId ? "— בחר לקוח תחילה —" : filteredJobs.length === 0 ? "— אין משרות פתוחות —" : "— בחר משרה —"}
+                {!selectedClientId ? "— בחר מעסיק תחילה —" : filteredJobs.length === 0 ? "— אין משרות פתוחות —" : "— בחר משרה —"}
               </option>
               {filteredJobs.map((j) => (
                 <option key={j.id} value={j.id}>
