@@ -31,6 +31,7 @@ export interface Lead {
   rejection_reason: string | null;
   hired_client: string | null;
   hired_position: string | null;
+  arrival_date: string | null;
   interview_date: string | null;
   interview_notes: string | null;
   followup_notes: string | null;
@@ -38,6 +39,7 @@ export interface Lead {
   human_approval: boolean;
   tags: string[] | null;
   preferences: Record<string, unknown> | null;
+  is_candidate: boolean;
 }
 
 export interface StatusChange {

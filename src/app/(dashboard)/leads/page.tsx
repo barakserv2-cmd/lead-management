@@ -28,13 +28,13 @@ export default async function LeadsPage({
     ? `name.ilike.%${searchQuery}%,phone.ilike.%${searchQuery}%,job_title.ilike.%${searchQuery}%`
     : null;
 
-  let dataQuery = supabase.from("leads").select("*");
+  let dataQuery = supabase.from("leads").select("*").neq("is_candidate", false);
   if (searchFilter) dataQuery = dataQuery.or(searchFilter);
   if (statusFilter.length > 0) dataQuery = dataQuery.in("status", statusFilter);
   if (tagFilter.length > 0) dataQuery = dataQuery.overlaps("tags", tagFilter);
   dataQuery = dataQuery.order("created_at", { ascending: false }).range(from, to);
 
-  let countQuery = supabase.from("leads").select("*", { count: "exact", head: true });
+  let countQuery = supabase.from("leads").select("*", { count: "exact", head: true }).neq("is_candidate", false);
   if (searchFilter) countQuery = countQuery.or(searchFilter);
   if (statusFilter.length > 0) countQuery = countQuery.in("status", statusFilter);
   if (tagFilter.length > 0) countQuery = countQuery.overlaps("tags", tagFilter);

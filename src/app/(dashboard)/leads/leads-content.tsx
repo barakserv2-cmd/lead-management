@@ -8,6 +8,7 @@ import { BoardView } from "./board-view";
 import { LeadWindowManager } from "./lead-mini-windows";
 import { BulkWhatsAppDialog } from "./bulk-whatsapp-dialog";
 import { BulkImportDialog } from "./bulk-import-dialog";
+import { LeadCardPanel } from "./lead-card-panel";
 import { Button } from "@/components/ui/button";
 
 function getInitials(name: string) {
@@ -68,6 +69,9 @@ export function LeadsContent({ leads }: { leads: Lead[] }) {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [waDialogOpen, setWaDialogOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
+  const [panelLeadId, setPanelLeadId] = useState<string | null>(null);
+
+  const panelLead = panelLeadId ? leads.find((l) => l.id === panelLeadId) ?? null : null;
 
   function openLeadWindow(id: string) {
     setOpenLeadIds((prev) => {
@@ -155,8 +159,12 @@ export function LeadsContent({ leads }: { leads: Lead[] }) {
               const sourceColor = SOURCE_COLORS[lead.source] ?? "bg-gray-100 text-gray-600";
               const isSelected = selectedIds.has(lead.id);
               return (
-                <tr key={lead.id} className={"border-b border-gray-100 transition-colors duration-150 " + (isSelected ? "bg-cyan-50/60" : "hover:bg-cyan-50/40")}>
-                  <td className="px-3 py-3">
+                <tr
+                  key={lead.id}
+                  className={"border-b border-gray-100 transition-colors duration-150 cursor-pointer " + (isSelected ? "bg-cyan-50/60" : "hover:bg-cyan-50/40")}
+                  onClick={() => setPanelLeadId(lead.id)}
+                >
+                  <td className="px-3 py-3" onClick={(e) => e.stopPropagation()}>
                     <input
                       type="checkbox"
                       checked={isSelected}
@@ -167,7 +175,7 @@ export function LeadsContent({ leads }: { leads: Lead[] }) {
                   <td className="px-4 py-3">
                     <button
                       type="button"
-                      onClick={() => openLeadWindow(lead.id)}
+                      onClick={(e) => { e.stopPropagation(); setPanelLeadId(lead.id); }}
                       className="flex items-center gap-2.5 hover:opacity-80 text-right"
                     >
                       <span className="flex-shrink-0 w-8 h-8 rounded-full bg-cyan-600 text-white flex items-center justify-center text-xs font-bold">
@@ -180,7 +188,7 @@ export function LeadsContent({ leads }: { leads: Lead[] }) {
                   </td>
                   <td className="px-4 py-3 text-gray-600" dir="ltr">{lead.phone ?? "—"}</td>
                   <td className="px-4 py-3 text-gray-600">{lead.job_title ?? "—"}</td>
-                  <td className="px-4 py-3">
+                  <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
                     <div className="flex items-center gap-1.5">
                       <StatusSelect leadId={lead.id} currentStatus={lead.status} currentSubStatus={lead.sub_status} />
                       {lead.rejection_reason && (
@@ -205,7 +213,7 @@ export function LeadsContent({ leads }: { leads: Lead[] }) {
                       {formatShortDate(lead.created_at)}
                     </span>
                   </td>
-                  <td className="px-4 py-3">
+                  <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
                     <div className="flex items-center gap-1">
                       <button
                         type="button"
@@ -315,6 +323,12 @@ export function LeadsContent({ leads }: { leads: Lead[] }) {
       <BulkImportDialog
         open={importOpen}
         onClose={() => setImportOpen(false)}
+      />
+
+      <LeadCardPanel
+        lead={panelLead}
+        open={panelLeadId !== null}
+        onOpenChange={(open) => { if (!open) setPanelLeadId(null); }}
       />
     </>
   );
