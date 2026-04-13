@@ -3,10 +3,19 @@ import OpenAI from "openai";
 import type { Lead } from "@/types/leads";
 import { STATUS_LABELS } from "@/lib/stateMachine";
 
-const openai = new OpenAI();
+export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
 
 export async function POST(request: NextRequest) {
   try {
+    const apiKey = process.env.OPENAI_API_KEY;
+    if (!apiKey) {
+      return NextResponse.json(
+        { error: "OPENAI_API_KEY is not configured" },
+        { status: 500 }
+      );
+    }
+    const openai = new OpenAI({ apiKey });
     const { lead } = (await request.json()) as { lead: Lead };
 
     if (!lead || !lead.id) {
