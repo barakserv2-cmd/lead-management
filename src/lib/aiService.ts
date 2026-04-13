@@ -8,9 +8,19 @@ import { createClient as createServerClient } from "@supabase/supabase-js";
 import { changeLeadStatus } from "@/lib/actions/changeLeadStatus";
 import { LeadStatus, type LeadStatusValue } from "@/lib/stateMachine";
 
-// ── OpenAI Client ────────────────────────────────────────────
+// ── OpenAI Client (lazy) ─────────────────────────────────────
 
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+let _openai: OpenAI | null = null;
+function getOpenAI(): OpenAI {
+  if (!_openai) {
+    const apiKey = process.env.OPENAI_API_KEY;
+    if (!apiKey) {
+      throw new Error("OPENAI_API_KEY is not configured");
+    }
+    _openai = new OpenAI({ apiKey });
+  }
+  return _openai;
+}
 
 // ── Supabase Admin Client ───────────────────────────────────
 
@@ -163,7 +173,7 @@ async function callLLM(
       })),
   ];
 
-  const response = await openai.chat.completions.create({
+  const response = await getOpenAI().chat.completions.create({
     model: "gpt-4o-mini",
     temperature: 0.3,
     response_format: { type: "json_object" },

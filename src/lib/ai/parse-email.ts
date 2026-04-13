@@ -2,9 +2,17 @@ import Anthropic from "@anthropic-ai/sdk";
 import type { AIParseResult } from "@/types/leads";
 import { extractPhone, extractEmail } from "@/lib/gmail";
 
-const anthropic = new Anthropic({
-  apiKey: process.env.ANTHROPIC_API_KEY,
-});
+let _anthropic: Anthropic | null = null;
+function getAnthropic(): Anthropic {
+  if (!_anthropic) {
+    const apiKey = process.env.ANTHROPIC_API_KEY;
+    if (!apiKey) {
+      throw new Error("ANTHROPIC_API_KEY is not configured");
+    }
+    _anthropic = new Anthropic({ apiKey });
+  }
+  return _anthropic;
+}
 
 const SYSTEM_PROMPT = `אתה מערכת לזיהוי וחילוץ מידע על לידים (מועמדים לעבודה) מאימיילים.
 
@@ -104,7 +112,7 @@ export async function parseEmailWithAI(
   }
 
   try {
-    const message = await anthropic.messages.create({
+    const message = await getAnthropic().messages.create({
       model: "claude-sonnet-4-5-20250929",
       max_tokens: 1024,
       system: SYSTEM_PROMPT,
