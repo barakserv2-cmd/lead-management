@@ -8,13 +8,20 @@ function getSupabase() {
   );
 }
 
-const REDIRECT_URI = `${process.env.NEXT_PUBLIC_APP_URL}/api/auth/gmail/callback`;
+function getAppBaseUrl(): string {
+  const explicit = process.env.NEXT_PUBLIC_APP_URL;
+  if (explicit) return explicit.replace(/\/$/, "");
+  if (process.env.VERCEL_URL) return `https://${process.env.VERCEL_URL}`;
+  throw new Error(
+    "NEXT_PUBLIC_APP_URL is not configured — set it to your production URL (e.g. https://lead-management-umber.vercel.app)"
+  );
+}
 
 function createOAuth2Client() {
   return new google.auth.OAuth2(
     process.env.GMAIL_CLIENT_ID,
     process.env.GMAIL_CLIENT_SECRET,
-    REDIRECT_URI
+    `${getAppBaseUrl()}/api/auth/gmail/callback`
   );
 }
 
