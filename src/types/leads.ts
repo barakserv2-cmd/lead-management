@@ -20,6 +20,7 @@ export interface Lead {
   status: LeadStatus;
   sub_status: string | null;
   assigned_to: string | null;
+  assigned_at: string | null;
   notes: string | null;
   original_email_id: string | null;
   original_email_body: string | null;

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import { toast } from "sonner";
 import type { Lead } from "@/types/leads";
 import { STATUS_LABELS, STATUS_COLORS } from "@/lib/stateMachine";
 import type { LeadStatusValue } from "@/lib/stateMachine";
@@ -14,6 +15,10 @@ import {
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { StatusSelect } from "./status-select";
+import { claimLead, releaseLead } from "@/lib/actions/claimLead";
+
+// 24h lock window — must match server constant in claimLead.ts
+const LOCK_TTL_MS = 24 * 60 * 60 * 1000;
 
 // ── AI Summary Hook ──────────────────────────────────────────
 
@@ -79,7 +84,47 @@ interface LeadCardPanelProps {
 export function LeadCardPanel({ lead, open, onOpenChange }: LeadCardPanelProps) {
   const { summary, loading, error, retry } = useAISummary(lead, open);
 
+  // Local mirror of the assignment so the button reacts instantly on click.
+  const [assignedTo, setAssignedTo] = useState<string | null>(lead?.assigned_to ?? null);
+  const [assignedAt, setAssignedAt] = useState<string | null>(lead?.assigned_at ?? null);
+  const [claiming, setClaiming] = useState(false);
+
+  useEffect(() => {
+    setAssignedTo(lead?.assigned_to ?? null);
+    setAssignedAt(lead?.assigned_at ?? null);
+  }, [lead?.id, lead?.assigned_to, lead?.assigned_at]);
+
   if (!lead) return null;
+
+  const lockFresh =
+    !!assignedTo &&
+    !!assignedAt &&
+    Date.now() - new Date(assignedAt).getTime() < LOCK_TTL_MS;
+
+  async function handleClaim() {
+    setClaiming(true);
+    if (lockFresh) {
+      const res = await releaseLead(lead!.id);
+      setClaiming(false);
+      if (!res.success) {
+        toast.error(res.error ?? "שגיאה בשחרור");
+        return;
+      }
+      setAssignedTo(null);
+      setAssignedAt(null);
+      toast.success("הליד שוחרר חזרה לפול");
+    } else {
+      const res = await claimLead(lead!.id);
+      setClaiming(false);
+      if (!res.success) {
+        toast.error(res.error ?? "שגיאה");
+        return;
+      }
+      setAssignedTo(res.assignedTo ?? null);
+      setAssignedAt(res.assignedAt ?? null);
+      toast.success(`הליד עבר לטיפולך${res.assignedName ? " (" + res.assignedName + ")" : ""}`);
+    }
+  }
 
   const statusColor = STATUS_COLORS[lead.status as LeadStatusValue] ?? {
     bg: "bg-gray-100",
@@ -244,20 +289,28 @@ export function LeadCardPanel({ lead, open, onOpenChange }: LeadCardPanelProps) 
             />
           </div>
           <Button
-            variant="outline"
+            variant={lockFresh ? "secondary" : "outline"}
             size="sm"
-            onClick={() => {
-              // Future: navigate to lead treatment page
-            }}
+            onClick={handleClaim}
+            disabled={claiming}
             className="gap-1.5"
           >
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4">
-              <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
-              <circle cx="9" cy="7" r="4" />
-              <path d="M22 21v-2a4 4 0 0 0-3-3.87" />
-              <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+              {lockFresh ? (
+                <>
+                  <rect width="18" height="11" x="3" y="11" rx="2" ry="2" />
+                  <path d="M7 11V7a5 5 0 0 1 9.9-1" />
+                </>
+              ) : (
+                <>
+                  <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
+                  <circle cx="9" cy="7" r="4" />
+                  <path d="M22 21v-2a4 4 0 0 0-3-3.87" />
+                  <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+                </>
+              )}
             </svg>
-            קח לטיפול
+            {claiming ? "..." : lockFresh ? "שחרר" : "קח לטיפול"}
           </Button>
           <Button
             variant="ghost"

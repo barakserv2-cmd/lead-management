@@ -24,17 +24,27 @@ export default async function LeadsPage({
 
   const supabase = await createClient();
 
+  // ── Assignment lock filter ──────────────────────────────────
+  // A lead is visible in the pool if any of:
+  //   • assigned_to IS NULL (never claimed)
+  //   • assigned_at < now() - 24h (stale claim → auto-released)
+  //   • assigned_to = current user (mine)
+  const { data: { user } } = await supabase.auth.getUser();
+  const myId = user?.id ?? "00000000-0000-0000-0000-000000000000";
+  const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+  const ownershipFilter = `assigned_to.is.null,assigned_at.lt.${cutoff},assigned_to.eq.${myId}`;
+
   const searchFilter = searchQuery
     ? `name.ilike.%${searchQuery}%,phone.ilike.%${searchQuery}%,job_title.ilike.%${searchQuery}%`
     : null;
 
-  let dataQuery = supabase.from("leads").select("*").neq("is_candidate", false);
+  let dataQuery = supabase.from("leads").select("*").neq("is_candidate", false).or(ownershipFilter);
   if (searchFilter) dataQuery = dataQuery.or(searchFilter);
   if (statusFilter.length > 0) dataQuery = dataQuery.in("status", statusFilter);
   if (tagFilter.length > 0) dataQuery = dataQuery.overlaps("tags", tagFilter);
   dataQuery = dataQuery.order("created_at", { ascending: false }).range(from, to);
 
-  let countQuery = supabase.from("leads").select("*", { count: "exact", head: true }).neq("is_candidate", false);
+  let countQuery = supabase.from("leads").select("*", { count: "exact", head: true }).neq("is_candidate", false).or(ownershipFilter);
   if (searchFilter) countQuery = countQuery.or(searchFilter);
   if (statusFilter.length > 0) countQuery = countQuery.in("status", statusFilter);
   if (tagFilter.length > 0) countQuery = countQuery.overlaps("tags", tagFilter);
