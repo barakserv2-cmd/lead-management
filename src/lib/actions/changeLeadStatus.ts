@@ -26,6 +26,7 @@ export interface ChangeStatusInput {
   // Optional extra fields that accompany certain transitions
   extra?: {
     rejectionReason?: string;
+    hiredJobId?: string;
     hiredClient?: string;
     hiredPosition?: string;
     startDate?: string;
@@ -95,11 +96,27 @@ export async function changeLeadStatus(input: ChangeStatusInput): Promise<Change
   }
 
   if (newStatus === LeadStatus.HIRED) {
-    if (extra?.hiredClient) {
+    // Prefer linking to a job — derive client + position from it so
+    // free-text drift can't corrupt reports.
+    if (extra?.hiredJobId) {
+      const { data: job } = await supabase
+        .from("jobs")
+        .select("id, title, client_id, clients(name)")
+        .eq("id", extra.hiredJobId)
+        .single<{ id: string; title: string; client_id: string; clients: { name: string } | null }>();
+      if (job) {
+        updateData.hired_job_id = job.id;
+        updateData.hired_position = job.title;
+        if (job.clients?.name) {
+          const norm = await normalizeEmployerName(job.clients.name);
+          updateData.hired_client = norm.normalized;
+        }
+      }
+    } else if (extra?.hiredClient) {
       const norm = await normalizeEmployerName(extra.hiredClient);
       updateData.hired_client = norm.normalized;
+      if (extra?.hiredPosition) updateData.hired_position = extra.hiredPosition;
     }
-    if (extra?.hiredPosition) updateData.hired_position = extra.hiredPosition;
     if (extra?.startDate) updateData.start_date = extra.startDate;
     updateData.human_approval = true;
   }

@@ -183,7 +183,7 @@ export function BoardView({ leads: initialLeads, onSelectLead }: { leads: LeadCa
     }
   }
 
-  async function handleHiredConfirm(data: { hiredClient: string; startDate: string; hiredPosition: string }) {
+  async function handleHiredConfirm(data: { hiredJobId: string; startDate: string }) {
     const leadId = hiredDialog.leadId;
     if (!leadId) return;
 
@@ -192,18 +192,10 @@ export function BoardView({ leads: initialLeads, onSelectLead }: { leads: LeadCa
 
     setHiredDialog((prev) => ({ ...prev, loading: true }));
 
-    // Optimistically move the card
+    // Optimistically move the card; client/position will be filled by the server
     setLeads((prev) =>
       prev.map((l) =>
-        l.id === leadId
-          ? {
-              ...l,
-              status: LeadStatus.HIRED,
-              hired_client: data.hiredClient,
-              start_date: data.startDate,
-              hired_position: data.hiredPosition || l.hired_position,
-            }
-          : l
+        l.id === leadId ? { ...l, status: LeadStatus.HIRED, start_date: data.startDate } : l
       )
     );
 
@@ -211,11 +203,10 @@ export function BoardView({ leads: initialLeads, onSelectLead }: { leads: LeadCa
       leadId,
       newStatus: LeadStatus.HIRED,
       userId: "user",
-      notes: `קבלה מלוח הקנבן: ${data.hiredClient}`,
+      notes: "קבלה מלוח הקנבן",
       extra: {
-        hiredClient: data.hiredClient,
+        hiredJobId: data.hiredJobId,
         startDate: data.startDate,
-        hiredPosition: data.hiredPosition || undefined,
       },
     });
 
@@ -228,7 +219,7 @@ export function BoardView({ leads: initialLeads, onSelectLead }: { leads: LeadCa
       );
       showToast(result.error ?? "שגיאה בעדכון הסטטוס", "error");
     } else {
-      showToast(`התקבל בהצלחה ב${data.hiredClient}`);
+      showToast("התקבל בהצלחה");
     }
   }
 

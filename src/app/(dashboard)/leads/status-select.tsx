@@ -130,18 +130,17 @@ export function StatusSelect({ leadId, currentStatus, currentSubStatus }: { lead
     }
   }
 
-  async function handleHiredConfirm(data: { hiredClient: string; startDate: string; hiredPosition: string }) {
+  async function handleHiredConfirm(data: { hiredJobId: string; startDate: string }) {
     setLoading(true);
 
     const result = await changeLeadStatus({
       leadId,
       newStatus: LeadStatus.HIRED,
       userId: "user",
-      notes: `קבלה ידנית: ${data.hiredClient}`,
+      notes: "קבלה ידנית",
       extra: {
-        hiredClient: data.hiredClient,
+        hiredJobId: data.hiredJobId,
         startDate: data.startDate,
-        hiredPosition: data.hiredPosition || undefined,
       },
     });
 
@@ -153,7 +152,7 @@ export function StatusSelect({ leadId, currentStatus, currentSubStatus }: { lead
     } else {
       setStatus(LeadStatus.HIRED);
       setSubStatus(null);
-      setToast({ message: `התקבל ב${data.hiredClient}`, type: "success" });
+      setToast({ message: "התקבל בהצלחה", type: "success" });
     }
   }
 

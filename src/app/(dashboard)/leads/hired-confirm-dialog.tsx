@@ -1,11 +1,19 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { getActiveClients } from "./actions";
+import { useState, useEffect, useMemo } from "react";
+import Link from "next/link";
+import { getOpenJobs } from "./actions";
+
+interface JobOption {
+  id: string;
+  title: string;
+  client_id: string;
+  clients: { name: string } | null;
+}
 
 interface HiredConfirmDialogProps {
   open: boolean;
-  onConfirm: (data: { hiredClient: string; startDate: string; hiredPosition: string }) => void;
+  onConfirm: (data: { hiredJobId: string; startDate: string }) => void;
   onCancel: () => void;
   loading?: boolean;
 }
@@ -16,47 +24,49 @@ export function HiredConfirmDialog({
   onCancel,
   loading,
 }: HiredConfirmDialogProps) {
-  const [hiredClient, setHiredClient] = useState("");
-  const [hiredClientCustom, setHiredClientCustom] = useState("");
+  const [hiredJobId, setHiredJobId] = useState("");
   const [startDate, setStartDate] = useState(() => new Date().toISOString().slice(0, 10));
-  const [hiredPosition, setHiredPosition] = useState("");
-  const [clients, setClients] = useState<{ id: string; name: string }[]>([]);
-  const [clientsLoading, setClientsLoading] = useState(false);
+  const [jobs, setJobs] = useState<JobOption[]>([]);
+  const [jobsLoading, setJobsLoading] = useState(false);
 
-  // Fetch clients when dialog opens
   useEffect(() => {
     if (!open) return;
     let cancelled = false;
-    setClientsLoading(true);
-    getActiveClients().then((res) => {
+    setJobsLoading(true);
+    getOpenJobs().then((res) => {
       if (cancelled) return;
-      setClients(res.clients);
-      setClientsLoading(false);
+      setJobs((res.jobs as JobOption[]) ?? []);
+      setJobsLoading(false);
     });
     return () => {
       cancelled = true;
     };
   }, [open]);
 
+  // Group jobs by client name for readability
+  const groupedJobs = useMemo(() => {
+    const groups = new Map<string, JobOption[]>();
+    for (const j of jobs) {
+      const clientName = j.clients?.name ?? "ללא לקוח";
+      const arr = groups.get(clientName) ?? [];
+      arr.push(j);
+      groups.set(clientName, arr);
+    }
+    return Array.from(groups.entries()).sort(([a], [b]) => a.localeCompare(b, "he"));
+  }, [jobs]);
+
   if (!open) return null;
 
-  function reset() {
-    setHiredClient("");
-    setHiredClientCustom("");
-    setStartDate(new Date().toISOString().slice(0, 10));
-    setHiredPosition("");
-  }
+  const canSubmit = !!hiredJobId && !!startDate && !loading;
 
-  const resolvedClient = hiredClient === "__other__" ? hiredClientCustom.trim() : hiredClient;
-  const canSubmit = !!resolvedClient && !!startDate && !loading;
+  function reset() {
+    setHiredJobId("");
+    setStartDate(new Date().toISOString().slice(0, 10));
+  }
 
   function handleConfirm() {
     if (!canSubmit) return;
-    onConfirm({
-      hiredClient: resolvedClient,
-      startDate,
-      hiredPosition: hiredPosition.trim(),
-    });
+    onConfirm({ hiredJobId, startDate });
     reset();
   }
 
@@ -67,15 +77,12 @@ export function HiredConfirmDialog({
 
   return (
     <div className="fixed inset-0 z-[200] flex items-center justify-center">
-      {/* Backdrop */}
       <div className="absolute inset-0 bg-black/40" onClick={handleCancel} />
 
-      {/* Modal */}
       <div
         className="relative bg-white rounded-xl shadow-2xl border border-gray-200 w-full max-w-md mx-4 p-6"
         dir="rtl"
       >
-        {/* Header */}
         <div className="flex items-center gap-3 mb-5">
           <div className="w-10 h-10 rounded-full bg-green-100 flex items-center justify-center flex-shrink-0">
             <svg
@@ -94,39 +101,43 @@ export function HiredConfirmDialog({
           <div>
             <h3 className="text-lg font-bold text-gray-900">אישור קבלה</h3>
             <p className="text-sm text-gray-500">
-              באיזה לקוח התקבל ומתי הוא מתחיל?
+              לאיזו משרה הוא התקבל ומתי מתחיל?
             </p>
           </div>
         </div>
 
-        {/* Form */}
         <div className="space-y-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
-              לקוח <span className="text-red-500">*</span>
+              משרה <span className="text-red-500">*</span>
             </label>
             <select
-              value={hiredClient}
-              onChange={(e) => setHiredClient(e.target.value)}
-              disabled={clientsLoading}
+              value={hiredJobId}
+              onChange={(e) => setHiredJobId(e.target.value)}
+              disabled={jobsLoading}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent disabled:opacity-50"
             >
-              <option value="">{clientsLoading ? "טוען..." : "בחר לקוח..."}</option>
-              {clients.map((c) => (
-                <option key={c.id} value={c.name}>
-                  {c.name}
-                </option>
+              <option value="">
+                {jobsLoading
+                  ? "טוען משרות..."
+                  : jobs.length === 0
+                  ? "אין משרות פתוחות"
+                  : "בחר משרה..."}
+              </option>
+              {groupedJobs.map(([clientName, jobsForClient]) => (
+                <optgroup key={clientName} label={clientName}>
+                  {jobsForClient.map((j) => (
+                    <option key={j.id} value={j.id}>
+                      {j.title}
+                    </option>
+                  ))}
+                </optgroup>
               ))}
-              <option value="__other__">— אחר (הקלד שם) —</option>
             </select>
-            {hiredClient === "__other__" && (
-              <input
-                type="text"
-                value={hiredClientCustom}
-                onChange={(e) => setHiredClientCustom(e.target.value)}
-                placeholder="שם לקוח חדש"
-                className="mt-2 w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent"
-              />
+            {!jobsLoading && jobs.length === 0 && (
+              <p className="mt-1.5 text-xs text-amber-700">
+                אין משרות פתוחות. <Link href="/jobs" className="underline">פתח משרה חדשה</Link> ואז חזור לכאן.
+              </p>
             )}
           </div>
 
@@ -142,22 +153,8 @@ export function HiredConfirmDialog({
               dir="ltr"
             />
           </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              תפקיד
-            </label>
-            <input
-              type="text"
-              value={hiredPosition}
-              onChange={(e) => setHiredPosition(e.target.value)}
-              placeholder="לדוגמה: מלצר, חדרנית, ברמן..."
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent"
-            />
-          </div>
         </div>
 
-        {/* Actions */}
         <div className="flex items-center gap-3 mt-6">
           <button
             type="button"
