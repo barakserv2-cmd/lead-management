@@ -16,6 +16,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { StatusSelect } from "./status-select";
 import { claimLead, releaseLead } from "@/lib/actions/claimLead";
+import { LeadDocumentsSection } from "./lead-documents-section";
 
 // 24h lock window — must match server constant in claimLead.ts
 const LOCK_TTL_MS = 24 * 60 * 60 * 1000;
@@ -245,6 +246,7 @@ export function LeadCardPanel({ lead, open, onOpenChange }: LeadCardPanelProps) 
             <DetailRow label="תאריך התחלה" value={formatDate(lead.start_date)} />
             <DetailRow label="תאריך הגעה" value={formatDate(lead.arrival_date)} />
           </div>
+          <LeadDocumentsSection leadId={lead.id} />
         </div>
 
         {/* Notes */}
