@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
-import { fetchUnreadEmails, markAsRead, parseFromHeader } from "@/lib/gmail";
+import { fetchUnreadEmails, markAsRead, parseFromHeader, detectSource } from "@/lib/gmail";
 import { parseEmailWithAI } from "@/lib/ai/parse-email";
 import { LEAD_STATUSES } from "@/lib/constants";
 
@@ -122,10 +122,12 @@ async function handleFetchEmails() {
           experience: aiResult.experience,
           age: aiResult.age,
           job_title,
-          source: "AllJobs",
+          source: detectSource(email.from, email.subject),
           status: LEAD_STATUSES.NEW_LEAD,
           original_email_id: email.id,
           original_email_body: email.body,
+          original_email_from: email.from,
+          original_email_subject: email.subject,
           ai_confidence: aiResult.confidence,
           notes: null,
           assigned_to: null,

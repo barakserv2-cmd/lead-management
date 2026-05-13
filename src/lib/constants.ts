@@ -9,6 +9,7 @@ export {
 
 export const LEAD_SOURCES = [
   "AllJobs",
+  "פייסבוק",
   "אימייל ישיר",
   "וואטסאפ",
   "טלפון",

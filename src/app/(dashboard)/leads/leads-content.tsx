@@ -49,6 +49,7 @@ function formatPhone(phone: string | null): string | null {
 
 const SOURCE_COLORS: Record<string, string> = {
   AllJobs: "bg-blue-100 text-blue-700",
+  "פייסבוק": "bg-indigo-100 text-indigo-700",
   "אימייל ישיר": "bg-violet-100 text-violet-700",
   "וואטסאפ": "bg-green-100 text-green-700",
   "טלפון": "bg-amber-100 text-amber-700",

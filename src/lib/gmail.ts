@@ -72,6 +72,13 @@ const PHONE_RE = /0[2-9]\d-?\d{7}/g;
 const EMAIL_RE = /[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}/g;
 const ALLJOBS_DOMAINS = ["alljob.co.il", "alljobs.co.il"];
 
+export function detectSource(from: string, subject: string): "AllJobs" | "פייסבוק" | "אימייל ישיר" {
+  if (/FB\s*JOBS|facebook/i.test(subject)) return "פייסבוק";
+  const fromDomain = from.match(/@([^\s>]+)/)?.[1]?.toLowerCase() || "";
+  if (ALLJOBS_DOMAINS.some((d) => fromDomain.includes(d))) return "AllJobs";
+  return "אימייל ישיר";
+}
+
 export function parseSubject(subject: string): {
   name: string | null;
   job_title: string | null;
