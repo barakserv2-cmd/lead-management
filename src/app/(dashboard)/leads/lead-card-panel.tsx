@@ -48,15 +48,15 @@ function useAISummary(lead: Lead | null, open: boolean) {
     }
   }, []);
 
+  // AI summary is OPT-IN — it calls OpenAI and takes 5-10 seconds. Opening
+  // the panel no longer auto-fires it; the user clicks the "סכם" button
+  // (handled in the JSX) when they actually want a summary.
   useEffect(() => {
-    if (open && lead) {
-      fetchSummary(lead);
-    }
     if (!open) {
       setSummary("");
       setError(null);
     }
-  }, [open, lead?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [open]);
 
   return { summary, loading, error, retry: () => lead && fetchSummary(lead) };
 }
@@ -214,8 +214,16 @@ export function LeadCardPanel({ lead, open, onOpenChange }: LeadCardPanelProps) 
                 נסה שוב
               </button>
             </div>
-          ) : (
+          ) : summary ? (
             <p className="text-sm text-gray-800 leading-relaxed">{summary}</p>
+          ) : (
+            <button
+              type="button"
+              onClick={retry}
+              className="text-sm text-violet-700 hover:text-violet-900 underline-offset-2 hover:underline"
+            >
+              לחץ לסיכום AI
+            </button>
           )}
         </div>
 

@@ -49,25 +49,21 @@ export default async function LeadsPage({
   if (statusFilter.length > 0) countQuery = countQuery.in("status", statusFilter);
   if (tagFilter.length > 0) countQuery = countQuery.overlaps("tags", tagFilter);
 
-  // Fetch all unique tags across all leads
-  const tagsQuery = supabase.from("leads").select("tags").not("tags", "is", null);
+  // Fetch all unique tags via a Postgres function (single value back, no
+  // scanning of every row in JS). Cached via Next.js fetch dedup.
+  const tagsRpc = supabase.rpc("get_distinct_lead_tags");
 
   const [{ data: leads }, { count }, { data: tagsData }] = await Promise.all([
     dataQuery,
     countQuery,
-    tagsQuery,
+    tagsRpc,
   ]);
 
   const typedLeads = (leads ?? []) as Lead[];
   const totalCount = count ?? 0;
   const totalPages = Math.max(1, Math.ceil(totalCount / PAGE_SIZE));
 
-  // Extract unique tags from all leads
-  const allTags = Array.from(
-    new Set(
-      (tagsData ?? []).flatMap((row) => (row.tags as string[]) ?? [])
-    )
-  ).sort();
+  const allTags = ((tagsData as string[] | null) ?? []).slice().sort();
 
   return (
     <div>
