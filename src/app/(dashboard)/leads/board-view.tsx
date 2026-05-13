@@ -12,7 +12,7 @@ import {
 } from "@/lib/stateMachine";
 import { InterviewScheduleDialog } from "./interview-schedule-dialog";
 import { HiredConfirmDialog } from "./hired-confirm-dialog";
-import { ContactedSubStatusDialog } from "./contacted-substatus-dialog";
+import { SubStatusPickerDialog, type SubStatusPickerConfig } from "./sub-status-picker-dialog";
 import { SUB_STATUSES, NO_ANSWER_3 } from "@/lib/constants";
 import { updateLeadSubStatus } from "./actions";
 
@@ -48,6 +48,7 @@ const BOARD_COLUMNS: { value: LeadStatusValue; label: string; headerColor: strin
   { value: LeadStatus.NO_SHOW,               label: STATUS_LABELS[LeadStatus.NO_SHOW],               headerColor: "bg-red-500" },
   { value: LeadStatus.REJECTED,              label: STATUS_LABELS[LeadStatus.REJECTED],              headerColor: "bg-gray-500" },
   { value: LeadStatus.LOST_CONTACT,          label: STATUS_LABELS[LeadStatus.LOST_CONTACT],          headerColor: "bg-rose-500" },
+  { value: LeadStatus.NOT_SUITABLE,          label: STATUS_LABELS[LeadStatus.NOT_SUITABLE],          headerColor: "bg-stone-500" },
 ];
 
 // Statuses that should not appear in any status picker (board / dropdown / etc).
@@ -85,9 +86,28 @@ export function BoardView({ leads: initialLeads, onSelectLead }: { leads: LeadCa
   const [hiredDialog, setHiredDialog] = useState<{ open: boolean; leadId: string | null; loading: boolean }>({
     open: false, leadId: null, loading: false,
   });
-  const [contactedDialog, setContactedDialog] = useState<{ open: boolean; leadId: string | null; loading: boolean }>({
-    open: false, leadId: null, loading: false,
-  });
+  const [subStatusDialog, setSubStatusDialog] = useState<{
+    open: boolean;
+    leadId: string | null;
+    targetStatus: LeadStatusValue | null;
+    loading: boolean;
+  }>({ open: false, leadId: null, targetStatus: null, loading: false });
+
+  const SUB_STATUS_DIALOG_CONFIG: Partial<Record<LeadStatusValue, SubStatusPickerConfig>> = {
+    [LeadStatus.CONTACTED]: {
+      title: "נוצר קשר — מצב",
+      subtitle: "בחר את תוצאת הניסיון",
+      options: SUB_STATUSES.CONTACTED ?? [],
+      accent: "cyan",
+      hint: { option: NO_ANSWER_3, text: "→ אבד קשר אוטומטית" },
+    },
+    [LeadStatus.NOT_SUITABLE]: {
+      title: "לא מתאים — סיבה",
+      subtitle: "בחר את הסיבה לפסילה",
+      options: SUB_STATUSES.NOT_SUITABLE ?? [],
+      accent: "stone",
+    },
+  };
 
   function showToast(message: string, type: "success" | "error" = "success") {
     setToast({ message, type });
@@ -138,10 +158,10 @@ export function BoardView({ leads: initialLeads, onSelectLead }: { leads: LeadCa
       return;
     }
 
-    // Intercept CONTACTED — require a sub-status before moving the card.
-    if (columnValue === LeadStatus.CONTACTED) {
+    // Intercept CONTACTED / NOT_SUITABLE — require a sub-status before moving.
+    if (columnValue === LeadStatus.CONTACTED || columnValue === LeadStatus.NOT_SUITABLE) {
       setDragging(null);
-      setContactedDialog({ open: true, leadId: lead.id, loading: false });
+      setSubStatusDialog({ open: true, leadId: lead.id, targetStatus: columnValue, loading: false });
       return;
     }
 
@@ -249,42 +269,41 @@ export function BoardView({ leads: initialLeads, onSelectLead }: { leads: LeadCa
     }
   }
 
-  async function handleContactedConfirm(subStatus: string) {
-    const leadId = contactedDialog.leadId;
-    if (!leadId) return;
+  async function handleSubStatusConfirm(subStatus: string) {
+    const { leadId, targetStatus } = subStatusDialog;
+    if (!leadId || !targetStatus) return;
 
     const lead = leads.find((l) => l.id === leadId);
     if (!lead) return;
 
-    setContactedDialog((prev) => ({ ...prev, loading: true }));
+    setSubStatusDialog((prev) => ({ ...prev, loading: true }));
 
-    // Optimistic: move to CONTACTED with the chosen sub-status
+    // Optimistic
     setLeads((prev) =>
-      prev.map((l) => (l.id === leadId ? { ...l, status: LeadStatus.CONTACTED, sub_status: subStatus } : l))
+      prev.map((l) => (l.id === leadId ? { ...l, status: targetStatus, sub_status: subStatus } : l))
     );
 
-    // 1. Move status
     const statusRes = await changeLeadStatus({
       leadId,
-      newStatus: LeadStatus.CONTACTED,
+      newStatus: targetStatus,
       userId: "user",
-      notes: `נוצר קשר: ${subStatus}`,
+      notes: `${STATUS_LABELS[targetStatus]}: ${subStatus}`,
     });
     if (!statusRes.success) {
       setLeads((prev) => prev.map((l) => (l.id === leadId ? { ...l, status: lead.status, sub_status: lead.sub_status } : l)));
-      setContactedDialog({ open: false, leadId: null, loading: false });
+      setSubStatusDialog({ open: false, leadId: null, targetStatus: null, loading: false });
       showToast(statusRes.error ?? "שגיאה בעדכון הסטטוס", "error");
       return;
     }
 
-    // 2. Save sub_status (changeLeadStatus clears it server-side)
+    // changeLeadStatus clears sub_status server-side — write it again.
     const subRes = await updateLeadSubStatus(leadId, subStatus);
     if (subRes.error) {
       showToast(`שגיאה בשמירת תת-סטטוס: ${subRes.error}`, "error");
     }
 
-    // 3. Auto-jump to LOST_CONTACT on "אין מענה 3"
-    if (subStatus === NO_ANSWER_3) {
+    // Auto-jump to LOST_CONTACT only for CONTACTED + "אין מענה 3"
+    if (targetStatus === LeadStatus.CONTACTED && subStatus === NO_ANSWER_3) {
       setLeads((prev) =>
         prev.map((l) => (l.id === leadId ? { ...l, status: LeadStatus.LOST_CONTACT, sub_status: null } : l))
       );
@@ -294,7 +313,7 @@ export function BoardView({ leads: initialLeads, onSelectLead }: { leads: LeadCa
         userId: "user",
         notes: "אבד קשר אחרי 3 ניסיונות",
       });
-      setContactedDialog({ open: false, leadId: null, loading: false });
+      setSubStatusDialog({ open: false, leadId: null, targetStatus: null, loading: false });
       if (!lostRes.success) {
         showToast(lostRes.error ?? "שגיאה במעבר ל“אבד קשר”", "error");
       } else {
@@ -303,8 +322,8 @@ export function BoardView({ leads: initialLeads, onSelectLead }: { leads: LeadCa
       return;
     }
 
-    setContactedDialog({ open: false, leadId: null, loading: false });
-    showToast(`נוצר קשר — ${subStatus}`);
+    setSubStatusDialog({ open: false, leadId: null, targetStatus: null, loading: false });
+    showToast(`${STATUS_LABELS[targetStatus]} — ${subStatus}`);
   }
 
   async function handleSubStatusChange(leadId: string, value: string) {
@@ -515,11 +534,12 @@ export function BoardView({ leads: initialLeads, onSelectLead }: { leads: LeadCa
         loading={hiredDialog.loading}
       />
 
-      <ContactedSubStatusDialog
-        open={contactedDialog.open}
-        onConfirm={handleContactedConfirm}
-        onCancel={() => setContactedDialog({ open: false, leadId: null, loading: false })}
-        loading={contactedDialog.loading}
+      <SubStatusPickerDialog
+        open={subStatusDialog.open}
+        config={subStatusDialog.targetStatus ? SUB_STATUS_DIALOG_CONFIG[subStatusDialog.targetStatus] ?? null : null}
+        onConfirm={handleSubStatusConfirm}
+        onCancel={() => setSubStatusDialog({ open: false, leadId: null, targetStatus: null, loading: false })}
+        loading={subStatusDialog.loading}
       />
     </>
   );

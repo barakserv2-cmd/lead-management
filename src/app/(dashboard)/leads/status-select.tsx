@@ -12,9 +12,25 @@ import {
   type LeadStatusValue,
 } from "@/lib/stateMachine";
 import { SUB_STATUSES, NO_ANSWER_3 } from "@/lib/constants";
+
+const SUB_STATUS_DIALOG_CONFIG: Partial<Record<LeadStatusValue, SubStatusPickerConfig>> = {
+  [LeadStatus.CONTACTED]: {
+    title: "נוצר קשר — מצב",
+    subtitle: "בחר את תוצאת הניסיון",
+    options: SUB_STATUSES.CONTACTED ?? [],
+    accent: "cyan",
+    hint: { option: NO_ANSWER_3, text: "→ אבד קשר אוטומטית" },
+  },
+  [LeadStatus.NOT_SUITABLE]: {
+    title: "לא מתאים — סיבה",
+    subtitle: "בחר את הסיבה לפסילה",
+    options: SUB_STATUSES.NOT_SUITABLE ?? [],
+    accent: "stone",
+  },
+};
 import { InterviewScheduleDialog } from "./interview-schedule-dialog";
 import { HiredConfirmDialog } from "./hired-confirm-dialog";
-import { ContactedSubStatusDialog } from "./contacted-substatus-dialog";
+import { SubStatusPickerDialog, type SubStatusPickerConfig } from "./sub-status-picker-dialog";
 
 // Statuses hidden from the picker while WhatsApp screening is paused.
 // They still exist in the enum so leads already on these values keep
@@ -50,7 +66,7 @@ export function StatusSelect({ leadId, currentStatus, currentSubStatus }: { lead
   const [loading, setLoading] = useState(false);
   const [showInterviewDialog, setShowInterviewDialog] = useState(false);
   const [showHiredDialog, setShowHiredDialog] = useState(false);
-  const [showContactedDialog, setShowContactedDialog] = useState(false);
+  const [subStatusDialog, setSubStatusDialog] = useState<{ open: boolean; targetStatus: LeadStatusValue | null }>({ open: false, targetStatus: null });
 
   const ref = useRef<HTMLDivElement>(null);
 
@@ -96,9 +112,9 @@ export function StatusSelect({ leadId, currentStatus, currentSubStatus }: { lead
       return;
     }
 
-    // Intercept CONTACTED — require a sub-status
-    if (newStatus === LeadStatus.CONTACTED) {
-      setShowContactedDialog(true);
+    // Intercept CONTACTED / NOT_SUITABLE — require a sub-status
+    if (newStatus === LeadStatus.CONTACTED || newStatus === LeadStatus.NOT_SUITABLE) {
+      setSubStatusDialog({ open: true, targetStatus: newStatus as LeadStatusValue });
       return;
     }
 
@@ -175,30 +191,30 @@ export function StatusSelect({ leadId, currentStatus, currentSubStatus }: { lead
     }
   }
 
-  async function handleContactedConfirm(chosenSub: string) {
+  async function handleSubStatusConfirm(chosenSub: string) {
+    const target = subStatusDialog.targetStatus;
+    if (!target) return;
     setLoading(true);
 
-    // 1. Move status
     const statusRes = await changeLeadStatus({
       leadId,
-      newStatus: LeadStatus.CONTACTED,
+      newStatus: target,
       userId: "user",
-      notes: `נוצר קשר: ${chosenSub}`,
+      notes: `${STATUS_LABELS[target]}: ${chosenSub}`,
     });
     if (!statusRes.success) {
       setLoading(false);
-      setShowContactedDialog(false);
+      setSubStatusDialog({ open: false, targetStatus: null });
       setToast({ message: statusRes.error ?? "שגיאה בעדכון", type: "error" });
       return;
     }
-    setStatus(LeadStatus.CONTACTED);
+    setStatus(target);
 
-    // 2. Save sub_status (changeLeadStatus clears it)
     await updateLeadSubStatus(leadId, chosenSub);
     setSubStatus(chosenSub);
 
-    // 3. Auto-transition to LOST_CONTACT on "אין מענה 3"
-    if (chosenSub === NO_ANSWER_3) {
+    // Auto-transition for CONTACTED + "אין מענה 3"
+    if (target === LeadStatus.CONTACTED && chosenSub === NO_ANSWER_3) {
       const lostRes = await changeLeadStatus({
         leadId,
         newStatus: LeadStatus.LOST_CONTACT,
@@ -206,7 +222,7 @@ export function StatusSelect({ leadId, currentStatus, currentSubStatus }: { lead
         notes: "אבד קשר אחרי 3 ניסיונות",
       });
       setLoading(false);
-      setShowContactedDialog(false);
+      setSubStatusDialog({ open: false, targetStatus: null });
       if (!lostRes.success) {
         setToast({ message: lostRes.error ?? "שגיאה במעבר ל“אבד קשר”", type: "error" });
         return;
@@ -218,8 +234,8 @@ export function StatusSelect({ leadId, currentStatus, currentSubStatus }: { lead
     }
 
     setLoading(false);
-    setShowContactedDialog(false);
-    setToast({ message: `נוצר קשר — ${chosenSub}`, type: "success" });
+    setSubStatusDialog({ open: false, targetStatus: null });
+    setToast({ message: `${STATUS_LABELS[target]} — ${chosenSub}`, type: "success" });
   }
 
   async function handleSubStatusChange(value: string) {
@@ -331,10 +347,11 @@ export function StatusSelect({ leadId, currentStatus, currentSubStatus }: { lead
         loading={loading}
       />
 
-      <ContactedSubStatusDialog
-        open={showContactedDialog}
-        onConfirm={handleContactedConfirm}
-        onCancel={() => setShowContactedDialog(false)}
+      <SubStatusPickerDialog
+        open={subStatusDialog.open}
+        config={subStatusDialog.targetStatus ? SUB_STATUS_DIALOG_CONFIG[subStatusDialog.targetStatus] ?? null : null}
+        onConfirm={handleSubStatusConfirm}
+        onCancel={() => setSubStatusDialog({ open: false, targetStatus: null })}
         loading={loading}
       />
     </>

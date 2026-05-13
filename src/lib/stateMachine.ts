@@ -17,6 +17,7 @@ export const LeadStatus = {
   NO_SHOW: "NO_SHOW",
   REJECTED: "REJECTED",
   LOST_CONTACT: "LOST_CONTACT",
+  NOT_SUITABLE: "NOT_SUITABLE",
 } as const;
 
 export type LeadStatusValue = (typeof LeadStatus)[keyof typeof LeadStatus];
@@ -37,6 +38,7 @@ export const STATUS_LABELS: Record<LeadStatusValue, string> = {
   [LeadStatus.NO_SHOW]: "לא הגיע",
   [LeadStatus.REJECTED]: "נדחה",
   [LeadStatus.LOST_CONTACT]: "אבד קשר",
+  [LeadStatus.NOT_SUITABLE]: "לא מתאים",
 };
 
 // ── Status Colors ───────────────────────────────────────────
@@ -53,6 +55,7 @@ export const STATUS_COLORS: Record<LeadStatusValue, { bg: string; text: string; 
   [LeadStatus.NO_SHOW]:               { bg: "bg-red-100",    text: "text-red-800",    dot: "bg-red-500" },
   [LeadStatus.REJECTED]:              { bg: "bg-gray-200",   text: "text-gray-700",   dot: "bg-gray-500" },
   [LeadStatus.LOST_CONTACT]:          { bg: "bg-rose-100",   text: "text-rose-800",   dot: "bg-rose-500" },
+  [LeadStatus.NOT_SUITABLE]:          { bg: "bg-stone-200",  text: "text-stone-700",  dot: "bg-stone-500" },
 };
 
 // ── Transition Rules ────────────────────────────────────────
@@ -106,6 +109,10 @@ const TRANSITION_MAP: Record<LeadStatusValue, LeadStatusValue[]> = {
   ],
   [LeadStatus.LOST_CONTACT]: [
     LeadStatus.CONTACTED,
+    LeadStatus.REJECTED,
+  ],
+  [LeadStatus.NOT_SUITABLE]: [
+    LeadStatus.NEW_LEAD,
     LeadStatus.REJECTED,
   ],
 };

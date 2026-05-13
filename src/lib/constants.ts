@@ -25,6 +25,12 @@ export const NO_ANSWER_3 = "אין מענה 3";
 
 export const SUB_STATUSES: Record<string, string[]> = {
   CONTACTED: ["אין מענה 1", "אין מענה 2", NO_ANSWER_3, "מעקב"],
+  NOT_SUITABLE: [
+    "הסיר מועמדות",
+    "לא תואם דרישות",
+    "לא תואם גאוגרפית",
+    "לא תואם שכר",
+  ],
 };
 
 // --- CRM enums ---
