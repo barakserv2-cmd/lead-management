@@ -15,12 +15,22 @@ import { SUB_STATUSES } from "@/lib/constants";
 import { InterviewScheduleDialog } from "./interview-schedule-dialog";
 import { HiredConfirmDialog } from "./hired-confirm-dialog";
 
-const QUICK_STATUSES = ALL_STATUSES.map((value) => ({
-  value,
-  label: STATUS_LABELS[value],
-  color: `${STATUS_COLORS[value].bg} ${STATUS_COLORS[value].text}`,
-  dot: STATUS_COLORS[value].dot,
-}));
+// Statuses hidden from the picker while WhatsApp screening is paused.
+// They still exist in the enum so leads already on these values keep
+// rendering correctly; they just can't be selected as a target.
+const HIDDEN_STATUSES: string[] = [
+  LeadStatus.SCREENING_IN_PROGRESS,
+  LeadStatus.FIT_FOR_INTERVIEW,
+];
+
+const QUICK_STATUSES = ALL_STATUSES
+  .filter((value) => !HIDDEN_STATUSES.includes(value))
+  .map((value) => ({
+    value,
+    label: STATUS_LABELS[value],
+    color: `${STATUS_COLORS[value].bg} ${STATUS_COLORS[value].text}`,
+    dot: STATUS_COLORS[value].dot,
+  }));
 
 function getStatusStyle(status: string) {
   return QUICK_STATUSES.find((s) => s.value === status) ?? {
