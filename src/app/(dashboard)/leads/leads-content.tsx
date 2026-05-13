@@ -115,6 +115,7 @@ export function LeadsContent({ leads }: { leads: Lead[] }) {
     phone: l.phone,
     source: l.source,
     status: l.status,
+    sub_status: l.sub_status,
     rejection_reason: l.rejection_reason,
     hired_client: l.hired_client,
     hired_position: l.hired_position,

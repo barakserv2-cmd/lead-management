@@ -12,6 +12,8 @@ import {
 } from "@/lib/stateMachine";
 import { InterviewScheduleDialog } from "./interview-schedule-dialog";
 import { HiredConfirmDialog } from "./hired-confirm-dialog";
+import { SUB_STATUSES, NO_ANSWER_3 } from "@/lib/constants";
+import { updateLeadSubStatus } from "./actions";
 
 interface LeadCard {
   id: string;
@@ -19,6 +21,7 @@ interface LeadCard {
   phone: string | null;
   source: string;
   status: string;
+  sub_status: string | null;
   rejection_reason: string | null;
   hired_client: string | null;
   hired_position: string | null;
@@ -234,6 +237,45 @@ export function BoardView({ leads: initialLeads, onSelectLead }: { leads: LeadCa
     }
   }
 
+  async function handleSubStatusChange(leadId: string, value: string) {
+    const newSub = value || null;
+    const lead = leads.find((l) => l.id === leadId);
+    if (!lead) return;
+
+    // Optimistic update
+    setLeads((prev) => prev.map((l) => (l.id === leadId ? { ...l, sub_status: newSub } : l)));
+
+    const res = await updateLeadSubStatus(leadId, newSub);
+    if (res.error) {
+      // Revert
+      setLeads((prev) => prev.map((l) => (l.id === leadId ? { ...l, sub_status: lead.sub_status } : l)));
+      showToast(`שגיאה: ${res.error}`, "error");
+      return;
+    }
+
+    // Auto-transition: "אין מענה 3" → LOST_CONTACT
+    if (newSub === NO_ANSWER_3 && lead.status !== LeadStatus.LOST_CONTACT) {
+      setLeads((prev) =>
+        prev.map((l) => (l.id === leadId ? { ...l, status: LeadStatus.LOST_CONTACT, sub_status: null } : l))
+      );
+      const transition = await changeLeadStatus({
+        leadId,
+        newStatus: LeadStatus.LOST_CONTACT,
+        userId: "user",
+        notes: "אבד קשר אחרי 3 ניסיונות",
+      });
+      if (!transition.success) {
+        // Revert both
+        setLeads((prev) =>
+          prev.map((l) => (l.id === leadId ? { ...l, status: lead.status, sub_status: lead.sub_status } : l))
+        );
+        showToast(transition.error ?? "שגיאה בעדכון הסטטוס", "error");
+      } else {
+        showToast("הליד הועבר ל“אבד קשר”");
+      }
+    }
+  }
+
   return (
     <>
       <div className="flex gap-3 overflow-x-auto pb-4">
@@ -282,6 +324,22 @@ export function BoardView({ leads: initialLeads, onSelectLead }: { leads: LeadCa
                             <span className="w-1.5 h-1.5 rounded-full bg-orange-500 animate-pulse" />
                             <span className="text-[10px] font-medium text-orange-600">סינון AI פעיל</span>
                           </div>
+                        )}
+                        {SUB_STATUSES[lead.status] && (
+                          <select
+                            value={lead.sub_status ?? ""}
+                            onChange={(e) => handleSubStatusChange(lead.id, e.target.value)}
+                            onClick={(e) => e.stopPropagation()}
+                            onMouseDown={(e) => e.stopPropagation()}
+                            draggable={false}
+                            onDragStart={(e) => e.stopPropagation()}
+                            className="mb-1.5 w-full text-[10px] border border-gray-200 rounded-md px-1.5 py-0.5 text-gray-700 bg-white cursor-pointer focus:outline-none focus:ring-1 focus:ring-cyan-400"
+                          >
+                            <option value="">— תת-סטטוס —</option>
+                            {SUB_STATUSES[lead.status].map((sub) => (
+                              <option key={sub} value={sub}>{sub}</option>
+                            ))}
+                          </select>
                         )}
                         <div className="flex items-center justify-between">
                           {lead.phone ? (
