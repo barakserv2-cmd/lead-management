@@ -13,6 +13,7 @@ import {
 } from "@/lib/stateMachine";
 import { SUB_STATUSES } from "@/lib/constants";
 import { InterviewScheduleDialog } from "./interview-schedule-dialog";
+import { HiredConfirmDialog } from "./hired-confirm-dialog";
 
 const QUICK_STATUSES = ALL_STATUSES.map((value) => ({
   value,
@@ -37,6 +38,7 @@ export function StatusSelect({ leadId, currentStatus, currentSubStatus }: { lead
   const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(null);
   const [loading, setLoading] = useState(false);
   const [showInterviewDialog, setShowInterviewDialog] = useState(false);
+  const [showHiredDialog, setShowHiredDialog] = useState(false);
 
   const ref = useRef<HTMLDivElement>(null);
 
@@ -73,6 +75,12 @@ export function StatusSelect({ leadId, currentStatus, currentSubStatus }: { lead
     // Intercept INTERVIEW_BOOKED — open scheduling dialog instead
     if (newStatus === LeadStatus.INTERVIEW_BOOKED) {
       setShowInterviewDialog(true);
+      return;
+    }
+
+    // Intercept HIRED — open client/date dialog instead
+    if (newStatus === LeadStatus.HIRED) {
+      setShowHiredDialog(true);
       return;
     }
 
@@ -119,6 +127,33 @@ export function StatusSelect({ leadId, currentStatus, currentSubStatus }: { lead
       setStatus(LeadStatus.INTERVIEW_BOOKED);
       setSubStatus(null);
       setToast({ message: "ראיון נקבע בהצלחה", type: "success" });
+    }
+  }
+
+  async function handleHiredConfirm(data: { hiredClient: string; startDate: string; hiredPosition: string }) {
+    setLoading(true);
+
+    const result = await changeLeadStatus({
+      leadId,
+      newStatus: LeadStatus.HIRED,
+      userId: "user",
+      notes: `קבלה ידנית: ${data.hiredClient}`,
+      extra: {
+        hiredClient: data.hiredClient,
+        startDate: data.startDate,
+        hiredPosition: data.hiredPosition || undefined,
+      },
+    });
+
+    setLoading(false);
+    setShowHiredDialog(false);
+
+    if (!result.success) {
+      setToast({ message: result.error ?? "שגיאה בעדכון", type: "error" });
+    } else {
+      setStatus(LeadStatus.HIRED);
+      setSubStatus(null);
+      setToast({ message: `התקבל ב${data.hiredClient}`, type: "success" });
     }
   }
 
@@ -200,6 +235,13 @@ export function StatusSelect({ leadId, currentStatus, currentSubStatus }: { lead
         open={showInterviewDialog}
         onConfirm={handleInterviewConfirm}
         onCancel={() => setShowInterviewDialog(false)}
+        loading={loading}
+      />
+
+      <HiredConfirmDialog
+        open={showHiredDialog}
+        onConfirm={handleHiredConfirm}
+        onCancel={() => setShowHiredDialog(false)}
         loading={loading}
       />
     </>

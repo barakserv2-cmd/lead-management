@@ -11,6 +11,7 @@ import {
   type LeadStatusValue,
 } from "@/lib/stateMachine";
 import { InterviewScheduleDialog } from "./interview-schedule-dialog";
+import { HiredConfirmDialog } from "./hired-confirm-dialog";
 
 interface LeadCard {
   id: string;
@@ -66,6 +67,9 @@ export function BoardView({ leads: initialLeads, onSelectLead }: { leads: LeadCa
   const [interviewDialog, setInterviewDialog] = useState<{ open: boolean; leadId: string | null; loading: boolean }>({
     open: false, leadId: null, loading: false,
   });
+  const [hiredDialog, setHiredDialog] = useState<{ open: boolean; leadId: string | null; loading: boolean }>({
+    open: false, leadId: null, loading: false,
+  });
 
   function showToast(message: string, type: "success" | "error" = "success") {
     setToast({ message, type });
@@ -106,6 +110,13 @@ export function BoardView({ leads: initialLeads, onSelectLead }: { leads: LeadCa
     if (columnValue === LeadStatus.INTERVIEW_BOOKED) {
       setDragging(null);
       setInterviewDialog({ open: true, leadId: lead.id, loading: false });
+      return;
+    }
+
+    // Intercept HIRED — show client/date dialog, don't move card yet
+    if (columnValue === LeadStatus.HIRED) {
+      setDragging(null);
+      setHiredDialog({ open: true, leadId: lead.id, loading: false });
       return;
     }
 
@@ -169,6 +180,55 @@ export function BoardView({ leads: initialLeads, onSelectLead }: { leads: LeadCa
       showToast(result.error ?? "שגיאה בעדכון הסטטוס", "error");
     } else {
       showToast("ראיון נקבע בהצלחה");
+    }
+  }
+
+  async function handleHiredConfirm(data: { hiredClient: string; startDate: string; hiredPosition: string }) {
+    const leadId = hiredDialog.leadId;
+    if (!leadId) return;
+
+    const lead = leads.find((l) => l.id === leadId);
+    if (!lead) return;
+
+    setHiredDialog((prev) => ({ ...prev, loading: true }));
+
+    // Optimistically move the card
+    setLeads((prev) =>
+      prev.map((l) =>
+        l.id === leadId
+          ? {
+              ...l,
+              status: LeadStatus.HIRED,
+              hired_client: data.hiredClient,
+              start_date: data.startDate,
+              hired_position: data.hiredPosition || l.hired_position,
+            }
+          : l
+      )
+    );
+
+    const result = await changeLeadStatus({
+      leadId,
+      newStatus: LeadStatus.HIRED,
+      userId: "user",
+      notes: `קבלה מלוח הקנבן: ${data.hiredClient}`,
+      extra: {
+        hiredClient: data.hiredClient,
+        startDate: data.startDate,
+        hiredPosition: data.hiredPosition || undefined,
+      },
+    });
+
+    setHiredDialog({ open: false, leadId: null, loading: false });
+
+    if (!result.success) {
+      // Revert on error
+      setLeads((prev) =>
+        prev.map((l) => (l.id === leadId ? { ...l, status: lead.status } : l))
+      );
+      showToast(result.error ?? "שגיאה בעדכון הסטטוס", "error");
+    } else {
+      showToast(`התקבל בהצלחה ב${data.hiredClient}`);
     }
   }
 
@@ -316,6 +376,13 @@ export function BoardView({ leads: initialLeads, onSelectLead }: { leads: LeadCa
         onConfirm={handleInterviewConfirm}
         onCancel={() => setInterviewDialog({ open: false, leadId: null, loading: false })}
         loading={interviewDialog.loading}
+      />
+
+      <HiredConfirmDialog
+        open={hiredDialog.open}
+        onConfirm={handleHiredConfirm}
+        onCancel={() => setHiredDialog({ open: false, leadId: null, loading: false })}
+        loading={hiredDialog.loading}
       />
     </>
   );

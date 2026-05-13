@@ -28,6 +28,7 @@ export interface ChangeStatusInput {
     rejectionReason?: string;
     hiredClient?: string;
     hiredPosition?: string;
+    startDate?: string;
     interviewDate?: string;
     interviewNotes?: string;
     followupNotes?: string;
@@ -99,6 +100,7 @@ export async function changeLeadStatus(input: ChangeStatusInput): Promise<Change
       updateData.hired_client = norm.normalized;
     }
     if (extra?.hiredPosition) updateData.hired_position = extra.hiredPosition;
+    if (extra?.startDate) updateData.start_date = extra.startDate;
     updateData.human_approval = true;
   }
 
