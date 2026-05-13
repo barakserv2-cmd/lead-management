@@ -11,7 +11,7 @@ import {
   getAllowedTransitions,
   type LeadStatusValue,
 } from "@/lib/stateMachine";
-import { SUB_STATUSES } from "@/lib/constants";
+import { SUB_STATUSES, NO_ANSWER_3 } from "@/lib/constants";
 import { InterviewScheduleDialog } from "./interview-schedule-dialog";
 import { HiredConfirmDialog } from "./hired-confirm-dialog";
 
@@ -172,6 +172,27 @@ export function StatusSelect({ leadId, currentStatus, currentSubStatus }: { lead
     const result = await updateLeadSubStatus(leadId, newSub);
     if (result.error) {
       setToast({ message: `שגיאה: ${result.error}`, type: "error" });
+      return;
+    }
+
+    // Auto-transition: "אין מענה 3" pushes the lead to LOST_CONTACT.
+    if (newSub === NO_ANSWER_3 && status !== LeadStatus.LOST_CONTACT) {
+      setLoading(true);
+      const transition = await changeLeadStatus({
+        leadId,
+        newStatus: LeadStatus.LOST_CONTACT,
+        userId: "user",
+        notes: "אבד קשר אחרי 3 ניסיונות",
+      });
+      setLoading(false);
+      if (!transition.success) {
+        setToast({ message: transition.error ?? "שגיאה בעדכון הסטטוס", type: "error" });
+        return;
+      }
+      setStatus(LeadStatus.LOST_CONTACT);
+      // changeLeadStatus clears sub_status server-side; mirror it client-side.
+      setSubStatus(null);
+      setToast({ message: "הליד הועבר ל“אבד קשר”", type: "success" });
     }
   }
 

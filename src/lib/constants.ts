@@ -19,7 +19,13 @@ export const LEAD_SOURCES = [
 export type LeadSource = (typeof LEAD_SOURCES)[number];
 
 // Sub-statuses keyed by main status — scalable for future statuses
-export const SUB_STATUSES: Record<string, string[]> = {};
+// Triggering "אין מענה 3" auto-transitions the lead to LOST_CONTACT
+// (handled in status-select.tsx).
+export const NO_ANSWER_3 = "אין מענה 3";
+
+export const SUB_STATUSES: Record<string, string[]> = {
+  CONTACTED: ["אין מענה 1", "אין מענה 2", NO_ANSWER_3, "מעקב"],
+};
 
 // --- CRM enums ---
 
