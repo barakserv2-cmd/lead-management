@@ -31,6 +31,7 @@ export interface ChangeStatusInput {
     hiredPosition?: string;
     startDate?: string;
     interviewDate?: string;
+    interviewType?: "in_person" | "video";
     interviewNotes?: string;
     followupNotes?: string;
     screeningScore?: number;
@@ -123,6 +124,7 @@ export async function changeLeadStatus(input: ChangeStatusInput): Promise<Change
 
   if (newStatus === LeadStatus.INTERVIEW_BOOKED) {
     if (extra?.interviewDate) updateData.interview_date = extra.interviewDate;
+    if (extra?.interviewType) updateData.interview_type = extra.interviewType;
     if (extra?.interviewNotes) updateData.interview_notes = extra.interviewNotes;
     if (extra?.hiredPosition) updateData.hired_position = extra.hiredPosition;
   }

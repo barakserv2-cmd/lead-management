@@ -2,9 +2,15 @@
 
 import { useState } from "react";
 
+type InterviewType = "in_person" | "video";
+
 interface InterviewScheduleDialogProps {
   open: boolean;
-  onConfirm: (data: { interviewDate: string; designatedRole: string }) => void;
+  onConfirm: (data: {
+    interviewDate: string;
+    interviewType: InterviewType;
+    designatedRole: string;
+  }) => void;
   onCancel: () => void;
   loading?: boolean;
 }
@@ -16,19 +22,28 @@ export function InterviewScheduleDialog({
   loading,
 }: InterviewScheduleDialogProps) {
   const [interviewDate, setInterviewDate] = useState("");
+  const [interviewType, setInterviewType] = useState<InterviewType | "">("");
   const [designatedRole, setDesignatedRole] = useState("");
 
   if (!open) return null;
 
+  const canSubmit = !!interviewDate && !!interviewType && !loading;
+
   function handleConfirm() {
-    if (!interviewDate) return;
-    onConfirm({ interviewDate, designatedRole });
+    if (!canSubmit) return;
+    onConfirm({
+      interviewDate,
+      interviewType: interviewType as InterviewType,
+      designatedRole,
+    });
     setInterviewDate("");
+    setInterviewType("");
     setDesignatedRole("");
   }
 
   function handleCancel() {
     setInterviewDate("");
+    setInterviewType("");
     setDesignatedRole("");
     onCancel();
   }
@@ -64,14 +79,51 @@ export function InterviewScheduleDialog({
           </div>
           <div>
             <h3 className="text-lg font-bold text-gray-900">קביעת ראיון</h3>
-            <p className="text-sm text-gray-500">
-              הזן את פרטי הראיון לפני שינוי הסטטוס
-            </p>
+            <p className="text-sm text-gray-500">בחר סוג ראיון ותאריך</p>
           </div>
         </div>
 
         {/* Form */}
         <div className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1.5">
+              סוג ראיון <span className="text-red-500">*</span>
+            </label>
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => setInterviewType("in_person")}
+                className={`flex items-center justify-center gap-2 px-3 py-2.5 rounded-lg border text-sm font-medium transition-all ${
+                  interviewType === "in_person"
+                    ? "bg-purple-50 border-purple-400 text-purple-900 ring-2 ring-purple-200"
+                    : "bg-white border-gray-200 text-gray-700 hover:border-purple-300"
+                }`}
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4">
+                  <path d="M3 21h18" />
+                  <path d="M5 21V7l8-4v18" />
+                  <path d="M19 21V11l-6-4" />
+                </svg>
+                פרונטלי
+              </button>
+              <button
+                type="button"
+                onClick={() => setInterviewType("video")}
+                className={`flex items-center justify-center gap-2 px-3 py-2.5 rounded-lg border text-sm font-medium transition-all ${
+                  interviewType === "video"
+                    ? "bg-purple-50 border-purple-400 text-purple-900 ring-2 ring-purple-200"
+                    : "bg-white border-gray-200 text-gray-700 hover:border-purple-300"
+                }`}
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4">
+                  <path d="m22 8-6 4 6 4V8Z" />
+                  <rect width="14" height="12" x="2" y="6" rx="2" ry="2" />
+                </svg>
+                וידאו
+              </button>
+            </div>
+          </div>
+
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
               תאריך ושעת ראיון <span className="text-red-500">*</span>
@@ -104,7 +156,7 @@ export function InterviewScheduleDialog({
           <button
             type="button"
             onClick={handleConfirm}
-            disabled={!interviewDate || loading}
+            disabled={!canSubmit}
             className="flex-1 px-4 py-2.5 bg-purple-600 text-white text-sm font-semibold rounded-lg hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
           >
             {loading ? "שומר..." : "אישור וקביעת ראיון"}

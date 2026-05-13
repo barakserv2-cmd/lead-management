@@ -122,7 +122,7 @@ export function StatusSelect({ leadId, currentStatus, currentSubStatus }: { lead
     }
   }
 
-  async function handleInterviewConfirm(data: { interviewDate: string; designatedRole: string }) {
+  async function handleInterviewConfirm(data: { interviewDate: string; interviewType: "in_person" | "video"; designatedRole: string }) {
     setLoading(true);
 
     const result = await changeLeadStatus({
@@ -132,6 +132,7 @@ export function StatusSelect({ leadId, currentStatus, currentSubStatus }: { lead
       notes: "קביעת ראיון ידנית",
       extra: {
         interviewDate: data.interviewDate,
+        interviewType: data.interviewType,
         hiredPosition: data.designatedRole || undefined,
       },
     });

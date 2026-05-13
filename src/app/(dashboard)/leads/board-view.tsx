@@ -170,7 +170,7 @@ export function BoardView({ leads: initialLeads, onSelectLead }: { leads: LeadCa
     }
   }
 
-  async function handleInterviewConfirm(data: { interviewDate: string; designatedRole: string }) {
+  async function handleInterviewConfirm(data: { interviewDate: string; interviewType: "in_person" | "video"; designatedRole: string }) {
     const leadId = interviewDialog.leadId;
     if (!leadId) return;
 
@@ -191,6 +191,7 @@ export function BoardView({ leads: initialLeads, onSelectLead }: { leads: LeadCa
       notes: "קביעת ראיון מלוח הקנבן",
       extra: {
         interviewDate: data.interviewDate,
+        interviewType: data.interviewType,
         hiredPosition: data.designatedRole || undefined,
       },
     });
