@@ -12,6 +12,7 @@ import {
 } from "@/lib/stateMachine";
 import { InterviewScheduleDialog } from "./interview-schedule-dialog";
 import { HiredConfirmDialog } from "./hired-confirm-dialog";
+import { ContactedSubStatusDialog } from "./contacted-substatus-dialog";
 import { SUB_STATUSES, NO_ANSWER_3 } from "@/lib/constants";
 import { updateLeadSubStatus } from "./actions";
 
@@ -84,6 +85,9 @@ export function BoardView({ leads: initialLeads, onSelectLead }: { leads: LeadCa
   const [hiredDialog, setHiredDialog] = useState<{ open: boolean; leadId: string | null; loading: boolean }>({
     open: false, leadId: null, loading: false,
   });
+  const [contactedDialog, setContactedDialog] = useState<{ open: boolean; leadId: string | null; loading: boolean }>({
+    open: false, leadId: null, loading: false,
+  });
 
   function showToast(message: string, type: "success" | "error" = "success") {
     setToast({ message, type });
@@ -131,6 +135,13 @@ export function BoardView({ leads: initialLeads, onSelectLead }: { leads: LeadCa
     if (columnValue === LeadStatus.HIRED) {
       setDragging(null);
       setHiredDialog({ open: true, leadId: lead.id, loading: false });
+      return;
+    }
+
+    // Intercept CONTACTED — require a sub-status before moving the card.
+    if (columnValue === LeadStatus.CONTACTED) {
+      setDragging(null);
+      setContactedDialog({ open: true, leadId: lead.id, loading: false });
       return;
     }
 
@@ -235,6 +246,64 @@ export function BoardView({ leads: initialLeads, onSelectLead }: { leads: LeadCa
     } else {
       showToast("התקבל בהצלחה");
     }
+  }
+
+  async function handleContactedConfirm(subStatus: string) {
+    const leadId = contactedDialog.leadId;
+    if (!leadId) return;
+
+    const lead = leads.find((l) => l.id === leadId);
+    if (!lead) return;
+
+    setContactedDialog((prev) => ({ ...prev, loading: true }));
+
+    // Optimistic: move to CONTACTED with the chosen sub-status
+    setLeads((prev) =>
+      prev.map((l) => (l.id === leadId ? { ...l, status: LeadStatus.CONTACTED, sub_status: subStatus } : l))
+    );
+
+    // 1. Move status
+    const statusRes = await changeLeadStatus({
+      leadId,
+      newStatus: LeadStatus.CONTACTED,
+      userId: "user",
+      notes: `נוצר קשר: ${subStatus}`,
+    });
+    if (!statusRes.success) {
+      setLeads((prev) => prev.map((l) => (l.id === leadId ? { ...l, status: lead.status, sub_status: lead.sub_status } : l)));
+      setContactedDialog({ open: false, leadId: null, loading: false });
+      showToast(statusRes.error ?? "שגיאה בעדכון הסטטוס", "error");
+      return;
+    }
+
+    // 2. Save sub_status (changeLeadStatus clears it server-side)
+    const subRes = await updateLeadSubStatus(leadId, subStatus);
+    if (subRes.error) {
+      showToast(`שגיאה בשמירת תת-סטטוס: ${subRes.error}`, "error");
+    }
+
+    // 3. Auto-jump to LOST_CONTACT on "אין מענה 3"
+    if (subStatus === NO_ANSWER_3) {
+      setLeads((prev) =>
+        prev.map((l) => (l.id === leadId ? { ...l, status: LeadStatus.LOST_CONTACT, sub_status: null } : l))
+      );
+      const lostRes = await changeLeadStatus({
+        leadId,
+        newStatus: LeadStatus.LOST_CONTACT,
+        userId: "user",
+        notes: "אבד קשר אחרי 3 ניסיונות",
+      });
+      setContactedDialog({ open: false, leadId: null, loading: false });
+      if (!lostRes.success) {
+        showToast(lostRes.error ?? "שגיאה במעבר ל“אבד קשר”", "error");
+      } else {
+        showToast("הליד הועבר ל“אבד קשר”");
+      }
+      return;
+    }
+
+    setContactedDialog({ open: false, leadId: null, loading: false });
+    showToast(`נוצר קשר — ${subStatus}`);
   }
 
   async function handleSubStatusChange(leadId: string, value: string) {
@@ -443,6 +512,13 @@ export function BoardView({ leads: initialLeads, onSelectLead }: { leads: LeadCa
         onConfirm={handleHiredConfirm}
         onCancel={() => setHiredDialog({ open: false, leadId: null, loading: false })}
         loading={hiredDialog.loading}
+      />
+
+      <ContactedSubStatusDialog
+        open={contactedDialog.open}
+        onConfirm={handleContactedConfirm}
+        onCancel={() => setContactedDialog({ open: false, leadId: null, loading: false })}
+        loading={contactedDialog.loading}
       />
     </>
   );

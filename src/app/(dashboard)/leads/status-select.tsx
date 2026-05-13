@@ -14,6 +14,7 @@ import {
 import { SUB_STATUSES, NO_ANSWER_3 } from "@/lib/constants";
 import { InterviewScheduleDialog } from "./interview-schedule-dialog";
 import { HiredConfirmDialog } from "./hired-confirm-dialog";
+import { ContactedSubStatusDialog } from "./contacted-substatus-dialog";
 
 // Statuses hidden from the picker while WhatsApp screening is paused.
 // They still exist in the enum so leads already on these values keep
@@ -49,6 +50,7 @@ export function StatusSelect({ leadId, currentStatus, currentSubStatus }: { lead
   const [loading, setLoading] = useState(false);
   const [showInterviewDialog, setShowInterviewDialog] = useState(false);
   const [showHiredDialog, setShowHiredDialog] = useState(false);
+  const [showContactedDialog, setShowContactedDialog] = useState(false);
 
   const ref = useRef<HTMLDivElement>(null);
 
@@ -91,6 +93,12 @@ export function StatusSelect({ leadId, currentStatus, currentSubStatus }: { lead
     // Intercept HIRED — open client/date dialog instead
     if (newStatus === LeadStatus.HIRED) {
       setShowHiredDialog(true);
+      return;
+    }
+
+    // Intercept CONTACTED — require a sub-status
+    if (newStatus === LeadStatus.CONTACTED) {
+      setShowContactedDialog(true);
       return;
     }
 
@@ -164,6 +172,53 @@ export function StatusSelect({ leadId, currentStatus, currentSubStatus }: { lead
       setSubStatus(null);
       setToast({ message: "התקבל בהצלחה", type: "success" });
     }
+  }
+
+  async function handleContactedConfirm(chosenSub: string) {
+    setLoading(true);
+
+    // 1. Move status
+    const statusRes = await changeLeadStatus({
+      leadId,
+      newStatus: LeadStatus.CONTACTED,
+      userId: "user",
+      notes: `נוצר קשר: ${chosenSub}`,
+    });
+    if (!statusRes.success) {
+      setLoading(false);
+      setShowContactedDialog(false);
+      setToast({ message: statusRes.error ?? "שגיאה בעדכון", type: "error" });
+      return;
+    }
+    setStatus(LeadStatus.CONTACTED);
+
+    // 2. Save sub_status (changeLeadStatus clears it)
+    await updateLeadSubStatus(leadId, chosenSub);
+    setSubStatus(chosenSub);
+
+    // 3. Auto-transition to LOST_CONTACT on "אין מענה 3"
+    if (chosenSub === NO_ANSWER_3) {
+      const lostRes = await changeLeadStatus({
+        leadId,
+        newStatus: LeadStatus.LOST_CONTACT,
+        userId: "user",
+        notes: "אבד קשר אחרי 3 ניסיונות",
+      });
+      setLoading(false);
+      setShowContactedDialog(false);
+      if (!lostRes.success) {
+        setToast({ message: lostRes.error ?? "שגיאה במעבר ל“אבד קשר”", type: "error" });
+        return;
+      }
+      setStatus(LeadStatus.LOST_CONTACT);
+      setSubStatus(null);
+      setToast({ message: "הליד הועבר ל“אבד קשר”", type: "success" });
+      return;
+    }
+
+    setLoading(false);
+    setShowContactedDialog(false);
+    setToast({ message: `נוצר קשר — ${chosenSub}`, type: "success" });
   }
 
   async function handleSubStatusChange(value: string) {
@@ -272,6 +327,13 @@ export function StatusSelect({ leadId, currentStatus, currentSubStatus }: { lead
         open={showHiredDialog}
         onConfirm={handleHiredConfirm}
         onCancel={() => setShowHiredDialog(false)}
+        loading={loading}
+      />
+
+      <ContactedSubStatusDialog
+        open={showContactedDialog}
+        onConfirm={handleContactedConfirm}
+        onCancel={() => setShowContactedDialog(false)}
         loading={loading}
       />
     </>
