@@ -138,16 +138,24 @@ export async function getLeadDocuments(leadId: string): Promise<LeadDocument[]> 
     .eq("lead_id", leadId)
     .order("uploaded_at", { ascending: false });
   if (error || !data) return [];
+  // No signed URLs here — they're slow (N+1 round-trips). The UI now requests
+  // a signed URL on demand via `signLeadDocument()` when the user clicks open.
+  return (data as LeadDocument[]).map((d) => ({ ...d, signed_url: null }));
+}
 
-  // Sign URLs in one go
-  const docs: LeadDocument[] = [];
-  for (const d of data) {
-    const { data: signed } = await admin.storage
-      .from(BUCKET)
-      .createSignedUrl(d.file_path, 60 * 60);
-    docs.push({ ...(d as LeadDocument), signed_url: signed?.signedUrl ?? null });
-  }
-  return docs;
+export async function signLeadDocument(docId: string): Promise<{ url: string | null; error?: string }> {
+  const admin = getAdmin();
+  const { data: doc } = await admin
+    .from("lead_documents")
+    .select("file_path")
+    .eq("id", docId)
+    .single();
+  if (!doc) return { url: null, error: "מסמך לא נמצא" };
+  const { data: signed, error } = await admin.storage
+    .from(BUCKET)
+    .createSignedUrl(doc.file_path, 60 * 60);
+  if (error || !signed) return { url: null, error: error?.message ?? "שגיאה ביצירת קישור" };
+  return { url: signed.signedUrl };
 }
 
 export async function deleteLeadDocument(docId: string): Promise<{ success: boolean; error?: string }> {
