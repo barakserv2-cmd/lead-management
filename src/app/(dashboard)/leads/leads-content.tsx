@@ -175,18 +175,24 @@ export function LeadsContent({ leads }: { leads: Lead[] }) {
                     />
                   </td>
                   <td className="px-4 py-3">
-                    <button
-                      type="button"
-                      onClick={(e) => { e.stopPropagation(); setPanelLeadId(lead.id); }}
-                      className="flex items-center gap-2.5 hover:opacity-80 text-right"
-                    >
-                      <span className="flex-shrink-0 w-8 h-8 rounded-full bg-cyan-600 text-white flex items-center justify-center text-xs font-bold">
+                    <div className="flex items-center gap-2.5">
+                      <button
+                        type="button"
+                        onClick={(e) => { e.stopPropagation(); openLeadWindow(lead.id); }}
+                        className="flex-shrink-0 w-8 h-8 rounded-full bg-cyan-600 text-white flex items-center justify-center text-xs font-bold hover:bg-cyan-700 transition-colors"
+                        title="פתח צ׳אט"
+                      >
                         {getInitials(lead.name)}
-                      </span>
-                      <span className="text-gray-900 hover:text-cyan-600 font-semibold">
+                      </button>
+                      <button
+                        type="button"
+                        onClick={(e) => { e.stopPropagation(); setPanelLeadId(lead.id); }}
+                        className="text-gray-900 hover:text-cyan-600 font-semibold text-right"
+                        title="פתח כרטיס"
+                      >
                         {lead.name}
-                      </span>
-                    </button>
+                      </button>
+                    </div>
                   </td>
                   <td className="px-4 py-3 text-gray-600" dir="ltr">{lead.phone ?? "—"}</td>
                   <td className="px-4 py-3 text-gray-600">{lead.job_title ?? "—"}</td>
