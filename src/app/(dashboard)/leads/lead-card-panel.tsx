@@ -62,6 +62,34 @@ function useAISummary(lead: Lead | null, open: boolean) {
   return { summary, loading, error, retry: () => lead && fetchSummary(lead) };
 }
 
+// ── Score Bar (Phase 4: agent scoring) ───────────────────────
+
+function ScoreBar({ label, value }: { label: string; value: number | null | undefined }) {
+  const v = typeof value === "number" ? Math.max(0, Math.min(100, value)) : null;
+  const colorClass =
+    v == null ? "bg-gray-300"
+      : v >= 70 ? "bg-emerald-500"
+        : v >= 40 ? "bg-amber-500"
+          : "bg-red-500";
+
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-1">
+        <span className="text-xs text-gray-600">{label}</span>
+        <span className="text-xs font-semibold text-gray-800 tabular-nums">
+          {v == null ? "—" : `${v}`}
+        </span>
+      </div>
+      <div className="h-1.5 w-full rounded-full bg-gray-100 overflow-hidden">
+        <div
+          className={`h-full ${colorClass} transition-all`}
+          style={{ width: `${v ?? 0}%` }}
+        />
+      </div>
+    </div>
+  );
+}
+
 // ── Detail Row ───────────────────────────────────────────────
 
 function DetailRow({ label, value }: { label: string; value: string | null | undefined }) {
@@ -195,6 +223,42 @@ export function LeadCardPanel({ lead, open, onOpenChange }: LeadCardPanelProps) 
           </div>
         </SheetHeader>
 
+        {/* ⚠ Agent escalation banner (Phase 4) — set by the screening agent */}
+        {lead.needs_human_attention && (
+          <div
+            className="mx-6 mt-5 -mb-1 p-4 rounded-xl bg-red-50 border-2 border-red-300 flex items-start gap-3"
+            role="alert"
+          >
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2.2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              className="w-5 h-5 text-red-600 shrink-0 mt-0.5"
+            >
+              <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z" />
+              <line x1="12" y1="9"  x2="12" y2="13" />
+              <line x1="12" y1="17" x2="12.01" y2="17" />
+            </svg>
+            <div className="flex-1 min-w-0">
+              <div className="text-sm font-semibold text-red-800">
+                דורש תשומת לב אנושית
+              </div>
+              <div className="text-sm text-red-700 mt-0.5">
+                {lead.human_attention_reason || "השיחה הועברה למגייס/ת אנושי/ת"}
+              </div>
+              {lead.human_attention_raised_at && (
+                <div className="text-[11px] text-red-500 mt-1">
+                  סומן ב-{new Date(lead.human_attention_raised_at).toLocaleString("he-IL")}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
         {/* Needs-attention banner — set by the WhatsApp NLU */}
         {lead.needs_attention && (
           <div className="mx-6 mt-4 p-3 rounded-lg bg-red-50 border border-red-200 flex items-start gap-2">
@@ -285,6 +349,49 @@ export function LeadCardPanel({ lead, open, onOpenChange }: LeadCardPanelProps) 
           </div>
           <LeadDocumentsSection leadId={lead.id} />
         </div>
+
+        {/* ── Agent scores (Phase 4: multi-dim) ── */}
+        {(lead.screening_motivation_score != null ||
+          lead.screening_fit_score != null ||
+          lead.screening_availability_score != null ||
+          lead.screening_experience_score != null) && (
+          <div className="px-6 pb-4">
+            <h3 className="text-sm font-semibold text-gray-700 mb-2">ניקוד הסוכן</h3>
+            <div className="bg-white rounded-lg border p-3 grid grid-cols-2 gap-3">
+              <ScoreBar label="מוטיבציה"  value={lead.screening_motivation_score} />
+              <ScoreBar label="התאמה"     value={lead.screening_fit_score} />
+              <ScoreBar label="זמינות"    value={lead.screening_availability_score} />
+              <ScoreBar label="ניסיון"    value={lead.screening_experience_score} />
+            </div>
+          </div>
+        )}
+
+        {/* ── Fields extracted from the agent conversation (Phase 4) ── */}
+        {(lead.extracted_availability ||
+          lead.extracted_salary_expectation ||
+          lead.extracted_location_pref ||
+          (lead.extracted_interests && lead.extracted_interests.length > 0)) && (
+          <div className="px-6 pb-4">
+            <h3 className="text-sm font-semibold text-gray-700 mb-2">מידע שחולץ מהשיחה</h3>
+            <div className="bg-white rounded-lg border p-3">
+              <DetailRow label="זמינות"       value={lead.extracted_availability} />
+              <DetailRow label="ציפיות שכר"   value={lead.extracted_salary_expectation} />
+              <DetailRow label="העדפת מיקום"  value={lead.extracted_location_pref} />
+              {lead.extracted_interests && lead.extracted_interests.length > 0 && (
+                <div className="flex items-start justify-between py-2">
+                  <span className="text-sm font-medium text-gray-500 shrink-0">תחומי עניין</span>
+                  <div className="flex flex-wrap gap-1.5 justify-end">
+                    {lead.extracted_interests.map((interest) => (
+                      <Badge key={interest} variant="secondary" className="text-xs">
+                        {interest}
+                      </Badge>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
 
         {/* Notes */}
         {(lead.notes || lead.followup_notes) && (

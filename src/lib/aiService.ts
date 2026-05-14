@@ -1,28 +1,32 @@
 // ============================================================
-// AI Evaluation Service
-// Handles the AI recruiter conversation logic using OpenAI GPT.
+// AI Recruitment Agent v2
+// Uses Anthropic Claude Sonnet 4.5 to drive WhatsApp screening
+// conversations with leads. Returns a multi-dimensional
+// evaluation plus structured fields extracted from the chat.
 // ============================================================
 
-import OpenAI from "openai";
+import Anthropic from "@anthropic-ai/sdk";
 import { createClient as createServerClient } from "@supabase/supabase-js";
 import { changeLeadStatus } from "@/lib/actions/changeLeadStatus";
 import { LeadStatus, type LeadStatusValue } from "@/lib/stateMachine";
 
-// ── OpenAI Client (lazy) ─────────────────────────────────────
+// ── Anthropic Client (lazy) ──────────────────────────────────
 
-let _openai: OpenAI | null = null;
-function getOpenAI(): OpenAI {
-  if (!_openai) {
-    const apiKey = process.env.OPENAI_API_KEY;
+const CLAUDE_MODEL = "claude-sonnet-4-5";
+
+let _anthropic: Anthropic | null = null;
+function getAnthropic(): Anthropic {
+  if (!_anthropic) {
+    const apiKey = process.env.ANTHROPIC_API_KEY;
     if (!apiKey) {
-      throw new Error("OPENAI_API_KEY is not configured");
+      throw new Error("ANTHROPIC_API_KEY is not configured");
     }
-    _openai = new OpenAI({ apiKey });
+    _anthropic = new Anthropic({ apiKey });
   }
-  return _openai;
+  return _anthropic;
 }
 
-// ── Supabase Admin Client ───────────────────────────────────
+// ── Supabase Admin Client ────────────────────────────────────
 
 function getSupabase() {
   return createServerClient(
@@ -31,28 +35,52 @@ function getSupabase() {
   );
 }
 
-// ── Types ───────────────────────────────────────────────────
+// ── Types ────────────────────────────────────────────────────
 
-export type AIAction = "CONTINUE" | "ADVANCE_TO_FIT" | "REJECT";
+export type AIAction = "CONTINUE" | "ADVANCE_TO_FIT" | "REJECT" | "ESCALATE_TO_HUMAN";
+
+/**
+ * Reasons the agent may hand the conversation off to a human recruiter.
+ * Keep this in sync with the system prompt.
+ */
+export type HumanEscalationReason =
+  | "explicit_request"      // candidate asked to speak with a human
+  | "distress"              // anger / confusion / complaint
+  | "hotel_sabbath"         // wants hospitality role + Sabbath observer
+  | "unlisted_job"          // wants a job we don't offer
+  | "other";
+
+export interface MultiScore {
+  motivation: number;    // 0-100 — does the candidate want to work with us
+  fit: number;           // 0-100 — match to our industries / roles
+  availability: number;  // 0-100 — start date, hours, days available
+  experience: number;    // 0-100 — relevant experience
+}
+
+export interface ExtractedFields {
+  availability?: string;        // e.g. "מיידי, מלא, כולל סופ"ש"
+  salary_expectation?: string;  // e.g. "45 ש"ח לשעה" / "8000 ברוטו"
+  location_pref?: string;       // e.g. "אילת בלבד, מעוניין במגורים"
+  interests?: string[];         // e.g. ["מלצרות", "ברמן"]
+}
 
 export interface AIEvaluation {
   action: AIAction;
   reply: string;
-  screening_score: number;
+  screening_score: number;          // composite / weighted, 0-100
+  scores: MultiScore;
+  extracted: ExtractedFields;
+  needs_human: boolean;
+  human_reason?: HumanEscalationReason;
+  human_reason_note?: string;       // free text reason from the model
 }
 
 export interface ProcessMessageResult {
   success: boolean;
   aiReply?: string;
   action?: AIAction;
+  needs_human?: boolean;
   error?: string;
-}
-
-interface DBMessage {
-  id: string;
-  role: "user" | "assistant" | "system";
-  content: string;
-  created_at: string;
 }
 
 interface LeadContext {
@@ -65,7 +93,12 @@ interface LeadContext {
   job_title: string | null;
 }
 
-// ── System Prompt Builder ───────────────────────────────────
+// ── Holding message (sent on escalation) ─────────────────────
+
+const HUMAN_HOLDING_MESSAGE =
+  "תודה רבה על הפנייה! אעביר את הפרטים שלך לרכזת הגיוס שלנו, והיא תחזור אליך בהקדם עם הצעות מותאמות אישית. 🙏";
+
+// ── System Prompt Builder ────────────────────────────────────
 
 function buildSystemPrompt(lead: LeadContext): string {
   const knownFields: string[] = [];
@@ -99,11 +132,12 @@ function buildSystemPrompt(lead: LeadContext): string {
 4. בונוסים: שכר שעתי + מענקי התמדה + זכאות למענק עבודה מועדפת (לחיילים משוחררים).
 5. גמישות: אפשרויות עבודה ללא שבתות וחגים, ואקסטרות (משמרות נוספות) למי שרוצה להרוויח יותר.
 
-=== תחומים ותפקידים ===
+=== תחומים ותפקידים (זוהי רשימת המשרות הסגורה שלנו) ===
 1. מלונאות: קב"ט (אבטחה), אחזקה, מלצרים, טבחים, עוזרי טבחים, קונדיטורים, קבלה, בלנים (bell boy), ברמנים, עובדי בריכה, מצילים, חדרנים, סטיוארדים, צ'קרים, שירות אורחים, מנהלי מועדון ילדים, מפעילי מגלשות, תפקידי ניהול, עובדי מחסן.
 2. אופנה (חנויות בגדים): יועצי מכירה, קופאים, עובדי מחסן, צוותי ניהול ומכירות למותגים מובילים.
 3. קמעונאות (סופרמרקטים): קופאים, סדרנים, ירקנים, עובדי מעדנייה, קצבים, מלקטי הזמנות אונליין.
 4. מכירות ואחר: דיילות קוסמטיקה, מכירות ביגוד ספורט, נציגי מרכז הזמנות מלונות.
+**אם המועמד מבקש משרה/תפקיד שאינו ברשימה הזו — זהו "unlisted_job" וצריך להעביר למגייסת אנושית.**
 
 === איך לענות על שאלות מועמדים ===
 - שאלה על מגורים/דיור/רילוקיישן → ענה בהתלהבות: "אנחנו מציעים מגורים מסובסדים לכל העובדים שלנו, בלי לשלם מראש! זה אחד היתרונות הכי גדולים שלנו."
@@ -125,36 +159,73 @@ ${knownInfo}
 - נהל שיחה של 3-5 הודעות לפני קבלת החלטה.
 - כל התשובות בעברית בלבד.
 
-=== כלל מיוחד: מלונאות + שומר שבת ===
-אם מועמד/ת רוצה לעבוד במלונאות אבל לא יכול/ה לעבוד בשבת (שומר/ת שבת, ללא שבתות):
-1. אל תציע תפקידי מלונאות רגילים. הסבר שעבודה במלונאות ללא שבת דורשת תיאום מיוחד.
-2. הודע שיועץ השמה אנושי ייצור איתם קשר בהקדם כדי למצוא את ההתאמה המושלמת בתחום המלונאות.
-3. שאל בנימוס אם בינתיים הם פתוחים לשמוע על משרות בסופרים או באופנה, כי שם קל יותר לעבוד ללא שבתות.
-4. השתמש ב-"CONTINUE" כל עוד ממתינים לתשובה על התחומים החלופיים. השתמש ב-"ADVANCE_TO_FIT" אם הם מתעניינים בתחום חלופי.
+=== ⚠ העברה למגייסת אנושית — needs_human=true ===
+תרים את הדגל ESCALATE_TO_HUMAN במקרים הבאים, ואל תמשיך לשאול שאלות:
+1. **explicit_request** — המועמד/ת ביקש/ה מפורשות לדבר עם נציג/ה / מגייסת / מנהל/ת / "בן אדם אמיתי".
+2. **distress** — סימני מצוקה, זעם, בלבול, או תלונה (לדוגמה: "אתם רובוט?", "תפסיקו לשלוח", "מה זה הבלאגן הזה").
+3. **hotel_sabbath** — המועמד/ת רוצה לעבוד במלונאות אבל לא יכול/ה לעבוד בשבת (שומר/ת שבת, ללא שבתות).
+4. **unlisted_job** — המועמד/ת מבקש/ת תפקיד שאינו ברשימה למעלה (למשל נהג, מהנדס, מורה, פקיד בנק, מתכנת וכו').
+5. **other** — כל מקרה אחר שמרגיש שדורש מומחיות אנושית.
+
+כשמרימים את הדגל:
+- action = "ESCALATE_TO_HUMAN"
+- needs_human = true
+- human_reason = אחד מהערכים מעלה
+- ב-reply שלח הודעת המתנה אדיבה: "תודה רבה על הפנייה! אעביר את הפרטים שלך לרכזת הגיוס שלנו, והיא תחזור אליך בהקדם עם הצעות מותאמות אישית."
 
 === גמישות בגיוס ===
-- אנחנו חברת השמה — המטרה שלנו למצוא עבודה לכל מועמד/ת. אל תדחה מועמדים בגלל שהם מעוניינים בתחום אחר.
-- אם המועמד/ת לא מעוניין/ת בתפקיד המקורי שלו/ה, או מביע/ה עניין בתחום אחר — הצע בחום את כל התחומים שלנו (מלונאות, אופנה, קמעונאות, מכירות) ושאל באיזה מהם הם מעדיפים.
-- דחה מועמד/ת ("REJECT") רק אם הוא/היא מסרב/ת לכל האפשרויות שהצעת, או שהוא/היא לא זמין/ה לעבודה כלל.
+- אנחנו חברת השמה — המטרה שלנו למצוא עבודה לכל מועמד/ת. אל תדחה מועמדים בגלל שהם מעוניינים בתחום אחר ברשימה.
+- אם המועמד/ת לא מעוניין/ת בתפקיד המקורי שלו/ה, אבל מביע/ה עניין בתחום אחר מהרשימה — הצע בחום את אותם תחומים.
+- דחה ("REJECT") רק אם המועמד/ת מסרב/ת לכל האפשרויות שהצעת, או שהוא/היא לא זמין/ה לעבודה כלל.
+- שים לב: בקשה לתפקיד שלא ברשימה איננה REJECT — היא ESCALATE_TO_HUMAN.
+
+=== מיצוי שדות מובנים (extracted) ===
+לאורך השיחה, חלץ מידע מובנה מהמועמד/ת ושמור אותו בשדה extracted:
+- availability: זמינות (למשל "מיידי, משרה מלאה", "החל מ-1.6", "רק בקרים").
+- salary_expectation: ציפיות שכר (למשל "45 ש"ח לשעה", "8000 ברוטו").
+- location_pref: העדפת מיקום (למשל "אילת בלבד", "מוכן/ה לעבור אם יש מגורים").
+- interests: רשימה של תחומים/תפקידים שמעניינים את המועמד/ת (למשל ["מלצרות", "ברמן"]).
+החזר רק שדות שהמועמד/ת אכן מסר/ה. אל תמציא.
+
+=== ניקוד רב-ממדי (scores, 0-100 כל אחד) ===
+- motivation: עד כמה המועמד/ת באמת רוצה לעבוד אצלנו (התלהבות, אורך תשובות, יוזמה).
+- fit: עד כמה המועמד/ת מתאים/ה לתחומים שלנו.
+- availability: עד כמה הזמינות שלו/ה תואמת את הצרכים שלנו.
+- experience: רלוונטיות הניסיון.
+בנוסף, החזר screening_score = ציון מצרפי משוקלל (לרוב הממוצע, אבל אתה יכול לתת משקל יתר ל-motivation או fit אם רלוונטי).
 
 === פורמט תשובה ===
-אחרי כל הודעה של המועמד/ת, החזר אובייקט JSON בלבד עם השדות הבאים:
+החזר אובייקט JSON בלבד עם השדות הבאים, ללא טקסט מחוץ ל-JSON:
 {
-  "action": "CONTINUE" | "ADVANCE_TO_FIT" | "REJECT",
+  "action": "CONTINUE" | "ADVANCE_TO_FIT" | "REJECT" | "ESCALATE_TO_HUMAN",
   "reply": "<הודעה בעברית למועמד/ת>",
-  "screening_score": <מספר 0-100>
+  "screening_score": <0-100>,
+  "scores": {
+    "motivation":   <0-100>,
+    "fit":          <0-100>,
+    "availability": <0-100>,
+    "experience":   <0-100>
+  },
+  "extracted": {
+    "availability":        "<טקסט או השמט>",
+    "salary_expectation":  "<טקסט או השמט>",
+    "location_pref":       "<טקסט או השמט>",
+    "interests":           ["<תחום1>", "<תחום2>"]
+  },
+  "needs_human": <true|false>,
+  "human_reason": "explicit_request" | "distress" | "hotel_sabbath" | "unlisted_job" | "other",
+  "human_reason_note": "<משפט אחד שמסביר למה הועבר לאנושי, אם רלוונטי>"
 }
 
-כללים:
-- "CONTINUE" — אם צריך עוד מידע מהמועמד/ת, או אם הצעת תחומים חלופיים וממתין לתשובה.
-- "ADVANCE_TO_FIT" (ציון >= 60) — כשהמועמד/ת מעוניין/ת באחד התחומים שלנו ויש מספיק מידע.
-- "REJECT" (ציון < 30) — רק כשהמועמד/ת בבירור לא מעוניין/ת באף אחד מהתחומים שלנו או לא זמין/ה לעבודה.
-- screening_score משקף את הביטחון שלך במועמד/ת (0 = לא מתאים בכלל, 100 = מושלם).
-- תמיד כלול תשובה ידידותית בעברית, גם בדחייה.
-- החזר JSON תקין בלבד, בלי טקסט נוסף מחוץ ל-JSON.`;
+כללי ההחלטה ל-action:
+- "CONTINUE" — צריך עוד מידע, או הצעת תחומים חלופיים וממתין לתשובה.
+- "ADVANCE_TO_FIT" — screening_score ≥ 60 והמועמד/ת מעוניין/ת באחד התחומים מהרשימה.
+- "REJECT" — screening_score < 30 והמועמד/ת לא מעוניין/ת באף אחד מהתחומים שלנו או לא זמין/ה.
+- "ESCALATE_TO_HUMAN" — אחד מהמקרים שתוארו למעלה. במצב זה, needs_human=true.
+תמיד החזר JSON תקין בלבד.`;
 }
 
-// ── OpenAI LLM Call ─────────────────────────────────────────
+// ── Anthropic LLM Call ───────────────────────────────────────
 
 async function callLLM(
   chatHistory: { role: string; content: string }[],
@@ -162,40 +233,70 @@ async function callLLM(
 ): Promise<AIEvaluation> {
   const systemPrompt = buildSystemPrompt(leadContext);
 
-  // Strip any old system messages from history, inject the lead-aware prompt
-  const messages: OpenAI.ChatCompletionMessageParam[] = [
-    { role: "system", content: systemPrompt },
-    ...chatHistory
-      .filter((m) => m.role !== "system")
-      .map((m) => ({
-        role: m.role as "user" | "assistant",
-        content: m.content,
-      })),
-  ];
+  // Anthropic expects alternating user/assistant; map roles, drop "system".
+  const messages = chatHistory
+    .filter((m) => m.role !== "system")
+    .map((m) => ({
+      role: (m.role === "assistant" ? "assistant" : "user") as "user" | "assistant",
+      content: m.content,
+    }));
 
-  const response = await getOpenAI().chat.completions.create({
-    model: "gpt-4o-mini",
+  const response = await getAnthropic().messages.create({
+    model: CLAUDE_MODEL,
+    max_tokens: 1024,
     temperature: 0.3,
-    response_format: { type: "json_object" },
+    system: systemPrompt,
     messages,
   });
 
-  const raw = response.choices[0]?.message?.content ?? "";
+  // Concatenate text blocks (avoid SDK-specific TextBlock type name)
+  const raw = response.content
+    .map((block) => (block.type === "text" ? block.text : ""))
+    .join("")
+    .trim();
+
   return parseAIResponse(raw);
 }
 
-// ── Response Parser ─────────────────────────────────────────
+// ── Response Parser ──────────────────────────────────────────
+
+const VALID_ACTIONS: AIAction[] = [
+  "CONTINUE",
+  "ADVANCE_TO_FIT",
+  "REJECT",
+  "ESCALATE_TO_HUMAN",
+];
+
+const VALID_REASONS: HumanEscalationReason[] = [
+  "explicit_request",
+  "distress",
+  "hotel_sabbath",
+  "unlisted_job",
+  "other",
+];
+
+const FALLBACK_EVAL: AIEvaluation = {
+  action: "CONTINUE",
+  reply: "סליחה, נתקלתי בבעיה טכנית. אפשר לחזור על ההודעה האחרונה?",
+  screening_score: 50,
+  scores: { motivation: 50, fit: 50, availability: 50, experience: 50 },
+  extracted: {},
+  needs_human: false,
+};
+
+function clamp100(n: unknown, fallback = 50): number {
+  return typeof n === "number" && n >= 0 && n <= 100 ? Math.round(n) : fallback;
+}
 
 function parseAIResponse(raw: string): AIEvaluation {
-  const VALID_ACTIONS: AIAction[] = ["CONTINUE", "ADVANCE_TO_FIT", "REJECT"];
-  const FALLBACK: AIEvaluation = {
-    action: "CONTINUE",
-    reply: "סליחה, נתקלתי בבעיה טכנית. אפשר לחזור על ההודעה האחרונה?",
-    screening_score: 50,
-  };
+  // Strip optional ```json fences
+  const cleaned = raw
+    .replace(/^```(?:json)?\s*/i, "")
+    .replace(/```\s*$/i, "")
+    .trim();
 
   try {
-    const parsed = JSON.parse(raw);
+    const parsed = JSON.parse(cleaned);
 
     const action: AIAction = VALID_ACTIONS.includes(parsed.action)
       ? parsed.action
@@ -204,23 +305,123 @@ function parseAIResponse(raw: string): AIEvaluation {
     const reply =
       typeof parsed.reply === "string" && parsed.reply.trim().length > 0
         ? parsed.reply.trim()
-        : FALLBACK.reply;
+        : FALLBACK_EVAL.reply;
 
-    const screening_score =
-      typeof parsed.screening_score === "number" &&
-      parsed.screening_score >= 0 &&
-      parsed.screening_score <= 100
-        ? parsed.screening_score
-        : 50;
+    const screening_score = clamp100(parsed.screening_score);
 
-    return { action, reply, screening_score };
+    const s = parsed.scores ?? {};
+    const scores: MultiScore = {
+      motivation:   clamp100(s.motivation),
+      fit:          clamp100(s.fit),
+      availability: clamp100(s.availability),
+      experience:   clamp100(s.experience),
+    };
+
+    const e = parsed.extracted ?? {};
+    const extracted: ExtractedFields = {};
+    if (typeof e.availability === "string" && e.availability.trim()) {
+      extracted.availability = e.availability.trim();
+    }
+    if (typeof e.salary_expectation === "string" && e.salary_expectation.trim()) {
+      extracted.salary_expectation = e.salary_expectation.trim();
+    }
+    if (typeof e.location_pref === "string" && e.location_pref.trim()) {
+      extracted.location_pref = e.location_pref.trim();
+    }
+    if (Array.isArray(e.interests)) {
+      const interests = e.interests
+        .filter((x: unknown): x is string => typeof x === "string" && x.trim().length > 0)
+        .map((x: string) => x.trim());
+      if (interests.length > 0) extracted.interests = interests;
+    }
+
+    const needs_human =
+      action === "ESCALATE_TO_HUMAN" || parsed.needs_human === true;
+
+    const human_reason: HumanEscalationReason | undefined =
+      needs_human && VALID_REASONS.includes(parsed.human_reason)
+        ? parsed.human_reason
+        : needs_human
+          ? "other"
+          : undefined;
+
+    const human_reason_note =
+      typeof parsed.human_reason_note === "string"
+        ? parsed.human_reason_note.trim() || undefined
+        : undefined;
+
+    return {
+      action: needs_human ? "ESCALATE_TO_HUMAN" : action,
+      reply,
+      screening_score,
+      scores,
+      extracted,
+      needs_human,
+      human_reason,
+      human_reason_note,
+    };
   } catch {
     console.error("Failed to parse AI response:", raw);
-    return FALLBACK;
+    return FALLBACK_EVAL;
   }
 }
 
-// ── Main Processing Function ────────────────────────────────
+// ── Persistence helpers ──────────────────────────────────────
+
+/**
+ * Patches the lead row with whatever fields the agent extracted this turn,
+ * plus the latest score breakdown. Only non-null fields are written.
+ */
+async function persistAgentUpdate(
+  supabase: ReturnType<typeof getSupabase>,
+  leadId: string,
+  evaluation: AIEvaluation
+): Promise<void> {
+  const patch: Record<string, unknown> = {
+    screening_motivation_score:   evaluation.scores.motivation,
+    screening_fit_score:          evaluation.scores.fit,
+    screening_availability_score: evaluation.scores.availability,
+    screening_experience_score:   evaluation.scores.experience,
+  };
+
+  if (evaluation.extracted.availability) {
+    patch.extracted_availability = evaluation.extracted.availability;
+  }
+  if (evaluation.extracted.salary_expectation) {
+    patch.extracted_salary_expectation = evaluation.extracted.salary_expectation;
+  }
+  if (evaluation.extracted.location_pref) {
+    patch.extracted_location_pref = evaluation.extracted.location_pref;
+  }
+  if (evaluation.extracted.interests && evaluation.extracted.interests.length > 0) {
+    patch.extracted_interests = evaluation.extracted.interests;
+  }
+
+  if (evaluation.needs_human) {
+    patch.needs_human_attention = true;
+    patch.human_attention_reason =
+      evaluation.human_reason_note ?? humanReasonLabel(evaluation.human_reason);
+    patch.human_attention_raised_at = new Date().toISOString();
+  }
+
+  const { error } = await supabase.from("leads").update(patch).eq("id", leadId);
+  if (error) {
+    console.error(`[aiService] Failed to persist agent update for ${leadId}:`, error.message);
+  }
+}
+
+function humanReasonLabel(reason?: HumanEscalationReason): string {
+  switch (reason) {
+    case "explicit_request": return "המועמד/ת ביקש/ה לדבר עם נציג/ה אנושי/ת";
+    case "distress":         return "זוהו סימני מצוקה בשיחה";
+    case "hotel_sabbath":    return "מלונאות + שמירת שבת — דורש תיאום אנושי";
+    case "unlisted_job":     return "ביקש/ה תפקיד שאינו ברשימת המשרות שלנו";
+    case "other":            return "השיחה דורשת מגייס/ת אנושי/ת";
+    default:                 return "דורש תשומת לב אנושית";
+  }
+}
+
+// ── Main Processing Function ─────────────────────────────────
 
 export async function processIncomingMessage(
   leadId: string,
@@ -228,10 +429,12 @@ export async function processIncomingMessage(
 ): Promise<ProcessMessageResult> {
   const supabase = getSupabase();
 
-  // 1. Fetch lead status + profile data for context
+  // 1. Fetch lead status + profile data + escalation flag
   const { data: lead, error: leadError } = await supabase
     .from("leads")
-    .select("status, name, phone, email, location, experience, age, job_title")
+    .select(
+      "status, name, phone, email, location, experience, age, job_title, needs_human_attention"
+    )
     .eq("id", leadId)
     .single();
 
@@ -246,6 +449,21 @@ export async function processIncomingMessage(
     return {
       success: false,
       error: `הליד במצב ${currentStatus} — הסינון פעיל רק במצב SCREENING_IN_PROGRESS`,
+    };
+  }
+
+  // Already escalated — save the message but don't auto-reply.
+  // A human is on the hook; we don't want the bot interrupting.
+  if (lead.needs_human_attention) {
+    await supabase.from("messages").insert({
+      lead_id: leadId,
+      role: "user",
+      content: messageText,
+    });
+    return {
+      success: true,
+      needs_human: true,
+      error: "השיחה הועברה למגייס/ת אנושי/ת — הסוכן לא משיב",
     };
   }
 
@@ -272,19 +490,17 @@ export async function processIncomingMessage(
   }
 
   // 3. Save the incoming user message
-  const { error: insertUserError } = await supabase
-    .from("messages")
-    .insert({
-      lead_id: leadId,
-      role: "user",
-      content: messageText,
-    });
+  const { error: insertUserError } = await supabase.from("messages").insert({
+    lead_id: leadId,
+    role: "user",
+    content: messageText,
+  });
 
   if (insertUserError) {
     return { success: false, error: `שגיאה בשמירת ההודעה: ${insertUserError.message}` };
   }
 
-  // 4. Build the chat history for the LLM (no system message — callLLM handles it)
+  // 4. Build chat history for the LLM
   const chatHistory = [
     ...(existingMessages ?? []).map((m) => ({
       role: m.role as string,
@@ -304,21 +520,29 @@ export async function processIncomingMessage(
     };
   }
 
-  // 6. Save the AI reply
-  const { error: insertAIError } = await supabase
-    .from("messages")
-    .insert({
-      lead_id: leadId,
-      role: "assistant",
-      content: evaluation.reply,
-    });
+  // 6. On escalation, override the reply with the canonical holding message
+  //    (so we don't accidentally promise things the human hasn't decided).
+  if (evaluation.needs_human) {
+    evaluation.reply = HUMAN_HOLDING_MESSAGE;
+  }
+
+  // 7. Save the AI reply
+  const { error: insertAIError } = await supabase.from("messages").insert({
+    lead_id: leadId,
+    role: "assistant",
+    content: evaluation.reply,
+  });
 
   if (insertAIError) {
     return { success: false, error: `שגיאה בשמירת תשובת AI: ${insertAIError.message}` };
   }
 
-  // 7. If the AI decided to transition, use the Phase 1 state machine
-  if (evaluation.action === "ADVANCE_TO_FIT") {
+  // 8. Persist scores + extracted fields + escalation flag to the lead row
+  await persistAgentUpdate(supabase, leadId, evaluation);
+
+  // 9. Status transitions (skip when escalating — leave the lead in SCREENING
+  //    so the human picks it up from the same column)
+  if (!evaluation.needs_human && evaluation.action === "ADVANCE_TO_FIT") {
     const result = await changeLeadStatus({
       leadId,
       newStatus: LeadStatus.FIT_FOR_INTERVIEW,
@@ -334,12 +558,13 @@ export async function processIncomingMessage(
         success: true,
         aiReply: evaluation.reply,
         action: evaluation.action,
+        needs_human: false,
         error: `ההודעה נשמרה אך מעבר הסטטוס נכשל: ${result.error}`,
       };
     }
   }
 
-  if (evaluation.action === "REJECT") {
+  if (!evaluation.needs_human && evaluation.action === "REJECT") {
     const result = await changeLeadStatus({
       leadId,
       newStatus: LeadStatus.REJECTED,
@@ -355,6 +580,7 @@ export async function processIncomingMessage(
         success: true,
         aiReply: evaluation.reply,
         action: evaluation.action,
+        needs_human: false,
         error: `ההודעה נשמרה אך מעבר הסטטוס נכשל: ${result.error}`,
       };
     }
@@ -364,5 +590,6 @@ export async function processIncomingMessage(
     success: true,
     aiReply: evaluation.reply,
     action: evaluation.action,
+    needs_human: evaluation.needs_human,
   };
 }

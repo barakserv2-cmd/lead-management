@@ -45,6 +45,18 @@ export interface Lead {
   needs_attention: boolean;
   needs_attention_at: string | null;
   attention_reason: string | null;
+  // ── Phase 4: Recruitment Agent v2 ───────────────────────────
+  needs_human_attention: boolean;
+  human_attention_reason: string | null;
+  human_attention_raised_at: string | null;
+  screening_motivation_score: number | null;
+  screening_fit_score: number | null;
+  screening_availability_score: number | null;
+  screening_experience_score: number | null;
+  extracted_availability: string | null;
+  extracted_salary_expectation: string | null;
+  extracted_location_pref: string | null;
+  extracted_interests: string[] | null;
 }
 
 export interface StatusChange {
