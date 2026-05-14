@@ -33,14 +33,11 @@ interface LeadCard {
   start_date: string | null;
 }
 
-// SCREENING_IN_PROGRESS and FIT_FOR_INTERVIEW are hidden from the board
-// while the WhatsApp screening subscription is paused. Restore the two
-// commented lines when screening comes back online.
 const BOARD_COLUMNS: { value: LeadStatusValue; label: string; headerColor: string }[] = [
   { value: LeadStatus.NEW_LEAD,              label: STATUS_LABELS[LeadStatus.NEW_LEAD],              headerColor: "bg-blue-500" },
   { value: LeadStatus.CONTACTED,             label: STATUS_LABELS[LeadStatus.CONTACTED],             headerColor: "bg-cyan-500" },
-  // { value: LeadStatus.SCREENING_IN_PROGRESS, label: STATUS_LABELS[LeadStatus.SCREENING_IN_PROGRESS], headerColor: "bg-orange-500" },
-  // { value: LeadStatus.FIT_FOR_INTERVIEW,     label: STATUS_LABELS[LeadStatus.FIT_FOR_INTERVIEW],     headerColor: "bg-amber-500" },
+  { value: LeadStatus.SCREENING_IN_PROGRESS, label: STATUS_LABELS[LeadStatus.SCREENING_IN_PROGRESS], headerColor: "bg-orange-500" },
+  { value: LeadStatus.FIT_FOR_INTERVIEW,     label: STATUS_LABELS[LeadStatus.FIT_FOR_INTERVIEW],     headerColor: "bg-amber-500" },
   { value: LeadStatus.INTERVIEW_BOOKED,      label: STATUS_LABELS[LeadStatus.INTERVIEW_BOOKED],      headerColor: "bg-purple-500" },
   { value: LeadStatus.ARRIVED,               label: STATUS_LABELS[LeadStatus.ARRIVED],               headerColor: "bg-indigo-500" },
   { value: LeadStatus.HIRED,                 label: STATUS_LABELS[LeadStatus.HIRED],                 headerColor: "bg-green-500" },
@@ -49,14 +46,6 @@ const BOARD_COLUMNS: { value: LeadStatusValue; label: string; headerColor: strin
   { value: LeadStatus.REJECTED,              label: STATUS_LABELS[LeadStatus.REJECTED],              headerColor: "bg-gray-500" },
   { value: LeadStatus.LOST_CONTACT,          label: STATUS_LABELS[LeadStatus.LOST_CONTACT],          headerColor: "bg-rose-500" },
   { value: LeadStatus.NOT_SUITABLE,          label: STATUS_LABELS[LeadStatus.NOT_SUITABLE],          headerColor: "bg-stone-500" },
-];
-
-// Statuses that should not appear in any status picker (board / dropdown / etc).
-// Used so existing leads that already sit on these statuses still render with
-// the correct label, but no one can transition INTO them from the UI.
-const HIDDEN_STATUSES: LeadStatusValue[] = [
-  LeadStatus.SCREENING_IN_PROGRESS,
-  LeadStatus.FIT_FOR_INTERVIEW,
 ];
 
 const SOURCE_COLORS: Record<string, string> = {
