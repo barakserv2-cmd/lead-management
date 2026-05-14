@@ -68,6 +68,11 @@ export async function POST(req: NextRequest) {
             sendResult.error
           );
         }
+      } else if (!result.success) {
+        console.error(
+          `[WhatsApp Webhook] Agent failed for lead ${lead.id}:`,
+          result.error
+        );
       }
     } else {
       // Non-screening: save the candidate's message + NLU analysis.

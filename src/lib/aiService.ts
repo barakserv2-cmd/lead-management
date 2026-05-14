@@ -233,13 +233,31 @@ async function callLLM(
 ): Promise<AIEvaluation> {
   const systemPrompt = buildSystemPrompt(leadContext);
 
-  // Anthropic expects alternating user/assistant; map roles, drop "system".
-  const messages = chatHistory
+  // Anthropic requires: messages must start with user and strictly alternate
+  // user/assistant. Map outbound roles ("assistant" from AI replies,
+  // "recruiter" from manual sends or cron reminders) to "assistant".
+  // Then drop leading assistant messages and merge consecutive same-role runs.
+  const mapped = chatHistory
     .filter((m) => m.role !== "system")
     .map((m) => ({
-      role: (m.role === "assistant" ? "assistant" : "user") as "user" | "assistant",
+      role: (m.role === "assistant" || m.role === "recruiter"
+        ? "assistant"
+        : "user") as "user" | "assistant",
       content: m.content,
     }));
+
+  const firstUser = mapped.findIndex((m) => m.role === "user");
+  const trimmed = firstUser === -1 ? [] : mapped.slice(firstUser);
+
+  const messages: { role: "user" | "assistant"; content: string }[] = [];
+  for (const m of trimmed) {
+    const last = messages[messages.length - 1];
+    if (last && last.role === m.role) {
+      last.content = `${last.content}\n\n${m.content}`;
+    } else {
+      messages.push({ ...m });
+    }
+  }
 
   const response = await getAnthropic().messages.create({
     model: CLAUDE_MODEL,
