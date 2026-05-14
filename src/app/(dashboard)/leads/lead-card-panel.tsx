@@ -16,6 +16,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { StatusSelect } from "./status-select";
 import { claimLead, releaseLead } from "@/lib/actions/claimLead";
+import { clearLeadAttention } from "@/lib/actions/clearAttention";
 import { LeadDocumentsSection } from "./lead-documents-section";
 
 // 24h lock window — must match server constant in claimLead.ts
@@ -193,6 +194,34 @@ export function LeadCardPanel({ lead, open, onOpenChange }: LeadCardPanelProps) 
             </Badge>
           </div>
         </SheetHeader>
+
+        {/* Needs-attention banner — set by the WhatsApp NLU */}
+        {lead.needs_attention && (
+          <div className="mx-6 mt-4 p-3 rounded-lg bg-red-50 border border-red-200 flex items-start gap-2">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4 text-red-600 flex-shrink-0 mt-0.5">
+              <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+              <line x1="12" x2="12" y1="9" y2="13" />
+              <line x1="12" x2="12.01" y1="17" y2="17" />
+            </svg>
+            <div className="flex-1 min-w-0">
+              <div className="text-sm font-semibold text-red-800">דורש תשומת לב</div>
+              {lead.attention_reason && (
+                <div className="text-xs text-red-700 mt-0.5">{lead.attention_reason}</div>
+              )}
+            </div>
+            <button
+              type="button"
+              onClick={async () => {
+                const res = await clearLeadAttention(lead.id);
+                if (res.success) toast.success("סומן כטופל");
+                else toast.error(res.error ?? "שגיאה");
+              }}
+              className="text-xs font-semibold text-red-700 hover:text-red-900 underline-offset-2 hover:underline flex-shrink-0"
+            >
+              סמן כטופל
+            </button>
+          </div>
+        )}
 
         {/* AI Summary */}
         <div className="mx-6 mt-5 mb-4 p-4 rounded-xl bg-gradient-to-bl from-violet-50 to-blue-50 border border-violet-200/60">

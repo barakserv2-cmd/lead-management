@@ -42,6 +42,9 @@ export interface Lead {
   tags: string[] | null;
   preferences: Record<string, unknown> | null;
   is_candidate: boolean;
+  needs_attention: boolean;
+  needs_attention_at: string | null;
+  attention_reason: string | null;
 }
 
 export interface StatusChange {

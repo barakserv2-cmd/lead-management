@@ -3,6 +3,7 @@ import { createClient as createServerClient } from "@supabase/supabase-js";
 import { processIncomingMessage } from "@/lib/aiService";
 import { sendWhatsAppMessage, phoneFromChatId } from "@/lib/whatsappService";
 import { LeadStatus } from "@/lib/stateMachine";
+import { analyzeWhatsappMessage, type WhatsAppNLU } from "@/lib/ai/parseWhatsappMessage";
 
 function getSupabase() {
   return createServerClient(
@@ -46,7 +47,7 @@ export async function POST(req: NextRequest) {
     const supabase = getSupabase();
     const { data: lead } = await supabase
       .from("leads")
-      .select("id, status")
+      .select("id, status, name, location, job_title")
       .eq("phone", phone)
       .single();
 
@@ -69,11 +70,29 @@ export async function POST(req: NextRequest) {
         }
       }
     } else {
-      // Non-screening: save the candidate's message to DB only (no AI)
+      // Non-screening: save the candidate's message + NLU analysis.
+      // 1. Run NLU first so the inserted message row carries the result.
+      let nlu: WhatsAppNLU | null = null;
+      try {
+        nlu = await analyzeWhatsappMessage(messageText, {
+          name: lead.name,
+          status: lead.status,
+          location: lead.location,
+          job_title: lead.job_title,
+        });
+      } catch (err) {
+        console.error(`[WhatsApp Webhook] NLU failed for lead ${lead.id}:`, err);
+      }
+
+      // 2. Save the candidate message with extracted intent/entities.
       const { error: insertError } = await supabase.from("messages").insert({
         lead_id: lead.id,
         role: "user",
         content: messageText,
+        ai_intent: nlu?.intent ?? null,
+        ai_entities: nlu?.entities ?? null,
+        ai_confidence: nlu?.confidence ?? null,
+        ai_summary: nlu?.summary ?? null,
       });
 
       if (insertError) {
@@ -81,6 +100,61 @@ export async function POST(req: NextRequest) {
           `[WhatsApp Webhook] Failed to save message for lead ${lead.id}:`,
           insertError.message
         );
+      }
+
+      // 3. Apply NLU-driven updates to the lead.
+      if (nlu) {
+        const updates: Record<string, unknown> = {};
+        const merged: Record<string, unknown> = {};
+
+        // High-confidence location change is safe to auto-apply.
+        if (
+          nlu.intent === "location_change" &&
+          nlu.entities.preferred_location &&
+          nlu.confidence >= 0.7
+        ) {
+          updates.location = nlu.entities.preferred_location;
+        }
+
+        // Other extractions land in the preferences JSONB so reports can use
+        // them without us guessing wrong on the main column.
+        if (nlu.entities.available_shifts?.length) {
+          merged.available_shifts = nlu.entities.available_shifts;
+        }
+        if (nlu.entities.unavailable_days?.length) {
+          merged.unavailable_days = nlu.entities.unavailable_days;
+        }
+        if (typeof nlu.entities.min_salary === "number") {
+          merged.min_salary = nlu.entities.min_salary;
+          merged.salary_unit = nlu.entities.salary_unit ?? "unknown";
+        }
+        if (nlu.entities.start_date) {
+          merged.start_date_requested = nlu.entities.start_date;
+        }
+
+        if (Object.keys(merged).length > 0) {
+          // Read existing preferences, merge, write back.
+          const { data: cur } = await supabase
+            .from("leads")
+            .select("preferences")
+            .eq("id", lead.id)
+            .single();
+          updates.preferences = {
+            ...((cur?.preferences as Record<string, unknown>) ?? {}),
+            ...merged,
+          };
+        }
+
+        // Flag for human review if the NLU says so or signals are mixed.
+        if (nlu.needs_attention) {
+          updates.needs_attention = true;
+          updates.needs_attention_at = new Date().toISOString();
+          updates.attention_reason = nlu.summary || nlu.intent;
+        }
+
+        if (Object.keys(updates).length > 0) {
+          await supabase.from("leads").update(updates).eq("id", lead.id);
+        }
       }
     }
 
