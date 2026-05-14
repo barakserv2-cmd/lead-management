@@ -18,6 +18,7 @@ import {
 import type { JobWithClient } from "@/types/jobs";
 import type { Client } from "@/types/clients";
 import { createJob, updateJob } from "./actions";
+import { JobMatchesSheet } from "./job-matches-sheet";
 
 // ── Status helpers ───────────────────────────────────────────
 
@@ -383,6 +384,7 @@ export function JobsContent({
 
 function JobCard({ job, onEdit }: { job: JobWithClient; onEdit: (job: JobWithClient) => void }) {
   const clientPhone = formatPhone(job.clients.phone);
+  const [matchesOpen, setMatchesOpen] = useState(false);
 
   const isCritical = job.assigned_count === 0;
   const isStable = job.assigned_count >= job.needed_count;
@@ -467,9 +469,10 @@ function JobCard({ job, onEdit }: { job: JobWithClient; onEdit: (job: JobWithCli
             </span>
           </div>
 
-          {/* Primary action button */}
+          {/* Primary action button — opens candidate matches */}
           <button
             type="button"
+            onClick={() => setMatchesOpen(true)}
             className={`w-full py-2 px-3 rounded text-sm font-medium transition-colors ${buttonStyle}`}
           >
             {buttonLabel}
@@ -496,6 +499,14 @@ function JobCard({ job, onEdit }: { job: JobWithClient; onEdit: (job: JobWithCli
           )}
         </div>
       </div>
+
+      <JobMatchesSheet
+        open={matchesOpen}
+        jobId={matchesOpen ? job.id : null}
+        jobTitle={job.title}
+        clientName={job.clients.name}
+        onOpenChange={setMatchesOpen}
+      />
     </div>
   );
 }
