@@ -1,0 +1,181 @@
+import { NextRequest, NextResponse } from "next/server";
+import { createClient as createServerClient } from "@supabase/supabase-js";
+import { sendWhatsAppMessage } from "@/lib/whatsappService";
+
+// Vercel cron pings this URL once a day (see vercel.json).
+// Guarded by CRON_SECRET so it can't be hit anonymously from outside.
+
+function getAdmin() {
+  return createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!
+  );
+}
+
+interface RunSummary {
+  rule: string;
+  attempted: number;
+  succeeded: number;
+  failed: number;
+  details: string[];
+}
+
+const LOCK_TTL_MS = 24 * 60 * 60 * 1000;
+
+// ── Rule 1: Interview-tomorrow reminder ─────────────────────
+// Send a WhatsApp to every lead whose interview is tomorrow.
+// Idempotent per (lead_id, date) via cron_reminders.occurrence_key.
+async function runInterviewReminders(admin: ReturnType<typeof getAdmin>): Promise<RunSummary> {
+  const summary: RunSummary = {
+    rule: "interview_tomorrow",
+    attempted: 0,
+    succeeded: 0,
+    failed: 0,
+    details: [],
+  };
+
+  // Window: 22h..50h from now, so anything scheduled "tomorrow" lands here
+  // even with timezone slack.
+  const now = new Date();
+  const start = new Date(now.getTime() + 22 * 60 * 60 * 1000);
+  const end = new Date(now.getTime() + 50 * 60 * 60 * 1000);
+
+  const { data: leads } = await admin
+    .from("leads")
+    .select("id, name, phone, interview_date, interview_type")
+    .eq("status", "INTERVIEW_BOOKED")
+    .not("phone", "is", null)
+    .gte("interview_date", start.toISOString())
+    .lt("interview_date", end.toISOString());
+
+  if (!leads || leads.length === 0) {
+    summary.details.push("אין ראיונות מחר");
+    return summary;
+  }
+
+  for (const lead of leads) {
+    summary.attempted++;
+    const interviewAt = new Date(lead.interview_date as string);
+    const dateKey = interviewAt.toISOString().slice(0, 10);
+    const occurrenceKey = `interview_${dateKey}_${lead.id}`;
+
+    // Idempotency check
+    const { data: existing } = await admin
+      .from("cron_reminders")
+      .select("id")
+      .eq("occurrence_key", occurrenceKey)
+      .maybeSingle();
+    if (existing) {
+      summary.details.push(`כבר נשלח: ${lead.name}`);
+      continue;
+    }
+
+    const hh = interviewAt.getHours().toString().padStart(2, "0");
+    const mm = interviewAt.getMinutes().toString().padStart(2, "0");
+    const type = lead.interview_type === "video" ? "ראיון וידאו" : "ראיון פרונטלי";
+    const message =
+      `שלום ${lead.name},\n` +
+      `תזכורת אוטומטית: מחר בשעה ${hh}:${mm} יש לך ${type}.\n` +
+      `בהצלחה! 🎯`;
+
+    const sendRes = await sendWhatsAppMessage(lead.phone as string, message);
+
+    // Save the message to the lead's history too
+    if (sendRes.success) {
+      await admin.from("messages").insert({
+        lead_id: lead.id,
+        role: "recruiter",
+        content: message,
+      });
+    }
+
+    await admin.from("cron_reminders").insert({
+      lead_id: lead.id,
+      reminder_type: "interview_tomorrow",
+      occurrence_key: occurrenceKey,
+      payload: { interview_at: lead.interview_date, type: lead.interview_type },
+      success: sendRes.success,
+      error: sendRes.error ?? null,
+    });
+
+    if (sendRes.success) {
+      summary.succeeded++;
+      summary.details.push(`נשלח: ${lead.name} (${hh}:${mm})`);
+    } else {
+      summary.failed++;
+      summary.details.push(`כשל: ${lead.name} — ${sendRes.error}`);
+    }
+  }
+
+  return summary;
+}
+
+// ── Rule 2: Stale-claim cleanup ─────────────────────────────
+// Lazy filter already hides locked leads from the pool after 24h,
+// but here we actively NULL the DB so reports + queries stay clean.
+async function runStaleClaimCleanup(admin: ReturnType<typeof getAdmin>): Promise<RunSummary> {
+  const summary: RunSummary = {
+    rule: "stale_claim_cleanup",
+    attempted: 0,
+    succeeded: 0,
+    failed: 0,
+    details: [],
+  };
+
+  const cutoff = new Date(Date.now() - LOCK_TTL_MS).toISOString();
+  const { data, error } = await admin
+    .from("leads")
+    .update({ assigned_to: null, assigned_at: null })
+    .lt("assigned_at", cutoff)
+    .not("assigned_to", "is", null)
+    .select("id");
+
+  if (error) {
+    summary.failed = 1;
+    summary.details.push(`error: ${error.message}`);
+    return summary;
+  }
+
+  summary.attempted = data?.length ?? 0;
+  summary.succeeded = data?.length ?? 0;
+  summary.details.push(`שוחררו ${summary.succeeded} נעילות ישנות`);
+  return summary;
+}
+
+// ── Orchestrator ────────────────────────────────────────────
+async function runDailyCron() {
+  const admin = getAdmin();
+  const results = await Promise.all([
+    runInterviewReminders(admin),
+    runStaleClaimCleanup(admin),
+  ]);
+  return { ok: true, ran_at: new Date().toISOString(), rules: results };
+}
+
+function isAuthorized(req: NextRequest): boolean {
+  // Local / curl test: allow if no CRON_SECRET configured.
+  const secret = process.env.CRON_SECRET;
+  if (!secret) return true;
+  const header = req.headers.get("authorization") ?? "";
+  return header === `Bearer ${secret}`;
+}
+
+export async function GET(req: NextRequest) {
+  if (!isAuthorized(req)) {
+    return NextResponse.json({ ok: false, error: "unauthorized" }, { status: 401 });
+  }
+  try {
+    const result = await runDailyCron();
+    return NextResponse.json(result);
+  } catch (err) {
+    console.error("[cron/daily] fatal", err);
+    return NextResponse.json(
+      { ok: false, error: err instanceof Error ? err.message : "unknown" },
+      { status: 500 }
+    );
+  }
+}
+
+export async function POST(req: NextRequest) {
+  return GET(req);
+}
