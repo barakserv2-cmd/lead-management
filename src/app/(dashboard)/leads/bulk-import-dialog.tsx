@@ -2,7 +2,7 @@
 
 import { useState, useRef } from "react";
 import { useRouter } from "next/navigation";
-import * as XLSX from "xlsx";
+import type * as XLSX from "xlsx";
 import { bulkImportLeads, type BulkImportRow } from "./actions";
 
 // ── Bulletproof Block-style Excel Parser ─────────────────────
@@ -360,14 +360,14 @@ function detectEmployerRow(cells: string[]): string | null {
 
 // ── State-machine block parser ──────────────────────────────
 
-function parseWorkbook(wb: XLSX.WorkBook): BulkImportRow[] {
+function parseWorkbook(xlsx: typeof import("xlsx"), wb: XLSX.WorkBook): BulkImportRow[] {
   const rows: BulkImportRow[] = [];
   dummyPhoneCounter = 0;
 
   for (const sheetName of wb.SheetNames) {
     const sheet = wb.Sheets[sheetName];
 
-    const data = XLSX.utils.sheet_to_json<string[]>(sheet, {
+    const data = xlsx.utils.sheet_to_json<string[]>(sheet, {
       header: 1,
       raw: false,
       defval: "",
@@ -509,8 +509,9 @@ export function BulkImportDialog({ open, onClose, source }: BulkImportDialogProp
     setFileName(file.name);
 
     const buffer = await file.arrayBuffer();
-    const wb = XLSX.read(buffer, { type: "array" });
-    const parsed = parseWorkbook(wb);
+    const xlsx = await import("xlsx");
+    const wb = xlsx.read(buffer, { type: "array" });
+    const parsed = parseWorkbook(xlsx, wb);
 
     if (parsed.length === 0) {
       setRows([]);

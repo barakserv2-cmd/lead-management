@@ -5,49 +5,36 @@ import { LeadsPerDayChart, LeadsBySourceChart } from "./charts";
 export default async function DashboardPage() {
   const supabase = await createClient();
 
-  const { count: totalCount } = await supabase
-    .from("leads")
-    .select("*", { count: "exact", head: true });
-
-  const { count: newCount } = await supabase
-    .from("leads")
-    .select("*", { count: "exact", head: true })
-    .eq("status", LEAD_STATUSES.NEW_LEAD);
-
-  const { count: contactedCount } = await supabase
-    .from("leads")
-    .select("*", { count: "exact", head: true })
-    .eq("status", LEAD_STATUSES.CONTACTED);
-
-  const { count: screeningCount } = await supabase
-    .from("leads")
-    .select("*", { count: "exact", head: true })
-    .eq("status", LEAD_STATUSES.SCREENING_IN_PROGRESS);
-
-  const { count: interviewBookedCount } = await supabase
-    .from("leads")
-    .select("*", { count: "exact", head: true })
-    .eq("status", LEAD_STATUSES.INTERVIEW_BOOKED);
-
-  const { count: hiredCount } = await supabase
-    .from("leads")
-    .select("*", { count: "exact", head: true })
-    .eq("status", LEAD_STATUSES.HIRED);
-
-  const { count: rejectedCount } = await supabase
-    .from("leads")
-    .select("*", { count: "exact", head: true })
-    .eq("status", LEAD_STATUSES.REJECTED);
-
   // Leads per day — last 7 days
   const sevenDaysAgo = new Date();
   sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 6);
   const since = sevenDaysAgo.toISOString().split("T")[0];
 
-  const { data: recentLeads } = await supabase
-    .from("leads")
-    .select("created_at")
-    .gte("created_at", since);
+  // All dashboard queries run concurrently — one round-trip of wall time, not nine.
+  const statusCount = (status: string) =>
+    supabase.from("leads").select("*", { count: "exact", head: true }).eq("status", status);
+
+  const [
+    { count: totalCount },
+    { count: newCount },
+    { count: contactedCount },
+    { count: screeningCount },
+    { count: interviewBookedCount },
+    { count: hiredCount },
+    { count: rejectedCount },
+    { data: recentLeads },
+    { data: allLeads },
+  ] = await Promise.all([
+    supabase.from("leads").select("*", { count: "exact", head: true }),
+    statusCount(LEAD_STATUSES.NEW_LEAD),
+    statusCount(LEAD_STATUSES.CONTACTED),
+    statusCount(LEAD_STATUSES.SCREENING_IN_PROGRESS),
+    statusCount(LEAD_STATUSES.INTERVIEW_BOOKED),
+    statusCount(LEAD_STATUSES.HIRED),
+    statusCount(LEAD_STATUSES.REJECTED),
+    supabase.from("leads").select("created_at").gte("created_at", since),
+    supabase.from("leads").select("source"),
+  ]);
 
   const dayCountsMap: Record<string, number> = {};
   for (let i = 0; i < 7; i++) {
@@ -65,10 +52,6 @@ export default async function DashboardPage() {
   }));
 
   // Leads by source
-  const { data: allLeads } = await supabase
-    .from("leads")
-    .select("source");
-
   const sourceMap: Record<string, number> = {};
   for (const lead of allLeads ?? []) {
     const src = lead.source || "אחר";
