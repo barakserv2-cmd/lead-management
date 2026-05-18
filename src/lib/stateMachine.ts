@@ -27,7 +27,7 @@ export const ALL_STATUSES = Object.values(LeadStatus) as LeadStatusValue[];
 // ── Hebrew Labels ───────────────────────────────────────────
 
 export const STATUS_LABELS: Record<LeadStatusValue, string> = {
-  [LeadStatus.NEW_LEAD]: "ליד חדש",
+  [LeadStatus.NEW_LEAD]: "ממתין לנציג",
   [LeadStatus.CONTACTED]: "נוצר קשר",
   [LeadStatus.SCREENING_IN_PROGRESS]: "בסינון",
   [LeadStatus.FIT_FOR_INTERVIEW]: "מתאים לראיון",
