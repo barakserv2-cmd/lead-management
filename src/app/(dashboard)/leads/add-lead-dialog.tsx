@@ -58,7 +58,7 @@ export function AddLeadDialog() {
       </DialogTrigger>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>הוסף ליד חדש</DialogTitle>
+          <DialogTitle>הוסף ליד</DialogTitle>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-2">
