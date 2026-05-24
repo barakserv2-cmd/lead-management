@@ -33,22 +33,32 @@ export function AddLeadDialog() {
     }
 
     setSubmitting(true);
-    const { error } = await createLead({
-      name,
-      phone: (form.get("phone") as string).trim(),
-      job_title: (form.get("job_title") as string).trim(),
-      source: form.get("source") as string,
-      status: form.get("status") as string,
-    });
+    try {
+      const { error } = await createLead({
+        name,
+        phone: (form.get("phone") as string).trim(),
+        job_title: (form.get("job_title") as string).trim(),
+        source: form.get("source") as string,
+        status: form.get("status") as string,
+      });
 
-    if (error) {
-      toast.error(`שגיאה ביצירת ליד: ${error}`);
-    } else {
-      toast.success("ליד נוסף בהצלחה!");
-      setOpen(false);
-      router.refresh();
+      if (error) {
+        toast.error(`שגיאה ביצירת ליד: ${error}`);
+      } else {
+        toast.success("ליד נוסף בהצלחה!");
+        setOpen(false);
+        router.refresh();
+      }
+    } catch (err) {
+      // Defensive: if the server action throws (e.g. hits Vercel's 10s
+      // function timeout, network error, or any uncaught exception), make
+      // sure the submitting state resets so the button isn't permanently
+      // stuck on "שומר...".
+      const msg = err instanceof Error ? err.message : String(err);
+      toast.error(`שמירה נכשלה: ${msg}`);
+    } finally {
+      setSubmitting(false);
     }
-    setSubmitting(false);
   }
 
   return (

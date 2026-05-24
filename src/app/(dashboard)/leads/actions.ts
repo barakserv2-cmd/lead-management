@@ -176,8 +176,14 @@ export async function createLead(data: {
   source: string;
   status: string;
 }) {
+  const t0 = Date.now();
+  console.log("[createLead] start", { name: data.name, phone: data.phone });
   try {
-    const { data: lead, error } = await getSupabase()
+    const sb = getSupabase();
+    console.log(`[createLead] client built in ${Date.now() - t0}ms`);
+
+    const insertT0 = Date.now();
+    const { data: lead, error } = await sb
       .from("leads")
       .insert({
         name: data.name,
@@ -188,21 +194,15 @@ export async function createLead(data: {
       })
       .select()
       .single();
+    console.log(`[createLead] insert returned in ${Date.now() - insertT0}ms`, { error: error?.message });
 
     if (error) return { lead: null, error: error.message };
 
-    // The WhatsApp welcome flow used to run here as fire-and-forget but
-    // would keep the Next.js 16 server-action alive for the full Claude
-    // call (~15-20s, can hang). Re-add via /api/leads/[id]/welcome — TODO.
-    //
-    // `revalidatePath` is also temporarily off — suspected of contributing
-    // to the "stuck on שומר..." regression in Next 16. The client already
-    // calls `router.refresh()` after the success toast, which forces the
-    // page server component to re-render, so the list updates either way.
+    console.log(`[createLead] total ${Date.now() - t0}ms, returning success`);
     return { lead, error: null };
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
-    console.error("[createLead] failed:", msg);
+    console.error(`[createLead] threw after ${Date.now() - t0}ms:`, msg);
     return { lead: null, error: msg };
   }
 }
