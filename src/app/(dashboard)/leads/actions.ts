@@ -4,7 +4,6 @@ import crypto from "crypto";
 import { createClient as createServerClient } from "@supabase/supabase-js";
 import { revalidatePath } from "next/cache";
 import { LeadStatus } from "@/lib/stateMachine";
-import { sendWelcomeMessage } from "@/lib/whatsappWelcome";
 import { normalizeEmployerName, type NormalizationResult } from "@/lib/employerNormalization";
 
 function getSupabase() {
@@ -177,27 +176,37 @@ export async function createLead(data: {
   source: string;
   status: string;
 }) {
-  const { data: lead, error } = await getSupabase()
-    .from("leads")
-    .insert({
-      name: data.name,
-      phone: data.phone || null,
-      job_title: data.job_title || null,
-      source: data.source || "אחר",
-      status: data.status || LeadStatus.NEW_LEAD,
-    })
-    .select()
-    .single();
+  try {
+    const { data: lead, error } = await getSupabase()
+      .from("leads")
+      .insert({
+        name: data.name,
+        phone: data.phone || null,
+        job_title: data.job_title || null,
+        source: data.source || "אחר",
+        status: data.status || LeadStatus.NEW_LEAD,
+      })
+      .select()
+      .single();
 
-  if (error) return { lead: null, error: error.message };
+    if (error) return { lead: null, error: error.message };
 
-  // Fire-and-forget: send WhatsApp welcome if phone exists
-  if (lead.phone) {
-    sendWelcomeMessage(lead.id, lead.phone).catch(console.error);
+    // The WhatsApp welcome flow (NEW_LEAD → CONTACTED → SCREENING + AI reply)
+    // used to run here as `.catch()`-style fire-and-forget. In the Next.js 16
+    // server-actions runtime that pattern keeps the function alive for the
+    // full duration of the welcome chain (~15-20s on a good day, can hang on
+    // a slow Claude call), so the client's `await` never resolves and the
+    // submit button gets stuck on "שומר...". Triggered out-of-band via a
+    // fetch to /api/leads/[id]/welcome instead — see TODO below.
+    // TODO: add /api/leads/welcome route + fire a non-blocking POST here.
+
+    revalidatePath("/leads");
+    return { lead, error: null };
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error("[createLead] failed:", msg);
+    return { lead: null, error: msg };
   }
-
-  revalidatePath("/leads");
-  return { lead, error: null };
 }
 
 /**
