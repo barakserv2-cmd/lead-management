@@ -191,16 +191,14 @@ export async function createLead(data: {
 
     if (error) return { lead: null, error: error.message };
 
-    // The WhatsApp welcome flow (NEW_LEAD → CONTACTED → SCREENING + AI reply)
-    // used to run here as `.catch()`-style fire-and-forget. In the Next.js 16
-    // server-actions runtime that pattern keeps the function alive for the
-    // full duration of the welcome chain (~15-20s on a good day, can hang on
-    // a slow Claude call), so the client's `await` never resolves and the
-    // submit button gets stuck on "שומר...". Triggered out-of-band via a
-    // fetch to /api/leads/[id]/welcome instead — see TODO below.
-    // TODO: add /api/leads/welcome route + fire a non-blocking POST here.
-
-    revalidatePath("/leads");
+    // The WhatsApp welcome flow used to run here as fire-and-forget but
+    // would keep the Next.js 16 server-action alive for the full Claude
+    // call (~15-20s, can hang). Re-add via /api/leads/[id]/welcome — TODO.
+    //
+    // `revalidatePath` is also temporarily off — suspected of contributing
+    // to the "stuck on שומר..." regression in Next 16. The client already
+    // calls `router.refresh()` after the success toast, which forces the
+    // page server component to re-render, so the list updates either way.
     return { lead, error: null };
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
