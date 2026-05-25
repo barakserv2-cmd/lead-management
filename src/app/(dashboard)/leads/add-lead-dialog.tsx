@@ -15,7 +15,6 @@ import {
 } from "@/components/ui/dialog";
 import { LEAD_SOURCES } from "@/lib/constants";
 import { ALL_STATUSES, STATUS_LABELS, LeadStatus } from "@/lib/stateMachine";
-import { createLead } from "./actions";
 
 export function AddLeadDialog() {
   const router = useRouter();
@@ -34,26 +33,35 @@ export function AddLeadDialog() {
 
     setSubmitting(true);
     try {
-      const { error } = await createLead({
-        name,
-        phone: (form.get("phone") as string).trim(),
-        job_title: (form.get("job_title") as string).trim(),
-        source: form.get("source") as string,
-        status: form.get("status") as string,
+      // Plain fetch (NOT a server action) so Next.js 16's implicit RSC
+      // refresh of /leads can't reject this promise with an opaque
+      // "Server Components render" error after a successful insert.
+      const res = await fetch("/api/leads", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name,
+          phone: (form.get("phone") as string).trim(),
+          job_title: (form.get("job_title") as string).trim(),
+          source: form.get("source") as string,
+          status: form.get("status") as string,
+        }),
       });
 
-      if (error) {
-        toast.error(`שגיאה ביצירת ליד: ${error}`);
+      const data = (await res.json().catch(() => ({}))) as { error?: string };
+
+      if (!res.ok) {
+        toast.error(`שגיאה ביצירת ליד: ${data.error ?? res.statusText}`);
       } else {
         toast.success("ליד נוסף בהצלחה!");
         setOpen(false);
+        // router.refresh() is fire-and-forget — failures inside the new
+        // RSC payload surface as a console warning, not a thrown error,
+        // so the user still sees the success toast even if the list
+        // doesn't auto-update.
         router.refresh();
       }
     } catch (err) {
-      // Defensive: if the server action throws (e.g. hits Vercel's 10s
-      // function timeout, network error, or any uncaught exception), make
-      // sure the submitting state resets so the button isn't permanently
-      // stuck on "שומר...".
       const msg = err instanceof Error ? err.message : String(err);
       toast.error(`שמירה נכשלה: ${msg}`);
     } finally {

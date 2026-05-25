@@ -169,44 +169,6 @@ export async function completeReminder(reminderId: string) {
   return { error: error?.message ?? null };
 }
 
-export async function createLead(data: {
-  name: string;
-  phone: string;
-  job_title: string;
-  source: string;
-  status: string;
-}) {
-  const t0 = Date.now();
-  console.log("[createLead] start", { name: data.name, phone: data.phone });
-  try {
-    const sb = getSupabase();
-    console.log(`[createLead] client built in ${Date.now() - t0}ms`);
-
-    const insertT0 = Date.now();
-    const { data: lead, error } = await sb
-      .from("leads")
-      .insert({
-        name: data.name,
-        phone: data.phone || null,
-        job_title: data.job_title || null,
-        source: data.source || "אחר",
-        status: data.status || LeadStatus.NEW_LEAD,
-      })
-      .select()
-      .single();
-    console.log(`[createLead] insert returned in ${Date.now() - insertT0}ms`, { error: error?.message });
-
-    if (error) return { lead: null, error: error.message };
-
-    console.log(`[createLead] total ${Date.now() - t0}ms, returning success`);
-    return { lead, error: null };
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    console.error(`[createLead] threw after ${Date.now() - t0}ms:`, msg);
-    return { lead: null, error: msg };
-  }
-}
-
 /**
  * Server action: normalize an employer name against existing employers.
  * Called from client components to show normalization feedback.
