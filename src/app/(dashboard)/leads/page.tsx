@@ -65,30 +65,39 @@ export default async function LeadsPage({
 
   const supabase = await createClient();
 
-  // מונה "חדשים לטיפול" — מוצג בטאב בכל התצוגות
-  const { count: newLeadsCount } = await supabase
+  // כל הקריאות הבסיסיות במקביל — כל await טורי הוא סיבוב רשת מלא
+  // ל-Supabase, וזה מה שהאט את העמוד.
+  const newCountQuery = supabase
     .from("leads")
     .select("*", { count: "exact", head: true })
     .neq("is_candidate", false)
     .eq("status", LeadStatus.NEW_LEAD);
-  const newCount = newLeadsCount ?? 0;
 
   // ── תצוגת תיקיות (?view=folders) ────────────────────────────
   // סופרים את כל הלידים לפי מקור וסטטוס — בלי נעילת שיוך, כי זו
   // תצוגת מדידה, לא תור עבודה.
   if (!sourceParam && viewParam === "folders") {
     type Row = { source: string | null; status: string; hired_client: string | null };
-    const rows: Row[] = [];
-    for (let fromIdx = 0; ; fromIdx += 1000) {
-      const { data } = await supabase
-        .from("leads")
-        .select("source, status, hired_client")
-        .neq("is_candidate", false)
-        .order("id")
-        .range(fromIdx, fromIdx + 999);
-      rows.push(...((data ?? []) as Row[]));
-      if (!data || data.length < 1000) break;
-    }
+
+    // ספירה + מונה תור במקביל, ואז כל עמודי הסריקה במקביל (לא בטור)
+    const [{ count: newLeadsCount }, { count: totalRows }] = await Promise.all([
+      newCountQuery,
+      supabase.from("leads").select("*", { count: "exact", head: true }).neq("is_candidate", false),
+    ]);
+    const newCount = newLeadsCount ?? 0;
+
+    const pageCount = Math.max(1, Math.ceil((totalRows ?? 0) / 1000));
+    const pages = await Promise.all(
+      Array.from({ length: pageCount }, (_, i) =>
+        supabase
+          .from("leads")
+          .select("source, status, hired_client")
+          .neq("is_candidate", false)
+          .order("id")
+          .range(i * 1000, i * 1000 + 999)
+      )
+    );
+    const rows: Row[] = pages.flatMap((p) => (p.data ?? []) as Row[]);
 
     const bySource = new Map<string, SourceFolderStats>();
     for (const row of rows) {
@@ -144,7 +153,11 @@ export default async function LeadsPage({
   //   • assigned_to IS NULL (never claimed)
   //   • assigned_at < now() - 24h (stale claim → auto-released)
   //   • assigned_to = current user (mine)
-  const { data: { user } } = await supabase.auth.getUser();
+  const [{ data: { user } }, { count: newLeadsCount }] = await Promise.all([
+    supabase.auth.getUser(),
+    newCountQuery,
+  ]);
+  const newCount = newLeadsCount ?? 0;
   const myId = user?.id ?? "00000000-0000-0000-0000-000000000000";
   const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
   const ownershipFilter = `assigned_to.is.null,assigned_at.lt.${cutoff},assigned_to.eq.${myId}`;
