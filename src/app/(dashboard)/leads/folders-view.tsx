@@ -19,6 +19,14 @@ function FolderIcon({ className }: { className?: string }) {
   );
 }
 
+function ChevronLeftIcon() {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4">
+      <path d="m15 18-6-6 6-6" />
+    </svg>
+  );
+}
+
 function successColor(pct: number): { bar: string; text: string } {
   if (pct >= 15) return { bar: "bg-green-500", text: "text-green-700" };
   if (pct >= 5) return { bar: "bg-amber-500", text: "text-amber-700" };
@@ -36,72 +44,109 @@ const FOLDER_ACCENTS = [
   "text-orange-400",
 ];
 
+function FolderRow({
+  href,
+  icon,
+  label,
+  total,
+  newCount,
+  inProgress,
+  success,
+  closed,
+  bold,
+}: {
+  href: string;
+  icon: React.ReactNode;
+  label: string;
+  total: number;
+  newCount: number;
+  inProgress: number;
+  success: number;
+  closed: number;
+  bold?: boolean;
+}) {
+  const pct = total > 0 ? Math.round((success / total) * 100) : 0;
+  const colors = successColor(pct);
+  return (
+    <Link
+      href={href}
+      className={`flex items-center gap-4 px-4 py-3 hover:bg-cyan-50/40 transition-colors group ${bold ? "bg-slate-50/60" : ""}`}
+    >
+      {icon}
+
+      {/* שם + כמות */}
+      <div className="flex-1 min-w-0">
+        <div className={`text-sm text-gray-900 truncate ${bold ? "font-bold" : "font-semibold"}`}>{label}</div>
+        <div className="text-xs text-gray-500">{total} לידים</div>
+      </div>
+
+      {/* מונים */}
+      <div className="hidden sm:flex items-center gap-2 flex-shrink-0">
+        {newCount > 0 && (
+          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-100 text-blue-700">
+            {newCount} חדשים
+          </span>
+        )}
+        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-gray-100 text-gray-600">
+          {inProgress} בתהליך
+        </span>
+        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-green-50 text-green-700">
+          {success} התקבלו
+        </span>
+        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-gray-50 text-gray-400">
+          {closed} נסגרו
+        </span>
+      </div>
+
+      {/* אחוז הצלחה */}
+      <div className="flex items-center gap-2 w-36 flex-shrink-0">
+        <div className="flex-1 h-1.5 bg-gray-100 rounded-full overflow-hidden">
+          <div className={`h-full rounded-full ${colors.bar}`} style={{ width: `${Math.min(100, pct)}%` }} />
+        </div>
+        <span className={`text-xs font-bold w-9 text-left ${colors.text}`}>{pct}%</span>
+      </div>
+
+      <span className="text-gray-300 group-hover:text-cyan-500 transition-colors flex-shrink-0">
+        <ChevronLeftIcon />
+      </span>
+    </Link>
+  );
+}
+
 export function FoldersView({ folders }: { folders: SourceFolderStats[] }) {
-  const grandTotal = folders.reduce((s, f) => s + f.total, 0);
-  const grandSuccess = folders.reduce((s, f) => s + f.success, 0);
-  const grandPct = grandTotal > 0 ? Math.round((grandSuccess / grandTotal) * 100) : 0;
+  const grand = folders.reduce(
+    (acc, f) => ({
+      total: acc.total + f.total,
+      newCount: acc.newCount + f.newCount,
+      inProgress: acc.inProgress + f.inProgress,
+      success: acc.success + f.success,
+      closed: acc.closed + f.closed,
+    }),
+    { total: 0, newCount: 0, inProgress: 0, success: 0, closed: 0 }
+  );
 
   return (
-    <div>
-      {/* תיקיית "כל הלידים" */}
-      <Link
+    <div className="bg-white rounded-xl shadow-sm border border-gray-200 divide-y divide-gray-100 overflow-hidden">
+      <FolderRow
         href="/leads?source=__all__"
-        className="flex items-center gap-4 mb-5 p-4 bg-white rounded-xl shadow-sm border border-gray-200 hover:border-cyan-300 hover:shadow-md transition-all group"
-      >
-        <FolderIcon className="w-10 h-10 text-cyan-500 group-hover:scale-105 transition-transform" />
-        <div className="flex-1">
-          <div className="font-bold text-gray-900">כל הלידים</div>
-          <div className="text-xs text-gray-500 mt-0.5">{grandTotal} לידים · {grandSuccess} הצלחות</div>
-        </div>
-        <div className="text-left">
-          <div className={`text-lg font-bold ${successColor(grandPct).text}`}>{grandPct}%</div>
-          <div className="text-[10px] text-gray-400">הצלחה</div>
-        </div>
-      </Link>
-
-      {/* רשת תיקיות לפי גורם גיוס */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-        {folders.map((folder, i) => {
-          const pct = folder.total > 0 ? Math.round((folder.success / folder.total) * 100) : 0;
-          const colors = successColor(pct);
-          return (
-            <Link
-              key={folder.key}
-              href={`/leads?source=${encodeURIComponent(folder.key)}`}
-              className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 hover:border-cyan-300 hover:shadow-md transition-all group"
-            >
-              <div className="flex items-start justify-between mb-3">
-                <FolderIcon className={`w-9 h-9 ${FOLDER_ACCENTS[i % FOLDER_ACCENTS.length]} group-hover:scale-105 transition-transform`} />
-                {folder.newCount > 0 && (
-                  <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-100 text-blue-700">
-                    {folder.newCount} חדשים
-                  </span>
-                )}
-              </div>
-
-              <div className="font-bold text-gray-900 text-sm leading-snug mb-0.5">{folder.label}</div>
-              <div className="text-xs text-gray-500 mb-3">{folder.total} לידים</div>
-
-              {/* פס אחוז הצלחה */}
-              <div className="flex items-center gap-2 mb-2">
-                <div className="flex-1 h-1.5 bg-gray-100 rounded-full overflow-hidden">
-                  <div
-                    className={`h-full rounded-full ${colors.bar}`}
-                    style={{ width: `${Math.min(100, pct)}%` }}
-                  />
-                </div>
-                <span className={`text-xs font-bold ${colors.text}`}>{pct}%</span>
-              </div>
-
-              <div className="flex items-center gap-3 text-[10px] text-gray-500">
-                <span>✓ {folder.success} התקבלו</span>
-                <span>⋯ {folder.inProgress} בתהליך</span>
-                <span>✕ {folder.closed} נסגרו</span>
-              </div>
-            </Link>
-          );
-        })}
-      </div>
+        icon={<FolderIcon className="w-8 h-8 text-cyan-500 flex-shrink-0" />}
+        label="כל הלידים"
+        bold
+        {...grand}
+      />
+      {folders.map((folder, i) => (
+        <FolderRow
+          key={folder.key}
+          href={`/leads?source=${encodeURIComponent(folder.key)}`}
+          icon={<FolderIcon className={`w-8 h-8 flex-shrink-0 ${FOLDER_ACCENTS[i % FOLDER_ACCENTS.length]}`} />}
+          label={folder.label}
+          total={folder.total}
+          newCount={folder.newCount}
+          inProgress={folder.inProgress}
+          success={folder.success}
+          closed={folder.closed}
+        />
+      ))}
     </div>
   );
 }

@@ -42,12 +42,12 @@ export default async function LeadsPage({
   // סופרים את כל הלידים לפי מקור וסטטוס — בלי נעילת שיוך, כי זו
   // תצוגת מדידה, לא תור עבודה.
   if (!sourceParam) {
-    type Row = { source: string | null; status: string };
+    type Row = { source: string | null; status: string; hired_client: string | null };
     const rows: Row[] = [];
     for (let fromIdx = 0; ; fromIdx += 1000) {
       const { data } = await supabase
         .from("leads")
-        .select("source, status")
+        .select("source, status, hired_client")
         .neq("is_candidate", false)
         .order("id")
         .range(fromIdx, fromIdx + 999);
@@ -65,7 +65,9 @@ export default async function LeadsPage({
         bySource.set(key, stats);
       }
       stats.total++;
-      if (SUCCESS_STATUSES.has(row.status)) stats.success++;
+      // הצלחה = סטטוס התקבל/התחיל, או מעסיק רשום — השמות ההיסטוריות
+      // (ייבוא מצבת) רשומות דרך hired_client בלי מעבר סטטוס.
+      if (SUCCESS_STATUSES.has(row.status) || row.hired_client) stats.success++;
       else if (NEW_STATUSES.has(row.status)) stats.newCount++;
       else if (CLOSED_STATUSES.has(row.status)) stats.closed++;
       else stats.inProgress++;

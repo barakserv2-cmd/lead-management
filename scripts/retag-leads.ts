@@ -2,7 +2,7 @@
 // הרצה: npx tsx retag-leads.ts [--apply]  (בלי --apply = dry run)
 import { readFileSync } from "fs";
 import { createClient } from "@supabase/supabase-js";
-import { detectSource } from "C:/Users/Barak/Projects/lead-management/src/lib/gmail";
+import { detectSource } from "../src/lib/gmail";
 
 // טעינת env מהפרויקט
 const envFile = readFileSync("C:/Users/Barak/Projects/lead-management/.env.local", "utf-8")
