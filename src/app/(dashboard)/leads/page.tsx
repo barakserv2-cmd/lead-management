@@ -166,7 +166,19 @@ export default async function LeadsPage({
     ? `name.ilike.%${searchQuery}%,phone.ilike.%${searchQuery}%,job_title.ilike.%${searchQuery}%`
     : null;
 
-  let dataQuery = supabase.from("leads").select("*").neq("is_candidate", false).or(ownershipFilter);
+  // כל העמודות חוץ מגוף המייל המקורי — הוא שוקל עשרות KB לליד,
+  // אף רכיב בעמוד לא משתמש בו, והוא הכפיל את זמן הטעינה.
+  const LEAD_LIST_COLUMNS =
+    "id, created_at, name, phone, email, location, experience, age, job_title, source, status, sub_status, " +
+    "assigned_to, assigned_at, notes, original_email_id, ai_confidence, financial_status, client_type, " +
+    "start_date, recruitment_status, rejection_reason, hired_client, hired_position, arrival_date, " +
+    "interview_date, interview_type, interview_notes, followup_notes, screening_score, human_approval, " +
+    "tags, preferences, is_candidate, needs_attention, needs_attention_at, attention_reason, " +
+    "needs_human_attention, human_attention_reason, human_attention_raised_at, screening_motivation_score, " +
+    "screening_fit_score, screening_availability_score, screening_experience_score, extracted_availability, " +
+    "extracted_salary_expectation, extracted_location_pref, extracted_interests";
+
+  let dataQuery = supabase.from("leads").select(LEAD_LIST_COLUMNS).neq("is_candidate", false).or(ownershipFilter);
   if (searchFilter) dataQuery = dataQuery.or(searchFilter);
   if (effectiveStatusFilter.length > 0) dataQuery = dataQuery.in("status", effectiveStatusFilter);
   if (tagFilter.length > 0) dataQuery = dataQuery.overlaps("tags", tagFilter);
@@ -191,7 +203,8 @@ export default async function LeadsPage({
     tagsRpc,
   ]);
 
-  const typedLeads = (leads ?? []) as Lead[];
+  // supabase-js לא מצליח לנתח את מחרוזת העמודות הארוכה — הידוע לנו טוב ממנו
+  const typedLeads = (leads ?? []) as unknown as Lead[];
   const totalCount = count ?? 0;
   const totalPages = Math.max(1, Math.ceil(totalCount / PAGE_SIZE));
 
