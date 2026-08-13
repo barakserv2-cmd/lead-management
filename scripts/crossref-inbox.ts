@@ -124,7 +124,24 @@ async function main() {
               original_email_from: best.from,
             })
             .eq("id", lead.id);
-          if (error) throw new Error(error.message);
+          if (error) {
+            // כפילות מועמד: ליד אחר כבר מחזיק את המייל הזה. מעדכנים
+            // את המקור בלבד; משאירים original_email_id פנוי כדי לא
+            // להפר את אילוץ הייחודיות.
+            if (error.message.includes("leads_original_email_id_key")) {
+              const { error: fallbackErr } = await supabase
+                .from("leads")
+                .update({
+                  source: best.source,
+                  original_email_subject: best.subject,
+                  original_email_from: best.from,
+                })
+                .eq("id", lead.id);
+              if (fallbackErr) throw new Error(fallbackErr.message);
+            } else {
+              throw new Error(error.message);
+            }
+          }
         }
       }
     } catch (e) {
