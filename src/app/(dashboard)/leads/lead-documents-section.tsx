@@ -7,10 +7,8 @@ import {
   getLeadDocuments,
   deleteLeadDocument,
   signLeadDocument,
-  LEAD_DOC_TYPES,
-  type LeadDocument,
-  type LeadDocType,
 } from "@/lib/actions/leadDocuments";
+import { LEAD_DOC_TYPES, type LeadDocument, type LeadDocType } from "@/lib/leadDocTypes";
 
 const KNOWN_TYPES: LeadDocType[] = [
   "form_101",

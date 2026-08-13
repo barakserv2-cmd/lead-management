@@ -166,17 +166,16 @@ export default async function LeadsPage({
     ? `name.ilike.%${searchQuery}%,phone.ilike.%${searchQuery}%,job_title.ilike.%${searchQuery}%`
     : null;
 
-  // כל העמודות חוץ מגוף המייל המקורי — הוא שוקל עשרות KB לליד,
-  // אף רכיב בעמוד לא משתמש בו, והוא הכפיל את זמן הטעינה.
+  // רק השדות שהטבלה, הקנבן, כרטיס הליד והחלונות הקטנים באמת קוראים
+  // (מיפוי מ-13/08/2026 — grep על lead.* בכל רכיבי העמוד). שדות כבדים
+  // שאינם בשימוש (גוף מייל, preferences, שדות ניהול) לא נמשכים בכלל.
   const LEAD_LIST_COLUMNS =
-    "id, created_at, name, phone, email, location, experience, age, job_title, source, status, sub_status, " +
-    "assigned_to, assigned_at, notes, original_email_id, ai_confidence, financial_status, client_type, " +
-    "start_date, recruitment_status, rejection_reason, hired_client, hired_position, arrival_date, " +
-    "interview_date, interview_type, interview_notes, followup_notes, screening_score, human_approval, " +
-    "tags, preferences, is_candidate, needs_attention, needs_attention_at, attention_reason, " +
-    "needs_human_attention, human_attention_reason, human_attention_raised_at, screening_motivation_score, " +
+    "id, created_at, name, phone, email, age, location, experience, job_title, source, status, sub_status, " +
+    "rejection_reason, hired_client, hired_position, start_date, arrival_date, interview_date, " +
+    "interview_notes, followup_notes, notes, tags, screening_score, screening_motivation_score, " +
     "screening_fit_score, screening_availability_score, screening_experience_score, extracted_availability, " +
-    "extracted_salary_expectation, extracted_location_pref, extracted_interests";
+    "extracted_salary_expectation, extracted_location_pref, extracted_interests, needs_attention, " +
+    "attention_reason, needs_human_attention, human_attention_reason, human_attention_raised_at";
 
   let dataQuery = supabase.from("leads").select(LEAD_LIST_COLUMNS).neq("is_candidate", false).or(ownershipFilter);
   if (searchFilter) dataQuery = dataQuery.or(searchFilter);
