@@ -22,10 +22,36 @@ const CLOSED_STATUSES = new Set<string>([
   LeadStatus.NOT_SUITABLE,
 ]);
 
+// טאבים עליונים: תור עבודה (ברירת מחדל) / תיקיות מדידה / כל הלידים
+function LeadsTabs({ active, newCount }: { active: "queue" | "folders" | "all"; newCount: number }) {
+  const tabs = [
+    { key: "queue" as const, href: "/leads", label: `חדשים לטיפול${newCount > 0 ? ` (${newCount})` : ""}` },
+    { key: "folders" as const, href: "/leads?view=folders", label: "תיקיות לפי גורם גיוס" },
+    { key: "all" as const, href: "/leads?source=__all__", label: "כל הלידים" },
+  ];
+  return (
+    <div className="flex items-center gap-1 mb-5 bg-gray-100 rounded-lg p-1 w-fit">
+      {tabs.map((tab) => (
+        <Link
+          key={tab.key}
+          href={tab.href}
+          className={`px-4 py-2 rounded-md text-sm font-semibold transition-colors ${
+            active === tab.key
+              ? "bg-white text-gray-900 shadow-sm"
+              : "text-gray-500 hover:text-gray-800"
+          } ${tab.key === "queue" && newCount > 0 && active !== "queue" ? "text-blue-600" : ""}`}
+        >
+          {tab.label}
+        </Link>
+      ))}
+    </div>
+  );
+}
+
 export default async function LeadsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ page?: string; q?: string; statuses?: string; tags?: string; source?: string }>;
+  searchParams: Promise<{ page?: string; q?: string; statuses?: string; tags?: string; source?: string; view?: string }>;
 }) {
   const params = await searchParams;
   const currentPage = Math.max(1, parseInt(params.page ?? "1", 10) || 1);
@@ -33,15 +59,24 @@ export default async function LeadsPage({
   const statusFilter = params.statuses?.split(",").filter(Boolean) ?? [];
   const tagFilter = params.tags?.split(",").filter(Boolean) ?? [];
   const sourceParam = params.source ?? null;
+  const viewParam = params.view ?? null;
   const from = (currentPage - 1) * PAGE_SIZE;
   const to = from + PAGE_SIZE - 1;
 
   const supabase = await createClient();
 
-  // ── תצוגת תיקיות (ברירת מחדל, בלי ?source) ──────────────────
+  // מונה "חדשים לטיפול" — מוצג בטאב בכל התצוגות
+  const { count: newLeadsCount } = await supabase
+    .from("leads")
+    .select("*", { count: "exact", head: true })
+    .neq("is_candidate", false)
+    .eq("status", LeadStatus.NEW_LEAD);
+  const newCount = newLeadsCount ?? 0;
+
+  // ── תצוגת תיקיות (?view=folders) ────────────────────────────
   // סופרים את כל הלידים לפי מקור וסטטוס — בלי נעילת שיוך, כי זו
   // תצוגת מדידה, לא תור עבודה.
-  if (!sourceParam) {
+  if (!sourceParam && viewParam === "folders") {
     type Row = { source: string | null; status: string; hired_client: string | null };
     const rows: Row[] = [];
     for (let fromIdx = 0; ; fromIdx += 1000) {
@@ -84,16 +119,25 @@ export default async function LeadsPage({
           </div>
           <AddLeadDialog />
         </div>
+        <LeadsTabs active="folders" newCount={newCount} />
         <FoldersView folders={folders} />
       </div>
     );
   }
 
-  // ── תצוגת תיקייה בודדת (?source=...) ────────────────────────
+  // ── תור עבודה (ברירת מחדל) או תיקייה בודדת (?source=...) ────
+  // תור העבודה: כל הלידים בסטטוס "ממתין לנציג", החדש ביותר ראשון.
+  // ליד נעלם מהתור רק כשמשנים לו סטטוס, וליד שממתין יותר מדי מסומן
+  // בכתום/אדום — אז שום דבר לא מתפספס גם כשיש צבר.
+  const isQueue = !sourceParam;
+  const effectiveStatusFilter =
+    isQueue && statusFilter.length === 0 ? [LeadStatus.NEW_LEAD as string] : statusFilter;
+
   const sourceFilter =
-    sourceParam === "__all__" ? null : sourceParam === "__none__" ? "__none__" : sourceParam;
-  const folderLabel =
-    sourceParam === "__all__" ? "כל הלידים" : sourceParam === "__none__" ? "ללא מקור" : sourceParam;
+    !sourceParam || sourceParam === "__all__" ? null : sourceParam === "__none__" ? "__none__" : sourceParam;
+  const folderLabel = isQueue
+    ? "חדשים לטיפול"
+    : sourceParam === "__all__" ? "כל הלידים" : sourceParam === "__none__" ? "ללא מקור" : sourceParam!;
 
   // ── Assignment lock filter ──────────────────────────────────
   // A lead is visible in the pool if any of:
@@ -111,7 +155,7 @@ export default async function LeadsPage({
 
   let dataQuery = supabase.from("leads").select("*").neq("is_candidate", false).or(ownershipFilter);
   if (searchFilter) dataQuery = dataQuery.or(searchFilter);
-  if (statusFilter.length > 0) dataQuery = dataQuery.in("status", statusFilter);
+  if (effectiveStatusFilter.length > 0) dataQuery = dataQuery.in("status", effectiveStatusFilter);
   if (tagFilter.length > 0) dataQuery = dataQuery.overlaps("tags", tagFilter);
   if (sourceFilter === "__none__") dataQuery = dataQuery.is("source", null);
   else if (sourceFilter) dataQuery = dataQuery.eq("source", sourceFilter);
@@ -119,7 +163,7 @@ export default async function LeadsPage({
 
   let countQuery = supabase.from("leads").select("*", { count: "exact", head: true }).neq("is_candidate", false).or(ownershipFilter);
   if (searchFilter) countQuery = countQuery.or(searchFilter);
-  if (statusFilter.length > 0) countQuery = countQuery.in("status", statusFilter);
+  if (effectiveStatusFilter.length > 0) countQuery = countQuery.in("status", effectiveStatusFilter);
   if (tagFilter.length > 0) countQuery = countQuery.overlaps("tags", tagFilter);
   if (sourceFilter === "__none__") countQuery = countQuery.is("source", null);
   else if (sourceFilter) countQuery = countQuery.eq("source", sourceFilter);
@@ -140,19 +184,23 @@ export default async function LeadsPage({
 
   const allTags = ((tagsData as string[] | null) ?? []).slice().sort();
 
+  const isNamedFolder = !isQueue && sourceParam !== "__all__";
+
   return (
     <div>
       <div className="flex items-center justify-between mb-6">
         <div className="flex items-center gap-3">
-          <Link
-            href="/leads"
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-gray-200 bg-white text-xs font-medium text-gray-600 hover:border-cyan-300 hover:text-cyan-700 transition-colors"
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-3.5 h-3.5">
-              <path d="m9 18 6-6-6-6" />
-            </svg>
-            כל התיקיות
-          </Link>
+          {isNamedFolder && (
+            <Link
+              href="/leads?view=folders"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-gray-200 bg-white text-xs font-medium text-gray-600 hover:border-cyan-300 hover:text-cyan-700 transition-colors"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-3.5 h-3.5">
+                <path d="m9 18 6-6-6-6" />
+              </svg>
+              כל התיקיות
+            </Link>
+          )}
           <h1 className="text-2xl font-bold">{folderLabel}</h1>
         </div>
         <div className="flex items-center gap-3">
@@ -160,6 +208,12 @@ export default async function LeadsPage({
           <AddLeadDialog />
         </div>
       </div>
+      {!isNamedFolder && <LeadsTabs active={isQueue ? "queue" : "all"} newCount={newCount} />}
+      {isQueue && (
+        <p className="text-sm text-gray-500 -mt-2 mb-4">
+          כל ליד חדש שנכנס מופיע כאן למעלה. טיפלת? שנה סטטוס והוא יורד מהרשימה. כתום/אדום = ממתין יותר מדי.
+        </p>
+      )}
       <Suspense fallback={null}>
         <SearchInput />
       </Suspense>

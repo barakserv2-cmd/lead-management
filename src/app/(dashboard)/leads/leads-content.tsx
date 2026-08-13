@@ -65,6 +65,24 @@ function formatShortDate(dateStr: string) {
   return day + " " + month;
 }
 
+// ליד חדש שממתין: עד 3 שעות רגיל, עד 24 שעות כתום, מעבר לזה אדום —
+// כדי ששום ליד לא יירקב בתור בלי שרואים את זה.
+function waitingChip(lead: Lead): { classes: string; label: string } {
+  const base = formatShortDate(lead.created_at);
+  if (lead.status !== "NEW_LEAD") {
+    return { classes: "bg-gray-100 text-gray-600", label: base };
+  }
+  const hours = (Date.now() - new Date(lead.created_at).getTime()) / 3_600_000;
+  if (hours >= 24) {
+    const days = Math.floor(hours / 24);
+    return { classes: "bg-red-100 text-red-700 font-bold", label: `ממתין ${days === 1 ? "יום" : days + " ימים"}` };
+  }
+  if (hours >= 3) {
+    return { classes: "bg-amber-100 text-amber-700 font-semibold", label: `ממתין ${Math.floor(hours)} שע׳` };
+  }
+  return { classes: "bg-blue-50 text-blue-600", label: base };
+}
+
 export function LeadsContent({ leads }: { leads: Lead[] }) {
   const [openLeadIds, setOpenLeadIds] = useState<string[]>([]);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -217,9 +235,14 @@ export function LeadsContent({ leads }: { leads: Lead[] }) {
                     </span>
                   </td>
                   <td className="px-4 py-3">
-                    <span className="inline-block px-2.5 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-600">
-                      {formatShortDate(lead.created_at)}
-                    </span>
+                    {(() => {
+                      const chip = waitingChip(lead);
+                      return (
+                        <span className={"inline-block px-2.5 py-1 rounded-full text-xs font-medium " + chip.classes} title={formatShortDate(lead.created_at)}>
+                          {chip.label}
+                        </span>
+                      );
+                    })()}
                   </td>
                   <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
                     <div className="flex items-center gap-1">
