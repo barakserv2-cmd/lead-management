@@ -3,8 +3,6 @@
 import { useState } from "react";
 import type { Lead } from "@/types/leads";
 import { StatusSelect } from "./status-select";
-import { ViewToggle } from "./view-toggle";
-import { BoardView } from "./board-view";
 import { LeadWindowManager } from "./lead-mini-windows";
 import { BulkWhatsAppDialog } from "./bulk-whatsapp-dialog";
 import { BulkImportDialog } from "./bulk-import-dialog";
@@ -126,23 +124,6 @@ export function LeadsContent({ leads }: { leads: Lead[] }) {
   const selectedRecipients = leads
     .filter((l) => selectedIds.has(l.id) && l.phone)
     .map((l) => ({ name: l.name, phone: formatPhone(l.phone)! }));
-
-  const boardLeads = leads.map((l) => ({
-    id: l.id,
-    name: l.name,
-    phone: l.phone,
-    source: l.source,
-    status: l.status,
-    sub_status: l.sub_status,
-    rejection_reason: l.rejection_reason,
-    hired_client: l.hired_client,
-    hired_position: l.hired_position,
-    interview_date: l.interview_date,
-    interview_notes: l.interview_notes,
-    followup_notes: l.followup_notes,
-    screening_score: l.screening_score ?? null,
-    start_date: l.start_date ?? null,
-  }));
 
   const tableView = (
     <div className="bg-white rounded-xl shadow-sm border overflow-hidden">
@@ -333,10 +314,7 @@ export function LeadsContent({ leads }: { leads: Lead[] }) {
         </Button>
       </div>
 
-      <ViewToggle
-        listView={tableView}
-        boardView={<BoardView leads={boardLeads} onSelectLead={(id) => openLeadWindow(id)} />}
-      />
+      <div className="mt-6">{tableView}</div>
       <LeadWindowManager
         leads={leads}
         openLeadIds={openLeadIds}
