@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { changeLeadStatus } from "@/lib/actions/changeLeadStatus";
+import { changeLeadStatus } from "@/lib/changeLeadStatusClient";
 import { calcTimer, timerColor } from "@/lib/employmentTimer";
 import {
   LeadStatus,

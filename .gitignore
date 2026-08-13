@@ -46,3 +46,5 @@ next-env.d.ts
 nul
 response.txt
 supabase/.temp/
+
+.vercel

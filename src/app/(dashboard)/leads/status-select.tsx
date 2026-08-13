@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { changeLeadStatus } from "@/lib/actions/changeLeadStatus";
+import { changeLeadStatus } from "@/lib/changeLeadStatusClient";
 import { updateLeadSubStatus } from "./actions";
 import {
   LeadStatus,
