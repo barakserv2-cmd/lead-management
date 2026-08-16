@@ -43,13 +43,24 @@ export async function POST(req: NextRequest) {
     // Convert chatId to local phone for DB lookup
     const phone = phoneFromChatId(chatId);
 
-    // Look up lead by phone
+    // בדאטהבייס יש טלפונים בכמה פורמטים (0521234567 / 052-1234567 /
+    // +972521234567) — מחפשים את כולם, אחרת לידים עם מקף לא נמצאים.
+    const phoneVariants = [
+      phone,
+      `${phone.slice(0, 3)}-${phone.slice(3)}`,
+      `+972${phone.slice(1)}`,
+      `972${phone.slice(1)}`,
+    ];
+
+    // Look up lead by phone (newest first if duplicates exist)
     const supabase = getSupabase();
-    const { data: lead } = await supabase
+    const { data: leadRows } = await supabase
       .from("leads")
       .select("id, status, name, location, job_title")
-      .eq("phone", phone)
-      .single();
+      .in("phone", phoneVariants)
+      .order("created_at", { ascending: false })
+      .limit(1);
+    const lead = leadRows?.[0] ?? null;
 
     // No lead found — ignore
     if (!lead) {

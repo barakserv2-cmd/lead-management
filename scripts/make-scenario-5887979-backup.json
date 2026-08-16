@@ -1,0 +1,10 @@
+{
+  "_comment": "גיבוי blueprint של תרחיש Make 5887979 (Noam WhatsApp Recruitment Agent) לפני הוספת מודול העברה ל-CRM — 13/08/2026. לשחזור: scenarios_update עם ה-flow הזה.",
+  "name": "Noam WhatsApp Recruitment Agent",
+  "flow_summary": [
+    { "id": 1, "module": "gateway:CustomWebHook", "hook": 3109168, "note": "GreenAPI webhook v4" },
+    { "id": 2, "module": "http:ActionSendData", "note": "Call Claude (Anthropic) — filter: only private chats (chatId not contains @g.us); system prompt של נועם + לוח משרות", "url": "https://api.anthropic.com/v1/messages" },
+    { "id": 3, "module": "http:ActionSendData", "note": "Send reply via GreenAPI sendMessage", "url": "https://api.green-api.com/waInstance7103508839/sendMessage/***" }
+  ],
+  "restore_note": "ה-blueprint המלא שמור בטרנסקריפט של השיחה מ-13/08/2026 (scenarios_get 5887979). השינוי שבוצע: הוספת מודול 4 בסוף ה-flow — HTTP POST של ה-payload המקורי אל https://lead-management-umber.vercel.app/api/whatsapp. להסרה: למחוק את מודול 4 מה-flow."
+}
