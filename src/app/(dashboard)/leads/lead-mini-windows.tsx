@@ -179,16 +179,18 @@ function LeadDetailsForm({ lead }: { lead: Lead }) {
 function LeadMiniWindow({
   lead,
   minimized,
+  initialTab = "details",
   onClose,
   onToggleMinimize,
 }: {
   lead: Lead;
   minimized: boolean;
+  initialTab?: "details" | "chat";
   onClose: () => void;
   onToggleMinimize: () => void;
 }) {
   const router = useRouter();
-  const [tab, setTab] = useState<"details" | "chat">("details");
+  const [tab, setTab] = useState<"details" | "chat">(initialTab);
   const statusColor = STATUS_COLORS[lead.status as LeadStatusValue];
   const statusLabel = STATUS_LABELS[lead.status as LeadStatusValue] ?? lead.status;
   const intlPhone = formatPhone(lead.phone);
@@ -311,11 +313,14 @@ const MAX_WINDOWS = 4;
 export function LeadWindowManager({
   leads,
   openLeadIds,
+  chatFirstIds,
   onOpenLead,
   onCloseLead,
 }: {
   leads: Lead[];
   openLeadIds: string[];
+  // חלונות שנפתחו בגלל הודעה נכנסת — נפתחים ישר על טאב הצ'אט
+  chatFirstIds?: Set<string>;
   onOpenLead: (id: string) => void;
   onCloseLead: (id: string) => void;
 }) {
@@ -356,6 +361,7 @@ export function LeadWindowManager({
           <LeadMiniWindow
             lead={lead}
             minimized={minimizedIds.has(lead.id)}
+            initialTab={chatFirstIds?.has(lead.id) ? "chat" : "details"}
             onClose={() => handleClose(lead.id)}
             onToggleMinimize={() => toggleMinimize(lead.id)}
           />

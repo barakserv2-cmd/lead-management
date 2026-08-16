@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { toast } from "sonner";
 import type { Lead } from "@/types/leads";
 import { StatusSelect } from "./status-select";
 import { LeadWindowManager } from "./lead-mini-windows";
@@ -81,12 +82,21 @@ function waitingChip(lead: Lead): { classes: string; label: string } {
   return { classes: "bg-blue-50 text-blue-600", label: base };
 }
 
+const INCOMING_POLL_MS = 7000;
+
 export function LeadsContent({ leads }: { leads: Lead[] }) {
   const [openLeadIds, setOpenLeadIds] = useState<string[]>([]);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [waDialogOpen, setWaDialogOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
   const [panelLeadId, setPanelLeadId] = useState<string | null>(null);
+
+  // הקפצת צ'אט על הודעה נכנסת: לידים שהגיעו מהפולר (גם אם אינם בעמוד
+  // הנוכחי), וסימון חלונות שנפתחו בגלל הודעה — ייפתחו על טאב הצ'אט.
+  const [incomingLeads, setIncomingLeads] = useState<Lead[]>([]);
+  const [chatFirstIds, setChatFirstIds] = useState<Set<string>>(new Set());
+  const sinceRef = useRef<string>(new Date().toISOString());
+  const seenMsgIds = useRef<Set<string>>(new Set());
 
   const panelLead = panelLeadId ? leads.find((l) => l.id === panelLeadId) ?? null : null;
 
@@ -97,6 +107,49 @@ export function LeadsContent({ leads }: { leads: Lead[] }) {
       return [...prev, id];
     });
   }
+
+  // ── פולר הודעות נכנסות: מקפיץ את חלון הצ'אט של המועמד ─────────
+  useEffect(() => {
+    let cancelled = false;
+
+    async function poll() {
+      try {
+        const res = await fetch(`/api/leads/incoming?since=${encodeURIComponent(sinceRef.current)}`);
+        if (!res.ok) return;
+        const data = (await res.json()) as {
+          items?: { message: { id: string; content: string; created_at: string }; lead: Lead }[];
+        };
+        if (cancelled || !data.items?.length) return;
+
+        for (const item of data.items) {
+          if (seenMsgIds.current.has(item.message.id)) continue;
+          seenMsgIds.current.add(item.message.id);
+          sinceRef.current = item.message.created_at;
+
+          // ליד שלא נמצא בעמוד הנוכחי — נוסיף אותו למאגר החלונות
+          setIncomingLeads((prev) =>
+            prev.some((l) => l.id === item.lead.id) || leads.some((l) => l.id === item.lead.id)
+              ? prev
+              : [...prev, item.lead]
+          );
+          setChatFirstIds((prev) => new Set(prev).add(item.lead.id));
+          openLeadWindow(item.lead.id);
+          toast.info(`הודעה חדשה מ${item.lead.name}`, {
+            description: item.message.content.slice(0, 60),
+          });
+        }
+      } catch {
+        // רשת נפלה — ננסה בסבב הבא
+      }
+    }
+
+    const interval = setInterval(poll, INCOMING_POLL_MS);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [leads]);
 
   function closeLeadWindow(id: string) {
     setOpenLeadIds((prev) => prev.filter((x) => x !== id));
@@ -316,8 +369,9 @@ export function LeadsContent({ leads }: { leads: Lead[] }) {
 
       <div className="mt-6">{tableView}</div>
       <LeadWindowManager
-        leads={leads}
+        leads={[...leads, ...incomingLeads]}
         openLeadIds={openLeadIds}
+        chatFirstIds={chatFirstIds}
         onOpenLead={openLeadWindow}
         onCloseLead={closeLeadWindow}
       />
