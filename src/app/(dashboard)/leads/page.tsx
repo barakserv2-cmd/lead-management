@@ -192,7 +192,10 @@ export default async function LeadsPage({
   if (tagFilter.length > 0) dataQuery = dataQuery.overlaps("tags", tagFilter);
   if (sourceFilter === "__none__") dataQuery = dataQuery.is("source", null);
   else if (sourceFilter) dataQuery = dataQuery.eq("source", sourceFilter);
-  dataQuery = dataQuery.order("created_at", { ascending: false }).range(from, to);
+  // Sort by true arrival time: email leads use their email send date, others
+  // fall back to created_at (both via the generated effective_at column). This
+  // keeps a backlog email ingested today from jumping above genuinely newer leads.
+  dataQuery = dataQuery.order("effective_at", { ascending: false }).range(from, to);
 
   // Fetch all unique tags via a Postgres function (single value back, no
   // scanning of every row in JS). Cached via Next.js fetch dedup.

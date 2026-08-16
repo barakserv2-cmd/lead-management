@@ -128,6 +128,13 @@ async function handleFetchEmails() {
           original_email_body: email.body,
           original_email_from: email.from,
           original_email_subject: email.subject,
+          // Real send date from the email's Date header — leads are sorted by
+          // this (via effective_at), so an old backlog email doesn't float to
+          // the top just because it was ingested today.
+          email_date:
+            email.date && !isNaN(new Date(email.date).getTime())
+              ? new Date(email.date).toISOString()
+              : null,
           ai_confidence: aiResult.confidence,
           notes: null,
           assigned_to: null,
