@@ -153,12 +153,15 @@ export default async function LeadsPage({
   //   • assigned_to IS NULL (never claimed)
   //   • assigned_at < now() - 24h (stale claim → auto-released)
   //   • assigned_to = current user (mine)
-  const [{ data: { user } }, { count: newLeadsCount }] = await Promise.all([
-    supabase.auth.getUser(),
+  // getSession קורא את ה-cookie מקומית בלי סיבוב רשת ל-Supabase —
+  // בטוח כאן כי ה-proxy (middleware) כבר אימת את המשתמש מול השרת
+  // בכל בקשה. auth.getUser() בעמוד הכפיל את זמן הטעינה לחינם.
+  const [{ data: { session } }, { count: newLeadsCount }] = await Promise.all([
+    supabase.auth.getSession(),
     newCountQuery,
   ]);
   const newCount = newLeadsCount ?? 0;
-  const myId = user?.id ?? "00000000-0000-0000-0000-000000000000";
+  const myId = session?.user?.id ?? "00000000-0000-0000-0000-000000000000";
   const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
   const ownershipFilter = `assigned_to.is.null,assigned_at.lt.${cutoff},assigned_to.eq.${myId}`;
 
@@ -177,7 +180,13 @@ export default async function LeadsPage({
     "extracted_salary_expectation, extracted_location_pref, extracted_interests, needs_attention, " +
     "attention_reason, needs_human_attention, human_attention_reason, human_attention_raised_at";
 
-  let dataQuery = supabase.from("leads").select(LEAD_LIST_COLUMNS).neq("is_candidate", false).or(ownershipFilter);
+  // שאילתה אחת מחזירה גם נתונים וגם ספירה כוללת (count: "exact") —
+  // במקום שאילתת ספירה נפרדת וכפולה.
+  let dataQuery = supabase
+    .from("leads")
+    .select(LEAD_LIST_COLUMNS, { count: "exact" })
+    .neq("is_candidate", false)
+    .or(ownershipFilter);
   if (searchFilter) dataQuery = dataQuery.or(searchFilter);
   if (effectiveStatusFilter.length > 0) dataQuery = dataQuery.in("status", effectiveStatusFilter);
   if (tagFilter.length > 0) dataQuery = dataQuery.overlaps("tags", tagFilter);
@@ -185,20 +194,12 @@ export default async function LeadsPage({
   else if (sourceFilter) dataQuery = dataQuery.eq("source", sourceFilter);
   dataQuery = dataQuery.order("created_at", { ascending: false }).range(from, to);
 
-  let countQuery = supabase.from("leads").select("*", { count: "exact", head: true }).neq("is_candidate", false).or(ownershipFilter);
-  if (searchFilter) countQuery = countQuery.or(searchFilter);
-  if (effectiveStatusFilter.length > 0) countQuery = countQuery.in("status", effectiveStatusFilter);
-  if (tagFilter.length > 0) countQuery = countQuery.overlaps("tags", tagFilter);
-  if (sourceFilter === "__none__") countQuery = countQuery.is("source", null);
-  else if (sourceFilter) countQuery = countQuery.eq("source", sourceFilter);
-
   // Fetch all unique tags via a Postgres function (single value back, no
   // scanning of every row in JS). Cached via Next.js fetch dedup.
   const tagsRpc = supabase.rpc("get_distinct_lead_tags");
 
-  const [{ data: leads }, { count }, { data: tagsData }] = await Promise.all([
+  const [{ data: leads, count }, { data: tagsData }] = await Promise.all([
     dataQuery,
-    countQuery,
     tagsRpc,
   ]);
 
