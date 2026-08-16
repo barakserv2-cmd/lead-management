@@ -156,6 +156,19 @@ export async function changeLeadStatus(input: ChangeStatusInput): Promise<Change
     notes: notes ?? null,
   });
 
+  // 7b. כל טקסט חופשי שהרכזת כתבה במעבר נרשם גם ביומן האירועים,
+  // כדי שההיסטוריה תשמור אותו גם אחרי שהשדה יידרס בעדכון הבא.
+  const journalRows: { event_type: string; event_text: string }[] = [];
+  if (extra?.rejectionReason) journalRows.push({ event_type: "דחייה", event_text: `סיבת דחייה: ${extra.rejectionReason}` });
+  if (extra?.interviewNotes) journalRows.push({ event_type: "ראיון", event_text: `הערות ראיון: ${extra.interviewNotes}` });
+  if (extra?.followupNotes) journalRows.push({ event_type: "מעקב", event_text: `הערות מעקב: ${extra.followupNotes}` });
+  if (journalRows.length > 0) {
+    // best-effort: אם הטבלה חסרה או שגיאה — המעבר עצמו כבר הצליח
+    await supabase.from("lead_events").insert(
+      journalRows.map((r) => ({ ...r, lead_id: leadId, created_by: userId ?? "system" }))
+    ).then(() => undefined, () => undefined);
+  }
+
   // 8. Revalidate
   revalidatePath("/leads");
 

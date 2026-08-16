@@ -2,6 +2,7 @@
 
 import crypto from "crypto";
 import { createClient as createServerClient } from "@supabase/supabase-js";
+import { createClient as createCookieClient } from "@/lib/supabase/server";
 import { revalidatePath } from "next/cache";
 import { LeadStatus } from "@/lib/stateMachine";
 import { normalizeEmployerName, type NormalizationResult } from "@/lib/employerNormalization";
@@ -67,10 +68,30 @@ export async function getLeadNotes(leadId: string) {
 }
 
 export async function updateLeadNotes(leadId: string, notes: string) {
-  const { error } = await getSupabase()
+  const supabase = getSupabase();
+  const { error } = await supabase
     .from("leads")
     .update({ notes })
     .eq("id", leadId);
+
+  // כל שמירת הערה נרשמת גם ביומן האירועים — כך נשמרת היסטוריה מלאה
+  // של מה שהרכזת כתבה, גם כשהשדה עצמו נדרס בעריכה הבאה.
+  if (!error && notes.trim()) {
+    let author = "רכזת";
+    try {
+      const cookieClient = await createCookieClient();
+      const { data: { user } } = await cookieClient.auth.getUser();
+      if (user?.email) author = user.email;
+    } catch {
+      // אין session (קריאה ממערכת) — נשאר "רכזת"
+    }
+    await supabase.from("lead_events").insert({
+      lead_id: leadId,
+      event_type: "הערה",
+      event_text: notes.trim(),
+      created_by: author,
+    }).then(() => undefined, () => undefined);
+  }
 
   return { error: error?.message ?? null };
 }

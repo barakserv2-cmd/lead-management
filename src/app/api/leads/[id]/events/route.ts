@@ -25,7 +25,7 @@ export async function GET(
 
   const { id: leadId } = await params;
 
-  const [eventsRes, historyRes] = await Promise.all([
+  const [eventsRes, historyRes, interactionsRes] = await Promise.all([
     supabase
       .from("lead_events")
       .select("id, event_type, event_text, created_by, created_at")
@@ -37,6 +37,12 @@ export async function GET(
       .select("id, from_status, to_status, changed_by, changed_at, notes")
       .eq("lead_id", leadId)
       .order("changed_at", { ascending: false })
+      .limit(200),
+    supabase
+      .from("interaction_logs")
+      .select("id, type, outcome, notes, created_at")
+      .eq("lead_id", leadId)
+      .order("created_at", { ascending: false })
       .limit(200),
   ]);
 
@@ -61,7 +67,30 @@ export async function GET(
     created_at: h.changed_at,
   }));
 
-  const timeline = [...manual, ...statusChanges].sort(
+  const INTERACTION_TYPE_LABELS: Record<string, string> = {
+    call_in: "שיחה נכנסת",
+    call_out: "שיחה יוצאת",
+    whatsapp: "וואטסאפ",
+  };
+  const INTERACTION_OUTCOME_LABELS: Record<string, string> = {
+    request: "בקשה",
+    complaint: "תלונה",
+    update: "עדכון",
+    other: "אחר",
+  };
+
+  const interactions: TimelineEvent[] = (interactionsRes.data ?? []).map((i) => ({
+    id: i.id,
+    kind: "event" as const,
+    event_type: INTERACTION_TYPE_LABELS[i.type] ?? i.type,
+    text:
+      (INTERACTION_OUTCOME_LABELS[i.outcome] ? `${INTERACTION_OUTCOME_LABELS[i.outcome]}` : "") +
+      (i.notes ? `${i.outcome ? " — " : ""}${i.notes}` : ""),
+    created_by: "רכזת",
+    created_at: i.created_at,
+  }));
+
+  const timeline = [...manual, ...statusChanges, ...interactions].sort(
     (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
   );
 

@@ -33,7 +33,8 @@ export async function POST(request: NextRequest) {
   const result = await changeLeadStatus({
     leadId: body.leadId,
     newStatus: body.newStatus,
-    userId: body.userId ?? user.email ?? "user",
+    // תמיד המשתמש המחובר — כדי שההיסטוריה והיומן יראו מי באמת ביצע
+    userId: user.email ?? body.userId ?? "user",
     notes: body.notes,
     extra: body.extra,
   });

@@ -18,6 +18,14 @@ const TYPE_COLORS: Record<string, string> = {
   "שיבוץ": "bg-green-100 text-green-700",
   "אחר": "bg-gray-100 text-gray-600",
   "שינוי סטטוס": "bg-slate-100 text-slate-500",
+  // סוגים שנרשמים אוטומטית מתוך פעולות הרכזת
+  "הערה": "bg-violet-100 text-violet-700",
+  "דחייה": "bg-red-100 text-red-700",
+  "ראיון": "bg-purple-100 text-purple-700",
+  "מעקב": "bg-teal-100 text-teal-700",
+  "שיחה נכנסת": "bg-cyan-100 text-cyan-700",
+  "שיחה יוצאת": "bg-cyan-100 text-cyan-700",
+  "וואטסאפ": "bg-green-100 text-green-700",
 };
 
 function formatDateTime(iso: string): string {
