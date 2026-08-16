@@ -356,7 +356,11 @@ export async function fetchUnreadEmails(
 
   const res = await gmail.users.messages.list({
     userId: "me",
-    q: "is:unread {AllJobs CV קורות חיים משרה פנייה מועמד lead candidate CASHIERS \"FB JOBS\" INFINES}",
+    // Landing-page form emails (Elementor on eilatjobs.com) contain none of the
+    // job-board keywords, so they were invisible to the scraper. Added נחיתה /
+    // eilatjobs / ליד so they get fetched too. False positives are harmless —
+    // parseEmailWithAI drops anything that isn't a real lead.
+    q: "is:unread {AllJobs CV קורות חיים משרה פנייה מועמד lead candidate CASHIERS \"FB JOBS\" INFINES נחיתה eilatjobs ליד}",
     maxResults,
   });
 
