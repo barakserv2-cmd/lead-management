@@ -27,13 +27,9 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: true });
     }
 
-    // טקסט רגיל = textMessage; תשובה עם ציטוט או הודעה עם קישור =
-    // extendedTextMessage — שניהם טקסט לכל דבר וחייבים להיקלט.
-    const typeMessage = body.messageData?.typeMessage;
-    if (typeMessage !== "textMessage" && typeMessage !== "extendedTextMessage") {
-      return NextResponse.json({ ok: true });
-    }
-
+    // GreenAPI שולחת טקסט בשלושה סוגים: textMessage (רגיל),
+    // extendedTextMessage (קישור/עיצוב), quotedMessage (תשובה עם ציטוט).
+    // במקום רשימת סוגים — מחלצים טקסט מכל מקום אפשרי; אם אין, מדלגים.
     const chatId: string = body.senderData?.chatId ?? "";
     const messageText: string =
       body.messageData?.textMessageData?.textMessage ??
