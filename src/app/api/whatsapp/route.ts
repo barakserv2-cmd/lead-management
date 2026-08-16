@@ -27,14 +27,18 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: true });
     }
 
+    // טקסט רגיל = textMessage; תשובה עם ציטוט או הודעה עם קישור =
+    // extendedTextMessage — שניהם טקסט לכל דבר וחייבים להיקלט.
     const typeMessage = body.messageData?.typeMessage;
-    if (typeMessage !== "textMessage") {
+    if (typeMessage !== "textMessage" && typeMessage !== "extendedTextMessage") {
       return NextResponse.json({ ok: true });
     }
 
     const chatId: string = body.senderData?.chatId ?? "";
     const messageText: string =
-      body.messageData?.textMessageData?.textMessage ?? "";
+      body.messageData?.textMessageData?.textMessage ??
+      body.messageData?.extendedTextMessageData?.text ??
+      "";
 
     if (!chatId || !messageText) {
       return NextResponse.json({ ok: true });
