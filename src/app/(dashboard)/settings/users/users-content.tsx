@@ -40,6 +40,62 @@ export function UsersContent({ users: initialUsers }: { users: UserProfile[] }) 
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState("");
 
+  // Password reset dialog state
+  const [pwUser, setPwUser] = useState<UserProfile | null>(null);
+  const [pwValue, setPwValue] = useState("");
+  const [pwSaving, setPwSaving] = useState(false);
+  const [pwError, setPwError] = useState("");
+  const [pwDone, setPwDone] = useState(false);
+
+  function openPasswordDialog(user: UserProfile) {
+    setPwUser(user);
+    setPwValue("");
+    setPwError("");
+    setPwDone(false);
+  }
+
+  function generatePassword() {
+    // סיסמה קריאה שנוח למסור בעל-פה: 8 אותיות/ספרות בלי תווים דו-משמעיים
+    const chars = "abcdefghjkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+    let out = "";
+    const rand = new Uint32Array(10);
+    crypto.getRandomValues(rand);
+    for (let i = 0; i < 10; i++) out += chars[rand[i] % chars.length];
+    setPwValue(out);
+  }
+
+  async function handleSetPassword() {
+    if (!pwUser) return;
+    if (pwValue.length < 8) {
+      setPwError("סיסמה חייבת להיות באורך 8 תווים לפחות");
+      return;
+    }
+    setPwError("");
+    setPwSaving(true);
+    try {
+      const res = await fetch("/api/users/set-password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: pwUser.email, password: pwValue }),
+      });
+      const data = (await res.json().catch(() => ({}))) as { error?: string; created?: boolean };
+      if (!res.ok) {
+        setPwError(data.error ?? "שגיאה בקביעת הסיסמה");
+      } else {
+        setPwDone(true);
+        toast.success(
+          data.created
+            ? "נוצר חשבון התחברות חדש עם הסיסמה שנקבעה"
+            : "הסיסמה עודכנה בהצלחה"
+        );
+      }
+    } catch {
+      setPwError("שגיאת רשת — נסה שוב");
+    } finally {
+      setPwSaving(false);
+    }
+  }
+
   function openAddDialog() {
     setEditingUser(null);
     setFormName("");
@@ -177,6 +233,17 @@ export function UsersContent({ users: initialUsers }: { users: UserProfile[] }) 
                       </button>
                       <button
                         type="button"
+                        onClick={() => openPasswordDialog(user)}
+                        className="p-1.5 rounded-md text-gray-400 hover:text-amber-600 hover:bg-amber-50 transition-colors"
+                        title="אפס סיסמה"
+                      >
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4">
+                          <path d="M2.586 17.414A2 2 0 0 0 2 18.828V21a1 1 0 0 0 1 1h3a1 1 0 0 0 1-1v-1a1 1 0 0 1 1-1h1a1 1 0 0 0 1-1v-1a1 1 0 0 1 1-1h.172a2 2 0 0 0 1.414-.586l.814-.814a6.5 6.5 0 1 0-4-4z" />
+                          <circle cx="16.5" cy="7.5" r=".5" fill="currentColor" />
+                        </svg>
+                      </button>
+                      <button
+                        type="button"
                         onClick={() => setDeleteConfirmId(user.id)}
                         className="p-1.5 rounded-md text-gray-400 hover:text-red-600 hover:bg-red-50 transition-colors"
                         title="מחק"
@@ -247,6 +314,70 @@ export function UsersContent({ users: initialUsers }: { users: UserProfile[] }) 
             <Button onClick={handleSave} disabled={saving || !formName.trim() || !formEmail.trim()}>
               {saving ? "שומר..." : editingUser ? "שמור שינויים" : "הוסף משתמש"}
             </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Password Reset Dialog */}
+      <Dialog open={!!pwUser} onOpenChange={(open) => { if (!open) setPwUser(null); }}>
+        <DialogContent className="sm:max-w-md" dir="rtl">
+          <DialogHeader>
+            <DialogTitle>איפוס סיסמה — {pwUser?.name}</DialogTitle>
+          </DialogHeader>
+          {pwDone ? (
+            <div className="py-2 space-y-3">
+              <div className="rounded-lg bg-green-50 border border-green-200 px-3 py-3 text-sm text-green-800">
+                הסיסמה נקבעה בהצלחה. מסור אותה למשתמש/ת — היא לא תוצג שוב:
+              </div>
+              <div className="rounded-lg bg-gray-50 border border-gray-200 px-3 py-3 text-center">
+                <span className="font-mono text-lg font-bold tracking-wider" dir="ltr">{pwValue}</span>
+              </div>
+              <p className="text-xs text-gray-500">
+                כניסה למערכת עם האימייל <span dir="ltr">{pwUser?.email}</span> והסיסמה הזו.
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-4 py-2">
+              <p className="text-sm text-gray-600">
+                קביעת סיסמה חדשה עבור <span dir="ltr" className="font-medium">{pwUser?.email}</span>.
+                אם אין למשתמש/ת עדיין חשבון התחברות — הוא ייווצר עכשיו.
+              </p>
+              <div className="space-y-2">
+                <Label htmlFor="pw-value">סיסמה חדשה (8 תווים לפחות)</Label>
+                <div className="flex gap-2">
+                  <Input
+                    id="pw-value"
+                    value={pwValue}
+                    onChange={(e) => setPwValue(e.target.value)}
+                    placeholder="הקלד או צור אקראית"
+                    dir="ltr"
+                    className="font-mono"
+                  />
+                  <Button type="button" variant="outline" onClick={generatePassword} className="flex-shrink-0">
+                    צור אקראית
+                  </Button>
+                </div>
+              </div>
+              {pwError && (
+                <div className="rounded-lg bg-red-50 border border-red-200 px-3 py-2 text-xs text-red-700 font-medium">
+                  {pwError}
+                </div>
+              )}
+            </div>
+          )}
+          <DialogFooter>
+            {pwDone ? (
+              <Button onClick={() => setPwUser(null)}>סגור</Button>
+            ) : (
+              <>
+                <Button variant="outline" onClick={() => setPwUser(null)} disabled={pwSaving}>
+                  ביטול
+                </Button>
+                <Button onClick={handleSetPassword} disabled={pwSaving || pwValue.length < 8}>
+                  {pwSaving ? "קובע..." : "קבע סיסמה"}
+                </Button>
+              </>
+            )}
           </DialogFooter>
         </DialogContent>
       </Dialog>
