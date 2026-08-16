@@ -356,11 +356,16 @@ export async function fetchUnreadEmails(
 
   const res = await gmail.users.messages.list({
     userId: "me",
-    // Landing-page form emails (Elementor on eilatjobs.com) contain none of the
-    // job-board keywords, so they were invisible to the scraper. Added נחיתה /
-    // eilatjobs / ליד so they get fetched too. False positives are harmless —
-    // parseEmailWithAI drops anything that isn't a real lead.
-    q: "is:unread {AllJobs CV קורות חיים משרה פנייה מועמד lead candidate CASHIERS \"FB JOBS\" INFINES נחיתה eilatjobs ליד}",
+    // Query a RECENT WINDOW instead of is:unread. Relying on is:unread was
+    // fragile: opening a lead email in Gmail marks it read, so the scraper then
+    // never processed it and the lead was lost. Dedup is handled downstream by
+    // original_email_id, so re-scanning recent read mail is safe (no dupes).
+    // newer_than:4d keeps the batch small/recent so today's leads aren't buried
+    // under a huge unread backlog; -from:maskyoo.co.il drops call-notification
+    // noise. Landing-page keywords (נחיתה/eilatjobs/ליד) were added so Elementor
+    // form emails, which carry none of the job-board keywords, match too.
+    // False positives are harmless — parseEmailWithAI drops anything that isn't a lead.
+    q: "newer_than:4d -from:maskyoo.co.il {AllJobs CV קורות חיים משרה פנייה מועמד lead candidate CASHIERS \"FB JOBS\" INFINES נחיתה eilatjobs ליד}",
     maxResults,
   });
 

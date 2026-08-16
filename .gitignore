@@ -48,3 +48,9 @@ response.txt
 supabase/.temp/
 
 .vercel
+.env.migration
+migration-backup/
+.env.local.frankfurt
+migrate-to-frankfurt.sh
+cutover-frankfurt.sh
+scripts/diag-gmail.mjs
