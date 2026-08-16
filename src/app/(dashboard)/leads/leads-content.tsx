@@ -163,7 +163,7 @@ export function LeadsContent({ leads }: { leads: Lead[] }) {
                 <tr
                   key={lead.id}
                   className={"border-b border-gray-100 transition-colors duration-150 cursor-pointer " + (isSelected ? "bg-cyan-50/60" : "hover:bg-cyan-50/40")}
-                  onClick={() => setPanelLeadId(lead.id)}
+                  onClick={() => openLeadWindow(lead.id)}
                 >
                   <td className="px-3 py-3" onClick={(e) => e.stopPropagation()}>
                     <input
@@ -179,15 +179,15 @@ export function LeadsContent({ leads }: { leads: Lead[] }) {
                         type="button"
                         onClick={(e) => { e.stopPropagation(); openLeadWindow(lead.id); }}
                         className="flex-shrink-0 w-8 h-8 rounded-full bg-cyan-600 text-white flex items-center justify-center text-xs font-bold hover:bg-cyan-700 transition-colors"
-                        title="פתח צ׳אט"
+                        title="פתח חלון עריכה"
                       >
                         {getInitials(lead.name)}
                       </button>
                       <button
                         type="button"
-                        onClick={(e) => { e.stopPropagation(); setPanelLeadId(lead.id); }}
+                        onClick={(e) => { e.stopPropagation(); openLeadWindow(lead.id); }}
                         className="text-gray-900 hover:text-cyan-600 font-semibold text-right"
-                        title="פתח כרטיס"
+                        title="פתח חלון עריכה"
                       >
                         {lead.name}
                       </button>
@@ -229,9 +229,9 @@ export function LeadsContent({ leads }: { leads: Lead[] }) {
                     <div className="flex items-center gap-1">
                       <button
                         type="button"
-                        onClick={() => openLeadWindow(lead.id)}
+                        onClick={() => setPanelLeadId(lead.id)}
                         className="p-1.5 rounded-lg text-gray-400 hover:text-amber-600 hover:bg-amber-50 transition-colors"
-                        title="הערות ופרטים"
+                        title="כרטיס מלא — יומן אירועים ומסמכים"
                       >
                         <NotesIcon />
                       </button>

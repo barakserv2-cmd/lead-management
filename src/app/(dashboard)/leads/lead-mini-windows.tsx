@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { toast } from "sonner";
 import type { Lead } from "@/types/leads";
 import { StatusSelect } from "./status-select";
 import { ChatHistory } from "./[id]/chat-history";
@@ -79,6 +80,102 @@ interface MiniWindowState {
   minimized: boolean;
 }
 
+// ── טופס עריכת פרטי מועמד בתוך החלון הצף ─────────────────────
+function LeadDetailsForm({ lead }: { lead: Lead }) {
+  const router = useRouter();
+  const [form, setForm] = useState({
+    name: lead.name ?? "",
+    phone: lead.phone ?? "",
+    email: lead.email ?? "",
+    job_title: lead.job_title ?? "",
+    location: lead.location ?? "",
+    age: lead.age != null ? String(lead.age) : "",
+    experience: lead.experience ?? "",
+  });
+  const [saving, setSaving] = useState(false);
+  const [dirty, setDirty] = useState(false);
+
+  function set(field: keyof typeof form, value: string) {
+    setForm((prev) => ({ ...prev, [field]: value }));
+    setDirty(true);
+  }
+
+  async function save() {
+    if (!form.name.trim()) {
+      toast.error("שם הוא שדה חובה");
+      return;
+    }
+    setSaving(true);
+    try {
+      const res = await fetch(`/api/leads/${lead.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(form),
+      });
+      const data = (await res.json().catch(() => ({}))) as { error?: string };
+      if (!res.ok) {
+        toast.error(data.error ?? "שגיאה בשמירה");
+      } else {
+        toast.success("הפרטים נשמרו");
+        setDirty(false);
+        // רענון רשימה ברקע — כישלון רינדור לא מפיל את השמירה
+        router.refresh();
+      }
+    } catch {
+      toast.error("שגיאת רשת בשמירה");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  const fields: { key: keyof typeof form; label: string; type?: string; dir?: string }[] = [
+    { key: "name", label: "שם מלא" },
+    { key: "phone", label: "טלפון", dir: "ltr" },
+    { key: "email", label: "אימייל", dir: "ltr" },
+    { key: "job_title", label: "תפקיד מבוקש" },
+    { key: "location", label: "עיר מגורים" },
+    { key: "age", label: "גיל", type: "number", dir: "ltr" },
+  ];
+
+  return (
+    <div className="flex flex-col h-full">
+      <div className="flex-1 overflow-y-auto px-3 py-2 space-y-2">
+        {fields.map((f) => (
+          <div key={f.key}>
+            <label className="block text-[10px] font-medium text-gray-500 mb-0.5">{f.label}</label>
+            <input
+              type={f.type ?? "text"}
+              value={form[f.key]}
+              dir={f.dir}
+              onChange={(e) => set(f.key, e.target.value)}
+              className="w-full px-2.5 py-1.5 border border-gray-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-transparent"
+            />
+          </div>
+        ))}
+        <div>
+          <label className="block text-[10px] font-medium text-gray-500 mb-0.5">ניסיון</label>
+          <textarea
+            value={form.experience}
+            onChange={(e) => set("experience", e.target.value)}
+            rows={2}
+            className="w-full px-2.5 py-1.5 border border-gray-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-transparent resize-none"
+          />
+        </div>
+      </div>
+      <div className="px-3 py-2 border-t border-gray-100 bg-gray-50/60 flex-shrink-0">
+        <button
+          type="button"
+          onClick={save}
+          disabled={!dirty || saving}
+          className="w-full py-1.5 bg-cyan-600 text-white text-xs font-semibold rounded-lg hover:bg-cyan-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+        >
+          {saving ? "שומר..." : dirty ? "שמור שינויים" : "אין שינויים"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function LeadMiniWindow({
   lead,
   minimized,
@@ -91,6 +188,7 @@ function LeadMiniWindow({
   onToggleMinimize: () => void;
 }) {
   const router = useRouter();
+  const [tab, setTab] = useState<"details" | "chat">("details");
   const statusColor = STATUS_COLORS[lead.status as LeadStatusValue];
   const statusLabel = STATUS_LABELS[lead.status as LeadStatusValue] ?? lead.status;
   const intlPhone = formatPhone(lead.phone);
@@ -174,9 +272,33 @@ function LeadMiniWindow({
             <StatusSelect leadId={lead.id} currentStatus={lead.status} currentSubStatus={lead.sub_status} />
           </div>
 
-          {/* Chat */}
+          {/* Tabs: פרטים (ברירת מחדל) / צ'אט */}
+          <div className="flex border-b border-gray-100 flex-shrink-0">
+            {([
+              { key: "details", label: "פרטים" },
+              { key: "chat", label: "צ'אט" },
+            ] as const).map((t) => (
+              <button
+                key={t.key}
+                type="button"
+                onClick={() => setTab(t.key)}
+                className={`flex-1 py-1.5 text-xs font-semibold transition-colors ${
+                  tab === t.key
+                    ? "text-cyan-700 border-b-2 border-cyan-600 bg-cyan-50/40"
+                    : "text-gray-400 hover:text-gray-600"
+                }`}
+              >
+                {t.label}
+              </button>
+            ))}
+          </div>
+
           <div className="flex-1 min-h-0 overflow-hidden">
-            <ChatHistory leadId={lead.id} leadStatus={lead.status as LeadStatusValue} />
+            {tab === "details" ? (
+              <LeadDetailsForm lead={lead} />
+            ) : (
+              <ChatHistory leadId={lead.id} leadStatus={lead.status as LeadStatusValue} />
+            )}
           </div>
         </div>
       )}
