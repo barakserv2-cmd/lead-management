@@ -53,15 +53,28 @@ export async function POST(req: NextRequest) {
 
     // Send via WhatsApp if lead has a phone number
     let whatsappSent = false;
+    let whatsappError: string | null = null;
     if (lead.phone) {
       const result = await sendWhatsAppMessage(lead.phone, message.trim());
       whatsappSent = result.success;
       if (!result.success) {
+        whatsappError = result.error ?? "שליחה נכשלה";
         console.error(
           `[Manual Send] WhatsApp send failed for lead ${leadId}:`,
           result.error
         );
       }
+    }
+
+    // כישלון וואטסאפ הוא לא הצלחה שקטה — הרכזת חייבת לדעת שההודעה
+    // לא הגיעה למועמד (למשל כשהחיבור ל-GreenAPI נפל).
+    if (lead.phone && !whatsappSent) {
+      return NextResponse.json({
+        success: false,
+        savedToChat: true,
+        error: "ההודעה נשמרה בצ'אט אבל לא נשלחה לוואטסאפ — ייתכן שהחיבור נותק. פנה למנהל המערכת.",
+        detail: whatsappError,
+      });
     }
 
     return NextResponse.json({ success: true, whatsappSent });

@@ -116,7 +116,13 @@ export function ChatHistory({
 
       if (!result.success) {
         setError(result.error ?? "שגיאה בשליחת ההודעה");
-        setMessages((prev) => prev.filter((m) => m.id !== tempMsg.id));
+        // אם ההודעה כן נשמרה בצ'אט (רק הוואטסאפ נכשל) — משאירים את
+        // הבועה; אחרת מסירים אותה.
+        if (result.savedToChat) {
+          await fetchMessages();
+        } else {
+          setMessages((prev) => prev.filter((m) => m.id !== tempMsg.id));
+        }
       } else {
         await fetchMessages();
       }
