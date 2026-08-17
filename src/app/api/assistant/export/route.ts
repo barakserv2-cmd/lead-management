@@ -50,8 +50,58 @@ export async function GET(req: NextRequest) {
   const type = rawType === "hired" ? "hired" : rawType === "interviews" ? "interviews" : "leads";
   const from = sp.get("from");
   const to = sp.get("to");
+  const stampEarly = new Date().toISOString().slice(0, 10);
 
   const db = admin();
+
+  // ── Ledger reports (separate tables) ──
+  if (rawType === "advances" || rawType === "transfers") {
+    const clientFilter = sp.get("client")?.trim();
+    const csvHeaders = {
+      "Content-Type": "text/csv; charset=utf-8",
+      "Content-Disposition": `attachment; filename="${rawType}-${stampEarly}.csv"`,
+      "Cache-Control": "no-store",
+    };
+    if (rawType === "advances") {
+      let aq = db
+        .from("advances")
+        .select("amount, paid_at, employer, notes, created_by, leads(name, phone, hired_position, job_title)")
+        .order("paid_at", { ascending: false })
+        .limit(5000);
+      if (from) aq = aq.gte("paid_at", from);
+      if (to) aq = aq.lte("paid_at", to);
+      if (clientFilter) aq = aq.eq("employer", clientFilter);
+      const { data, error } = await aq;
+      if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+      const csv = toCsv(
+        ["תאריך", "שם", "טלפון", "מעסיק", "תפקיד", "סכום", "הערה", "נרשם ע\"י"],
+        ((data ?? []) as Array<Record<string, unknown>>).map((r) => {
+          const l = (r.leads as Record<string, unknown> | null) ?? {};
+          return [r.paid_at, l.name, l.phone, r.employer, l.hired_position ?? l.job_title, r.amount, r.notes, r.created_by];
+        })
+      );
+      return new NextResponse(csv, { status: 200, headers: csvHeaders });
+    }
+    let tq = db
+      .from("job_transfers")
+      .select("transferred_at, from_client, from_position, to_client, to_position, reason, source, created_by, leads(name, phone)")
+      .order("transferred_at", { ascending: false })
+      .limit(5000);
+    if (from) tq = tq.gte("transferred_at", from);
+    if (to) tq = tq.lte("transferred_at", to);
+    if (clientFilter) tq = tq.or(`from_client.eq.${clientFilter},to_client.eq.${clientFilter}`);
+    const { data, error } = await tq;
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    const csv = toCsv(
+      ["תאריך", "שם", "טלפון", "ממעסיק", "מתפקיד", "למעסיק", "לתפקיד", "סיבה", "מקור", "נרשם ע\"י"],
+      ((data ?? []) as Array<Record<string, unknown>>).map((r) => {
+        const l = (r.leads as Record<string, unknown> | null) ?? {};
+        return [r.transferred_at, l.name, l.phone, r.from_client, r.from_position, r.to_client, r.to_position, r.reason, r.source === "auto" ? "אוטומטי" : "ידני", r.created_by];
+      })
+    );
+    return new NextResponse(csv, { status: 200, headers: csvHeaders });
+  }
+
   let q = db
     .from("leads")
     .select(

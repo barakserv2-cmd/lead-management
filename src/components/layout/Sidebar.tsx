@@ -22,7 +22,7 @@ const NAV_ITEMS = [
   { href: "/today", label: "לידים של היום", icon: CalendarCheck },
   { href: "/interviews", label: "ראיונות", icon: CalendarClock },
   { href: "/campaigns", label: "אקסטרות", icon: CalendarDays },
-  { href: "/reports/hired", label: "דוח מועסקים", icon: BarChart3 },
+  { href: "/reports", label: "דוחות", icon: BarChart3 },
   { href: "/settings", label: "הגדרות", icon: Settings },
 ];
 

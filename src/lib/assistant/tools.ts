@@ -385,7 +385,7 @@ export const assistantTools = [
         by_client: byClient,
         rows: rows.slice(0, 40),
         truncated: rows.length > 40,
-        report_page_url: "/reports/hired",
+        report_page_url: "/reports?tab=hired",
         csv_download_url: `/api/assistant/export?${params.toString()}`,
       };
     })()),
