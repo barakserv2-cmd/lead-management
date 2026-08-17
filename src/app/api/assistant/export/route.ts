@@ -46,7 +46,8 @@ export async function GET(req: NextRequest) {
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const sp = req.nextUrl.searchParams;
-  const type = sp.get("type") === "hired" ? "hired" : "leads";
+  const rawType = sp.get("type");
+  const type = rawType === "hired" ? "hired" : rawType === "interviews" ? "interviews" : "leads";
   const from = sp.get("from");
   const to = sp.get("to");
 
@@ -54,12 +55,18 @@ export async function GET(req: NextRequest) {
   let q = db
     .from("leads")
     .select(
-      "id, created_at, name, phone, email, job_title, location, experience, age, source, status, sub_status, hired_client, hired_position, start_date, interview_date, rejection_reason, notes, tags, preferences"
+      "id, created_at, name, phone, email, job_title, location, experience, age, source, status, sub_status, hired_client, hired_position, start_date, interview_date, interview_type, interview_notes, handled_by, rejection_reason, notes, tags, preferences"
     )
     .order("created_at", { ascending: false })
     .limit(5000);
 
-  if (type === "hired") {
+  if (type === "interviews") {
+    q = q.not("interview_date", "is", null).order("interview_date", { ascending: true });
+    const job = sp.get("job");
+    if (job) q = q.ilike("job_title", `%${job}%`);
+    if (from) q = q.gte("interview_date", `${from}T00:00:00+03:00`);
+    if (to) q = q.lte("interview_date", `${to}T23:59:59+03:00`);
+  } else if (type === "hired") {
     q = q.in("status", [LeadStatus.HIRED, LeadStatus.STARTED]);
   } else {
     const statuses = (sp.get("statuses") ?? "")
@@ -72,15 +79,17 @@ export async function GET(req: NextRequest) {
     const job = sp.get("job");
     if (job) q = q.ilike("job_title", `%${job}%`);
   }
-  if (from) q = q.gte("created_at", `${from}T00:00:00`);
-  if (to) q = q.lte("created_at", `${to}T23:59:59`);
+  if (type !== "interviews") {
+    if (from) q = q.gte("created_at", `${from}T00:00:00`);
+    if (to) q = q.lte("created_at", `${to}T23:59:59`);
+  }
 
   const { data, error } = await q;
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
   let rows = data ?? [];
   const clientFilter = sp.get("client")?.trim();
-  if (type === "hired" && clientFilter) {
+  if ((type === "hired" || type === "interviews") && clientFilter) {
     rows = rows.filter((l) => {
       const matched = (l.preferences as Record<string, unknown> | null)?.matched_client;
       const c = l.hired_client ?? (typeof matched === "string" ? matched : "");
@@ -92,7 +101,30 @@ export async function GET(req: NextRequest) {
   let filename: string;
   const stamp = new Date().toISOString().slice(0, 10);
 
-  if (type === "hired") {
+  if (type === "interviews") {
+    csv = toCsv(
+      ["תאריך", "שעה", "שם", "טלפון", "תפקיד", "מעסיק", "סוג ראיון", "סטטוס", "רכזת", "מיקום", "הערות ראיון", "גורם גיוס"],
+      rows.map((l) => {
+        const matched = (l.preferences as Record<string, unknown> | null)?.matched_client;
+        const d = new Date(l.interview_date as string);
+        return [
+          d.toLocaleDateString("he-IL", { timeZone: "Asia/Jerusalem" }),
+          d.toLocaleTimeString("he-IL", { timeZone: "Asia/Jerusalem", hour: "2-digit", minute: "2-digit" }),
+          l.name,
+          l.phone,
+          l.hired_position ?? l.job_title,
+          l.hired_client ?? (typeof matched === "string" ? matched : ""),
+          l.interview_type === "video" ? "וידאו" : l.interview_type === "in_person" ? "פרונטלי" : "",
+          STATUS_LABELS[l.status as LeadStatusValue] ?? l.status,
+          l.handled_by,
+          l.location,
+          l.interview_notes,
+          l.source,
+        ];
+      })
+    );
+    filename = `interviews-${stamp}.csv`;
+  } else if (type === "hired") {
     csv = toCsv(
       ["שם", "טלפון", "מעסיק", "תפקיד", "תאריך התחלה", "סטטוס", "נוצר בתאריך", "גורם גיוס"],
       rows.map((l) => {

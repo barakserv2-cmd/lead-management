@@ -209,6 +209,76 @@ export const assistantTools = [
   }),
 
   betaZodTool({
+    name: "get_interviews",
+    description:
+      "לוח הראיונות: כל הראיונות המתוזמנים לפי יום ושעה — שם המועמד, טלפון, תפקיד, מעסיק, סוג (פרונטלי/וידאו), רכזת, סטטוס (ראיון נקבע / הגיע / לא הגיע). קרא לזה כשהמגייסת שואלת 'מי מגיע היום/מחר', 'מתי הראיון של X', 'איזה ראיונות יש למלצרים השבוע', 'מה יש לי מחר ב-10'. ברירת מחדל: מהיום ל-7 ימים קדימה.",
+    inputSchema: z.object({
+      from_date: z.string().optional().describe("YYYY-MM-DD (ברירת מחדל היום)"),
+      to_date: z.string().optional().describe("YYYY-MM-DD (ברירת מחדל 7 ימים קדימה)"),
+      job_title_query: z.string().optional().describe("סינון לפי תפקיד"),
+      client_query: z.string().optional().describe("סינון לפי מעסיק"),
+      name_or_phone: z.string().optional(),
+      include_past_outcomes: z.boolean().optional().describe("לכלול גם ראיונות שעברו (הגיע/לא הגיע) בטווח"),
+    }),
+    run: async (args) => JSON.stringify(await (async () => {
+      const tz = "Asia/Jerusalem";
+      const todayKey = new Intl.DateTimeFormat("en-CA", { timeZone: tz }).format(new Date());
+      const from = args.from_date ?? todayKey;
+      const to = args.to_date ?? new Intl.DateTimeFormat("en-CA", { timeZone: tz }).format(new Date(Date.now() + 7 * 86400000));
+      let q = admin()
+        .from("leads")
+        .select("id, name, phone, job_title, hired_position, hired_client, location, status, interview_date, interview_type, interview_notes, handled_by, preferences")
+        .not("interview_date", "is", null)
+        .gte("interview_date", `${from}T00:00:00+03:00`)
+        .lte("interview_date", `${to}T23:59:59+03:00`)
+        .order("interview_date", { ascending: true })
+        .limit(200);
+      const statuses: LeadStatusValue[] = args.include_past_outcomes
+        ? [LeadStatus.INTERVIEW_BOOKED, LeadStatus.ARRIVED, LeadStatus.NO_SHOW, LeadStatus.HIRED, LeadStatus.STARTED]
+        : [LeadStatus.INTERVIEW_BOOKED, LeadStatus.ARRIVED];
+      q = q.in("status", statuses);
+      if (args.job_title_query?.trim()) q = q.ilike("job_title", `%${args.job_title_query.trim()}%`);
+      if (args.name_or_phone?.trim()) {
+        const s = args.name_or_phone.trim();
+        q = q.or(`name.ilike.%${s}%,phone.ilike.%${s}%`);
+      }
+      const { data, error } = await q;
+      if (error) return { error: error.message };
+      let rows = (data ?? []).map((l) => {
+        const matched = (l.preferences as Record<string, unknown> | null)?.matched_client;
+        const d = new Date(l.interview_date as string);
+        return {
+          id: l.id,
+          name: l.name,
+          phone: l.phone,
+          date: d.toLocaleDateString("he-IL", { timeZone: tz, weekday: "long", day: "numeric", month: "numeric" }),
+          time: d.toLocaleTimeString("he-IL", { timeZone: tz, hour: "2-digit", minute: "2-digit" }),
+          iso: l.interview_date,
+          job_title: l.hired_position ?? l.job_title,
+          client: l.hired_client ?? (typeof matched === "string" ? matched : null),
+          type: l.interview_type === "video" ? "וידאו" : l.interview_type === "in_person" ? "פרונטלי" : null,
+          status: label(l.status),
+          recruiter: l.handled_by,
+          location: l.location,
+          notes: l.interview_notes,
+          url: `/leads/${l.id}`,
+        };
+      });
+      if (args.client_query?.trim()) rows = rows.filter((r) => (r.client ?? "").includes(args.client_query!.trim()));
+      const params = new URLSearchParams({ type: "interviews", from, to });
+      if (args.job_title_query) params.set("job", args.job_title_query);
+      if (args.client_query) params.set("client", args.client_query);
+      return {
+        range: { from, to },
+        count: rows.length,
+        interviews: rows,
+        board_url: "/interviews",
+        csv_download_url: `/api/assistant/export?${params.toString()}`,
+      };
+    })()),
+  }),
+
+  betaZodTool({
     name: "get_job_matches",
     description:
       "מועמדים שהכי מתאימים למשרה פתוחה מסוימת (דירוג אוטומטי לפי תפקיד, מיקום, ניסיון, סטטוס). קודם קרא ל-get_open_jobs כדי לקבל job_id. השתמש כשהמגייסת שואלת 'מי מתאים למשרה של X אצל Y', 'את מי לשלוח למלון Z'.",

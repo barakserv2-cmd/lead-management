@@ -9,6 +9,7 @@ import {
   Users,
   CalendarCheck,
   CalendarDays,
+  CalendarClock,
   BarChart3,
   Settings,
 } from "lucide-react";
@@ -19,6 +20,7 @@ const NAV_ITEMS = [
   { href: "/jobs", label: "משרות", icon: Briefcase },
   { href: "/leads", label: "לידים", icon: Users },
   { href: "/today", label: "לידים של היום", icon: CalendarCheck },
+  { href: "/interviews", label: "ראיונות", icon: CalendarClock },
   { href: "/campaigns", label: "אקסטרות", icon: CalendarDays },
   { href: "/reports/hired", label: "דוח מועסקים", icon: BarChart3 },
   { href: "/settings", label: "הגדרות", icon: Settings },
