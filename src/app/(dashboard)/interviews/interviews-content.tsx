@@ -51,6 +51,15 @@ function normPhone(p: string): string {
   return digits;
 }
 
+// The only statuses selectable from the interviews board.
+const INTERVIEW_STATUSES: LeadStatusValue[] = [
+  LeadStatus.INTERVIEW_BOOKED,
+  LeadStatus.ARRIVED,
+  LeadStatus.NO_SHOW,
+  LeadStatus.REJECTED,
+  LeadStatus.LOST_CONTACT,
+];
+
 type Range = "today" | "tomorrow" | "week" | "upcoming" | "past" | "all";
 
 const RANGE_LABELS: Record<Range, string> = {
@@ -261,7 +270,7 @@ export function InterviewsContent({ rows }: { rows: InterviewRow[] }) {
                           {r.interview_notes && <div className="mt-1 text-sm text-slate-600 whitespace-pre-wrap">{r.interview_notes}</div>}
                         </div>
                         <div className="shrink-0" onClick={(e) => e.stopPropagation()}>
-                          <StatusSelect leadId={r.id} currentStatus={r.status} />
+                          <StatusSelect leadId={r.id} currentStatus={r.status} allowedStatuses={INTERVIEW_STATUSES} />
                         </div>
                       </li>
                     );

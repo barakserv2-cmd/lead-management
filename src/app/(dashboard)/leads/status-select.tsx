@@ -50,7 +50,18 @@ function getStatusStyle(status: string) {
   };
 }
 
-export function StatusSelect({ leadId, currentStatus, currentSubStatus }: { leadId: string; currentStatus: string; currentSubStatus?: string | null }) {
+export function StatusSelect({
+  leadId,
+  currentStatus,
+  currentSubStatus,
+  allowedStatuses,
+}: {
+  leadId: string;
+  currentStatus: string;
+  currentSubStatus?: string | null;
+  /** Optional whitelist — further restricts the visible options (e.g. the interviews board). */
+  allowedStatuses?: LeadStatusValue[];
+}) {
   const [status, setStatus] = useState(currentStatus);
   const [subStatus, setSubStatus] = useState<string | null>(currentSubStatus ?? null);
   const [open, setOpen] = useState(false);
@@ -120,7 +131,9 @@ export function StatusSelect({ leadId, currentStatus, currentSubStatus }: { lead
   // Only show allowed transitions from the current status
   const allowedTargets = getAllowedTransitions(status as LeadStatusValue);
   const availableStatuses = QUICK_STATUSES.filter(
-    (s) => s.value === status || allowedTargets.includes(s.value)
+    (s) =>
+      (s.value === status || allowedTargets.includes(s.value)) &&
+      (!allowedStatuses || s.value === status || allowedStatuses.includes(s.value))
   );
 
   async function handleSelect(newStatus: string) {
