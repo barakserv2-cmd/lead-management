@@ -85,7 +85,7 @@ export async function GET(req: NextRequest) {
     }
     let tq = db
       .from("job_transfers")
-      .select("transferred_at, from_client, from_position, to_client, to_position, reason, source, created_by, leads(name, phone)")
+      .select("transferred_at, from_client, from_position, to_client, to_position, from_start_date, to_start_date, reason, source, created_by, leads(name, phone)")
       .order("transferred_at", { ascending: false })
       .limit(5000);
     if (from) tq = tq.gte("transferred_at", from);
@@ -94,10 +94,11 @@ export async function GET(req: NextRequest) {
     const { data, error } = await tq;
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
     const csv = toCsv(
-      ["תאריך", "שם", "טלפון", "ממעסיק", "מתפקיד", "למעסיק", "לתפקיד", "סיבה", "מקור", "נרשם ע\"י"],
+      ["תאריך העברה", "שם", "טלפון", "ממעסיק", "מתפקיד", "עבד/ה שם מ-", "עד", "למעסיק", "לתפקיד", "התחיל/ה ב-", "סיבה", "מקור", "נרשם ע\"י"],
       ((data ?? []) as Array<Record<string, unknown>>).map((r) => {
         const l = (r.leads as Record<string, unknown> | null) ?? {};
-        return [r.transferred_at, l.name, l.phone, r.from_client, r.from_position, r.to_client, r.to_position, r.reason, r.source === "auto" ? "אוטומטי" : "ידני", r.created_by];
+        const until = r.transferred_at ? new Date(new Date(String(r.transferred_at) + "T12:00:00").getTime() - 86400000).toISOString().slice(0, 10) : null;
+        return [r.transferred_at, l.name, l.phone, r.from_client, r.from_position, r.from_start_date, until, r.to_client, r.to_position, r.to_start_date ?? r.transferred_at, r.reason, r.source === "auto" ? "אוטומטי" : "ידני", r.created_by];
       })
     );
     return new NextResponse(csv, { status: 200, headers: csvHeaders });

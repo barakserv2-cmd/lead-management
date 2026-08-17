@@ -82,7 +82,7 @@ export default async function ReportsPage({
     const [{ data: rows, error }, { data: workers }, { data: clients }] = await Promise.all([
       supabase
         .from("job_transfers")
-        .select("id, lead_id, from_client, from_position, to_client, to_position, transferred_at, reason, source, created_by, leads(name, phone)")
+        .select("id, lead_id, from_client, from_position, to_client, to_position, transferred_at, from_start_date, to_start_date, reason, source, created_by, leads(name, phone)")
         .order("transferred_at", { ascending: false })
         .limit(2000),
       workersPromise,
@@ -98,6 +98,8 @@ export default async function ReportsPage({
         to_client: (r.to_client as string | null) ?? null,
         to_position: (r.to_position as string | null) ?? null,
         transferred_at: r.transferred_at as string,
+        from_start_date: (r.from_start_date as string | null) ?? null,
+        to_start_date: (r.to_start_date as string | null) ?? null,
         reason: (r.reason as string | null) ?? null,
         source: (r.source as string) ?? "manual",
         created_by: (r.created_by as string | null) ?? null,

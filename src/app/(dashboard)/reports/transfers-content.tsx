@@ -13,6 +13,8 @@ export interface TransferRow {
   to_client: string | null;
   to_position: string | null;
   transferred_at: string; // YYYY-MM-DD
+  from_start_date: string | null;
+  to_start_date: string | null;
   reason: string | null;
   source: string; // manual | auto
   created_by: string | null;
@@ -23,6 +25,18 @@ export interface TransferRow {
 function ilDate(d: string | null) {
   if (!d) return "—";
   return new Date(`${d}T12:00:00`).toLocaleDateString("he-IL");
+}
+function dayBefore(d: string) {
+  const x = new Date(`${d}T12:00:00`);
+  x.setDate(x.getDate() - 1);
+  return x.toISOString().slice(0, 10);
+}
+function monthBounds(): [string, string] {
+  const now = new Date();
+  const y = now.getFullYear(), m = now.getMonth();
+  const f = new Date(y, m, 1), t = new Date(y, m + 1, 0);
+  const iso = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  return [iso(f), iso(t)];
 }
 function todayIso() {
   return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Jerusalem" }).format(new Date());
@@ -120,7 +134,7 @@ export function TransfersContent({
       <div className="flex flex-wrap items-end justify-between gap-3 mb-6">
         <div>
           <h1 className="text-2xl font-bold">דוח העברות בין עבודות</h1>
-          <p className="text-sm text-gray-500 mt-1">נרשם אוטומטית כשמשנים מעסיק/תפקיד לעובד מועסק, או ידנית מכאן.</p>
+          <p className="text-sm text-gray-500 mt-1">נרשם <b>אוטומטית</b> ברגע שעובד/ת מועסק/ת מסומן/ת אצל מעסיק אחר (מהכרטיס או מסטטוס &quot;התקבל&quot;) — כולל תקופות העבודה, כדי שהשכר ידע לצפות לדוח נוכחות משני מקומות. אפשר גם לרשום ידנית.</p>
         </div>
         <div className="flex gap-2">
           <a href={exportUrl} className="text-sm px-3 py-2 rounded-lg border border-gray-300 bg-white hover:bg-gray-50">⬇ ייצוא לאקסל</a>
@@ -175,7 +189,7 @@ export function TransfersContent({
               <input value={toPosition} onChange={(e) => setToPosition(e.target.value)} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" placeholder="אופציונלי" />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">תאריך העברה</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">התחיל/ה במקום החדש ב-</label>
               <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" />
             </div>
             <div className="md:col-span-2">
@@ -211,6 +225,8 @@ export function TransfersContent({
           <label className="block text-xs text-gray-500 mb-1">עד תאריך</label>
           <input type="date" value={to} onChange={(e) => setTo(e.target.value)} className="border border-gray-300 rounded-lg px-3 py-2 text-sm" />
         </div>
+        <button type="button" onClick={() => { const [f, t] = monthBounds(); setFrom(f); setTo(t); }} className="text-sm px-3 py-2 rounded-lg border border-gray-300 bg-white hover:bg-gray-50">החודש</button>
+        {(from || to) && <button type="button" onClick={() => { setFrom(""); setTo(""); }} className="text-sm text-gray-500 hover:text-gray-800">נקה תאריכים</button>}
         <span className="text-sm text-gray-500 mr-auto">{filtered.length} העברות</span>
       </div>
 
@@ -221,7 +237,7 @@ export function TransfersContent({
           <table className="w-full text-sm">
             <thead>
               <tr className="bg-gray-50 border-b text-right">
-                <th className="px-4 py-3 font-semibold text-gray-700">תאריך</th>
+                <th className="px-4 py-3 font-semibold text-gray-700">תאריך העברה</th>
                 <th className="px-4 py-3 font-semibold text-gray-700">שם</th>
                 <th className="px-4 py-3 font-semibold text-gray-700">טלפון</th>
                 <th className="px-4 py-3 font-semibold text-gray-700">מ־</th>
@@ -237,8 +253,14 @@ export function TransfersContent({
                   <td className="px-4 py-3 text-gray-600 whitespace-nowrap">{ilDate(r.transferred_at)}</td>
                   <td className="px-4 py-3 font-medium"><Link href={`/leads/${r.lead_id}`} className="hover:text-blue-700 hover:underline">{r.name}</Link></td>
                   <td className="px-4 py-3 text-gray-600" dir="ltr">{r.phone ?? "—"}</td>
-                  <td className="px-4 py-3 text-gray-700">{r.from_client ?? "—"}{r.from_position ? <span className="text-gray-400"> · {r.from_position}</span> : null}</td>
-                  <td className="px-4 py-3 text-gray-900 font-medium">{r.to_client ?? "—"}{r.to_position ? <span className="text-gray-500 font-normal"> · {r.to_position}</span> : null}</td>
+                  <td className="px-4 py-3 text-gray-700">
+                    {r.from_client ?? "—"}{r.from_position ? <span className="text-gray-400"> · {r.from_position}</span> : null}
+                    <div className="text-xs text-gray-400">{r.from_start_date ? `${ilDate(r.from_start_date)} – ` : "עד "}{ilDate(dayBefore(r.transferred_at))}</div>
+                  </td>
+                  <td className="px-4 py-3 text-gray-900 font-medium">
+                    {r.to_client ?? "—"}{r.to_position ? <span className="text-gray-500 font-normal"> · {r.to_position}</span> : null}
+                    <div className="text-xs text-gray-400 font-normal">מ-{ilDate(r.to_start_date ?? r.transferred_at)}</div>
+                  </td>
                   <td className="px-4 py-3 text-gray-500 max-w-[220px] truncate" title={r.reason ?? ""}>{r.reason ?? ""}</td>
                   <td className="px-4 py-3">
                     <span className={`text-xs rounded-full px-2 py-0.5 ${r.source === "auto" ? "bg-slate-100 text-slate-600" : "bg-blue-50 text-blue-700"}`}>

@@ -31,7 +31,7 @@ export async function POST(req: NextRequest) {
   const admin = getSupabaseAdmin();
   const { data: lead } = await admin
     .from("leads")
-    .select("hired_client, hired_position, job_title")
+    .select("hired_client, hired_position, job_title, start_date")
     .eq("id", body.lead_id)
     .maybeSingle();
 
@@ -47,6 +47,8 @@ export async function POST(req: NextRequest) {
       to_client: toClient,
       to_position: toPosition,
       transferred_at: body.transferred_at || undefined,
+      from_start_date: lead?.start_date ?? null,
+      to_start_date: body.transferred_at || null,
       reason: body.reason?.trim() || null,
       source: "manual",
       created_by: user.email ?? null,
@@ -62,6 +64,7 @@ export async function POST(req: NextRequest) {
   if (body.apply_to_lead !== false) {
     const upd: Record<string, unknown> = { hired_client: toClient };
     if (toPosition) upd.hired_position = toPosition;
+    if (body.transferred_at) upd.start_date = body.transferred_at;
     await admin.from("leads").update(upd).eq("id", body.lead_id);
     await admin
       .from("job_transfers")
