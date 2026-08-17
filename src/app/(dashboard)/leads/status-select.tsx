@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useLayoutEffect } from "react";
+import { createPortal } from "react-dom";
 import { changeLeadStatus } from "@/lib/changeLeadStatusClient";
 import { updateLeadSubStatus } from "./actions";
 import {
@@ -60,14 +61,53 @@ export function StatusSelect({ leadId, currentStatus, currentSubStatus }: { lead
   const [subStatusDialog, setSubStatusDialog] = useState<{ open: boolean; targetStatus: LeadStatusValue | null }>({ open: false, targetStatus: null });
 
   const ref = useRef<HTMLDivElement>(null);
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+  const [coords, setCoords] = useState<{ top: number; right: number; openUp: boolean }>({
+    top: 0,
+    right: 0,
+    openUp: false,
+  });
 
   useEffect(() => {
+    // The menu is portaled to <body>, so "outside" must exclude both the
+    // trigger wrapper and the portaled menu — otherwise clicking a menu item
+    // closes it before the click lands.
     function handleClickOutside(e: MouseEvent) {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+      const t = e.target as Node;
+      if (ref.current?.contains(t)) return;
+      if (menuRef.current?.contains(t)) return;
+      setOpen(false);
     }
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
+
+  // Position the portaled menu under (or above, if no room) the trigger.
+  // Recomputed on scroll/resize so it tracks the button inside scroll areas.
+  useLayoutEffect(() => {
+    if (!open) return;
+    function place() {
+      const btn = buttonRef.current;
+      if (!btn) return;
+      const b = btn.getBoundingClientRect();
+      const menuH = menuRef.current?.offsetHeight ?? 260;
+      const spaceBelow = window.innerHeight - b.bottom;
+      const openUp = spaceBelow < menuH + 12 && b.top > spaceBelow;
+      setCoords({
+        top: openUp ? b.top - 4 : b.bottom + 4,
+        right: window.innerWidth - b.right,
+        openUp,
+      });
+    }
+    place();
+    window.addEventListener("scroll", place, true);
+    window.addEventListener("resize", place);
+    return () => {
+      window.removeEventListener("scroll", place, true);
+      window.removeEventListener("resize", place);
+    };
+  }, [open]);
 
   useEffect(() => {
     if (!toast) return;
@@ -263,6 +303,7 @@ export function StatusSelect({ leadId, currentStatus, currentSubStatus }: { lead
     <>
       <div className="relative" ref={ref}>
         <button
+          ref={buttonRef}
           type="button"
           onClick={() => setOpen(!open)}
           disabled={loading}
@@ -275,31 +316,43 @@ export function StatusSelect({ leadId, currentStatus, currentSubStatus }: { lead
           </svg>
         </button>
 
-        {open && (
-          <div className="absolute z-50 mt-1 right-0 w-44 bg-white rounded-lg shadow-lg border border-gray-200 py-1 animate-in fade-in max-h-72 overflow-y-auto">
-            {availableStatuses.map((s) => {
-              const isActive = s.value === status;
-              const isAllowed = allowedTargets.includes(s.value);
-              return (
-                <button
-                  key={s.value}
-                  type="button"
-                  onClick={() => handleSelect(s.value)}
-                  disabled={isActive}
-                  className={`w-full flex items-center gap-2 px-3 py-2 text-xs text-right hover:bg-gray-50 transition-colors ${isActive ? "bg-gray-50 font-semibold" : ""} ${!isActive && !isAllowed ? "opacity-40 cursor-not-allowed" : ""}`}
-                >
-                  <span className={`w-2 h-2 rounded-full flex-shrink-0 ${s.dot}`} />
-                  {s.label}
-                  {isActive && (
-                    <svg className="w-3 h-3 mr-auto text-cyan-600" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                    </svg>
-                  )}
-                </button>
-              );
-            })}
-          </div>
-        )}
+        {open &&
+          typeof document !== "undefined" &&
+          createPortal(
+            <div
+              ref={menuRef}
+              style={{
+                position: "fixed",
+                top: coords.top,
+                right: coords.right,
+                transform: coords.openUp ? "translateY(-100%)" : undefined,
+              }}
+              className="z-[90] w-44 bg-white rounded-lg shadow-lg border border-gray-200 py-1 animate-in fade-in max-h-72 overflow-y-auto"
+            >
+              {availableStatuses.map((s) => {
+                const isActive = s.value === status;
+                const isAllowed = allowedTargets.includes(s.value);
+                return (
+                  <button
+                    key={s.value}
+                    type="button"
+                    onClick={() => handleSelect(s.value)}
+                    disabled={isActive}
+                    className={`w-full flex items-center gap-2 px-3 py-2 text-xs text-right hover:bg-gray-50 transition-colors ${isActive ? "bg-gray-50 font-semibold" : ""} ${!isActive && !isAllowed ? "opacity-40 cursor-not-allowed" : ""}`}
+                  >
+                    <span className={`w-2 h-2 rounded-full flex-shrink-0 ${s.dot}`} />
+                    {s.label}
+                    {isActive && (
+                      <svg className="w-3 h-3 mr-auto text-cyan-600" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                      </svg>
+                    )}
+                  </button>
+                );
+              })}
+            </div>,
+            document.body
+          )}
 
         {/* Sub-status dropdown */}
         {SUB_STATUSES[status] && (
