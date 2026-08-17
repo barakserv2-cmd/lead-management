@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
-import { fetchUnreadEmails, markAsRead, parseFromHeader, detectSource } from "@/lib/gmail";
+import { fetchUnreadEmails, parseFromHeader, detectSource } from "@/lib/gmail";
 import { parseEmailWithAI } from "@/lib/ai/parse-email";
 import { LEAD_STATUSES } from "@/lib/constants";
 
@@ -107,8 +107,8 @@ async function handleFetchEmails() {
             );
             summary.duplicates++;
             summary.details.push(`Duplicate (phone ${phone}): ${name}`);
-            // Still mark as read to avoid reprocessing
-            await markAsRead(email.id);
+            // Do NOT mark as read — lead emails must stay unread in the inbox.
+            // Dedup is by original_email_id, so re-scanning is safe.
             continue;
           }
         }
@@ -151,8 +151,10 @@ async function handleFetchEmails() {
         summary.details.push(`New lead: ${name} (${phone || "no phone"})`);
         console.log(`[Gmail] New lead created: ${name}`);
 
-        // 2f. Mark email as read
-        await markAsRead(email.id);
+        // NOTE: we intentionally do NOT mark the email as read — new leads
+        // stay unread in the inbox so they're visible there too. The scraper
+        // no longer relies on unread status (it scans a recent time window and
+        // dedups by original_email_id), so this is safe and won't re-ingest.
 
         // Rate limit: 1s delay between Claude AI calls
         if (summary.processed < emails.length) {
