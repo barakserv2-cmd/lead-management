@@ -1,10 +1,12 @@
 import Link from "next/link";
 import { getSupabaseAdmin } from "@/lib/api-auth";
 import {
+  LeadStatus,
   STATUS_LABELS,
   STATUS_COLORS,
   type LeadStatusValue,
 } from "@/lib/stateMachine";
+import { AutoRefresh } from "./auto-refresh";
 
 export const dynamic = "force-dynamic";
 
@@ -21,7 +23,8 @@ type Row = {
   handled_at: string | null;
 };
 
-const UNHANDLED = "__unhandled__";
+const UNHANDLED = "__unhandled__";        // status still NEW_LEAD — truly untouched
+const UNATTRIBUTED = "__unattributed__";  // has a real status but no recruiter (automation/legacy)
 
 function ilTime(iso: string): string {
   return new Date(iso).toLocaleTimeString("he-IL", {
@@ -45,27 +48,41 @@ export default async function TodayPage() {
   const { data, error } = await supabase.rpc("get_today_leads_by_recruiter");
   const rows = (data ?? []) as Row[];
 
-  // Group by handling recruiter; unhandled last.
+  // Group into: recruiters (by name) · "handled but unattributed" (real status,
+  // no recruiter — automation/legacy) · "not yet handled" (still NEW_LEAD).
   const groups = new Map<string, { name: string; rows: Row[] }>();
   for (const r of rows) {
-    const key = r.handled_by ?? UNHANDLED;
-    const name =
-      r.handled_by == null ? "טרם טופלו" : r.recruiter_name || r.handled_by;
+    let key: string;
+    let name: string;
+    if (r.handled_by) {
+      key = r.handled_by;
+      name = r.recruiter_name || r.handled_by;
+    } else if (r.status === LeadStatus.NEW_LEAD) {
+      key = UNHANDLED;
+      name = "טרם טופלו";
+    } else {
+      key = UNATTRIBUTED;
+      name = "טופל (לא משויך)";
+    }
     if (!groups.has(key)) groups.set(key, { name, rows: [] });
     groups.get(key)!.rows.push(r);
   }
+  // recruiters first (by size), then unattributed, then untouched last
+  const rank = (k: string) => (k === UNHANDLED ? 2 : k === UNATTRIBUTED ? 1 : 0);
   const ordered = [...groups.entries()].sort((a, b) => {
-    if (a[0] === UNHANDLED) return 1;
-    if (b[0] === UNHANDLED) return -1;
+    if (rank(a[0]) !== rank(b[0])) return rank(a[0]) - rank(b[0]);
     return b[1].rows.length - a[1].rows.length;
   });
 
   return (
     <div dir="rtl" className="p-6 max-w-5xl mx-auto">
+      {/* refresh the board every 15s so handling/new leads appear near-live */}
+      <AutoRefresh intervalMs={15000} />
+
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-slate-800">לידים של היום</h1>
         <p className="text-sm text-slate-500 mt-1">
-          {ilToday()} · {rows.length} לידים · מחולק לפי הרכזת שטיפלה
+          {ilToday()} · {rows.length} לידים · מחולק לפי הרכזת שטיפלה · מתעדכן אוטומטית
         </p>
       </div>
 
@@ -89,7 +106,7 @@ export default async function TodayPage() {
           >
             <div
               className={`flex items-center justify-between px-5 py-3 border-b ${
-                key === UNHANDLED
+                key === UNHANDLED || key === UNATTRIBUTED
                   ? "bg-slate-50 border-slate-200"
                   : "bg-cyan-50 border-cyan-100"
               }`}
