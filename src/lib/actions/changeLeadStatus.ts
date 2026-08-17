@@ -137,6 +137,14 @@ export async function changeLeadStatus(input: ChangeStatusInput): Promise<Change
     updateData.followup_notes = extra.followupNotes;
   }
 
+  // 5b. Attribute handling to the recruiter who moved the lead — real user
+  // emails only (skip automated "system"/"ai-recruiter"/"user"). Powers the
+  // "לידים של היום" board that splits today's leads by recruiter.
+  if (userId && userId.includes("@")) {
+    updateData.handled_by = userId;
+    updateData.handled_at = new Date().toISOString();
+  }
+
   // 6. Update the leads table
   const { error: updateError } = await supabase
     .from("leads")
@@ -171,6 +179,7 @@ export async function changeLeadStatus(input: ChangeStatusInput): Promise<Change
 
   // 8. Revalidate
   revalidatePath("/leads");
+  revalidatePath("/today");
 
   return { success: true };
 }
