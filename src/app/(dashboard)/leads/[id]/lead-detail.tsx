@@ -51,6 +51,7 @@ function getStatusLabel(status: string): string {
 }
 import { ConversationSheet } from "./conversation-sheet";
 import { ChatHistory } from "./chat-history";
+import { DuplicatesSection } from "./duplicates-section";
 
 // ── Helpers ──────────────────────────────────────────────────
 
@@ -386,6 +387,9 @@ export function LeadDetail({ lead }: { lead: Lead }) {
 
   return (
     <div className="space-y-4">
+      {/* Duplicate cards for the same candidate — offer to merge */}
+      <DuplicatesSection leadId={lead.id} />
+
       {/* Back link */}
       <Link
         href="/leads"
