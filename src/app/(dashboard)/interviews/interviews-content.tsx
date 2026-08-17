@@ -2,7 +2,8 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
-import { STATUS_COLORS, STATUS_LABELS, LeadStatus, type LeadStatusValue } from "@/lib/stateMachine";
+import { STATUS_LABELS, LeadStatus, type LeadStatusValue } from "@/lib/stateMachine";
+import { StatusSelect } from "../leads/status-select";
 
 export interface InterviewRow {
   id: string;
@@ -222,7 +223,6 @@ export function InterviewsContent({ rows }: { rows: InterviewRow[] }) {
                 </div>
                 <ul className="divide-y divide-slate-100">
                   {g.rows.map((r) => {
-                    const c = STATUS_COLORS[r.status] ?? { bg: "bg-slate-100", text: "text-slate-700", dot: "bg-slate-400" };
                     return (
                       <li key={r.id} className="flex items-start gap-3 px-5 py-3 hover:bg-slate-50 transition-colors">
                         <span className="text-base font-bold text-slate-900 w-14 shrink-0 tabular-nums pt-0.5">{ilTime(r.interview_date)}</span>
@@ -260,7 +260,9 @@ export function InterviewsContent({ rows }: { rows: InterviewRow[] }) {
                           </div>
                           {r.interview_notes && <div className="mt-1 text-sm text-slate-600 whitespace-pre-wrap">{r.interview_notes}</div>}
                         </div>
-                        <span className={`text-xs font-medium rounded-full px-2.5 py-1 shrink-0 ${c.bg} ${c.text}`}>{STATUS_LABELS[r.status] ?? r.status}</span>
+                        <div className="shrink-0" onClick={(e) => e.stopPropagation()}>
+                          <StatusSelect leadId={r.id} currentStatus={r.status} />
+                        </div>
                       </li>
                     );
                   })}
