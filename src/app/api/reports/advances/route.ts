@@ -1,4 +1,4 @@
-// POST /api/reports/advances  { lead_id, amount, paid_at, notes }
+// POST /api/reports/advances  { lead_id, amount, paid_at, notes, reason }  (housing deductions)
 // DELETE /api/reports/advances?id=...
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
@@ -16,7 +16,7 @@ export async function POST(req: NextRequest) {
   const user = await requireUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const body = (await req.json().catch(() => ({}))) as { lead_id?: string; amount?: number | string; paid_at?: string; notes?: string };
+  const body = (await req.json().catch(() => ({}))) as { lead_id?: string; amount?: number | string; paid_at?: string; notes?: string; reason?: string };
   const amount = Number(body.amount);
   if (!body.lead_id || !Number.isFinite(amount) || amount <= 0) {
     return NextResponse.json({ error: "lead_id ו-amount חיובי נדרשים" }, { status: 400 });
@@ -33,6 +33,7 @@ export async function POST(req: NextRequest) {
       paid_at: body.paid_at || undefined,
       employer: lead?.hired_client ?? null,
       notes: body.notes?.trim() || null,
+      reason: ["requested", "self_rent", "stopped_working"].includes(body.reason ?? "") ? body.reason : "requested",
       created_by: user.email ?? null,
     })
     .select("id")

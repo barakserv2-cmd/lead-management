@@ -65,7 +65,7 @@ export async function GET(req: NextRequest) {
     if (rawType === "advances") {
       let aq = db
         .from("advances")
-        .select("amount, paid_at, employer, notes, created_by, leads(name, phone, hired_position, job_title)")
+        .select("amount, paid_at, employer, notes, reason, created_by, leads(name, phone, hired_position, job_title)")
         .order("paid_at", { ascending: false })
         .limit(5000);
       if (from) aq = aq.gte("paid_at", from);
@@ -74,10 +74,11 @@ export async function GET(req: NextRequest) {
       const { data, error } = await aq;
       if (error) return NextResponse.json({ error: error.message }, { status: 500 });
       const csv = toCsv(
-        ["תאריך", "שם", "טלפון", "מעסיק", "תפקיד", "סכום", "הערה", "נרשם ע\"י"],
+        ["תאריך", "שם", "טלפון", "מעסיק", "תפקיד", "סכום לניכוי", "סיבה", "הערה", "נרשם ע\"י"],
         ((data ?? []) as Array<Record<string, unknown>>).map((r) => {
           const l = (r.leads as Record<string, unknown> | null) ?? {};
-          return [r.paid_at, l.name, l.phone, r.employer, l.hired_position ?? l.job_title, r.amount, r.notes, r.created_by];
+          const reasonLabel = r.reason === "self_rent" ? "שוכר/ת לבד" : r.reason === "stopped_working" ? "הפסיק/ה להגיע, נשאר/ה במגורים" : "ביקש/ה";
+          return [r.paid_at, l.name, l.phone, r.employer, l.hired_position ?? l.job_title, r.amount, reasonLabel, r.notes, r.created_by];
         })
       );
       return new NextResponse(csv, { status: 200, headers: csvHeaders });

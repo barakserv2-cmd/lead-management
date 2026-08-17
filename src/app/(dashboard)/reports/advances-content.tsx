@@ -4,6 +4,18 @@ import { useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 
+export type AdvanceReason = "requested" | "self_rent" | "stopped_working";
+export const REASON_LABELS: Record<AdvanceReason, string> = {
+  requested: "ביקש/ה ניכוי לשכירות",
+  self_rent: "שוכר/ת דירה לבד",
+  stopped_working: "הפסיק/ה להגיע — נשאר/ה במגורים",
+};
+const REASON_STYLE: Record<AdvanceReason, string> = {
+  requested: "bg-blue-50 text-blue-700",
+  self_rent: "bg-violet-50 text-violet-700",
+  stopped_working: "bg-red-50 text-red-700",
+};
+
 export interface AdvanceRow {
   id: string;
   lead_id: string;
@@ -11,6 +23,7 @@ export interface AdvanceRow {
   paid_at: string; // YYYY-MM-DD
   employer: string | null;
   notes: string | null;
+  reason: AdvanceReason;
   created_by: string | null;
   name: string;
   phone: string | null;
@@ -37,14 +50,11 @@ function ilDate(d: string | null) {
 function todayIso() {
   return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Jerusalem" }).format(new Date());
 }
-function daysSince(d: string | null): number | null {
-  if (!d) return null;
-  return Math.floor((Date.now() - new Date(`${d}T12:00:00`).getTime()) / 86400000);
-}
 
 export function AdvancesContent({ rows, workers, loadError }: { rows: AdvanceRow[]; workers: WorkerOption[]; loadError: string | null }) {
   const router = useRouter();
   const [employer, setEmployer] = useState("");
+  const [reasonF, setReasonF] = useState("");
   const [q, setQ] = useState("");
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
@@ -56,6 +66,7 @@ export function AdvancesContent({ rows, workers, loadError }: { rows: AdvanceRow
   const [amount, setAmount] = useState("");
   const [paidAt, setPaidAt] = useState(todayIso());
   const [notes, setNotes] = useState("");
+  const [reason, setReason] = useState<AdvanceReason>("requested");
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
@@ -65,12 +76,13 @@ export function AdvancesContent({ rows, workers, loadError }: { rows: AdvanceRow
     const qn = q.trim().toLowerCase();
     return rows.filter((r) => {
       if (employer && r.employer !== employer) return false;
+      if (reasonF && r.reason !== reasonF) return false;
       if (from && r.paid_at < from) return false;
       if (to && r.paid_at > to) return false;
       if (qn && !`${r.name} ${r.phone ?? ""} ${r.employer ?? ""} ${r.notes ?? ""}`.toLowerCase().includes(qn)) return false;
       return true;
     });
-  }, [rows, employer, q, from, to]);
+  }, [rows, employer, reasonF, q, from, to]);
 
   const total = filtered.reduce((a, r) => a + r.amount, 0);
   const perWorker = useMemo(() => {
@@ -90,7 +102,6 @@ export function AdvancesContent({ rows, workers, loadError }: { rows: AdvanceRow
     return workers.filter((w) => `${w.name} ${w.phone ?? ""} ${w.hired_client ?? ""}`.toLowerCase().includes(s)).slice(0, 8);
   }, [workers, workerQ]);
   const selectedWorker = workers.find((w) => w.id === leadId) ?? null;
-  const eligibleDays = daysSince(selectedWorker?.start_date ?? null);
 
   async function submit() {
     setErr(null);
@@ -101,11 +112,11 @@ export function AdvancesContent({ rows, workers, loadError }: { rows: AdvanceRow
       const res = await fetch("/api/reports/advances", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ lead_id: leadId, amount: Number(amount), paid_at: paidAt, notes }),
+        body: JSON.stringify({ lead_id: leadId, amount: Number(amount), paid_at: paidAt, notes, reason }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error ?? "שגיאה");
-      setLeadId(""); setWorkerQ(""); setAmount(""); setNotes(""); setShowForm(false);
+      setLeadId(""); setWorkerQ(""); setAmount(""); setNotes(""); setReason("requested"); setShowForm(false);
       router.refresh();
     } catch (e) {
       setErr(e instanceof Error ? e.message : "שגיאה");
@@ -115,7 +126,7 @@ export function AdvancesContent({ rows, workers, loadError }: { rows: AdvanceRow
   }
 
   async function remove(id: string) {
-    if (!confirm("למחוק את המקדמה?")) return;
+    if (!confirm("למחוק את הרישום?")) return;
     const res = await fetch(`/api/reports/advances?id=${id}`, { method: "DELETE" });
     if (res.ok) router.refresh();
   }
@@ -131,11 +142,14 @@ export function AdvancesContent({ rows, workers, loadError }: { rows: AdvanceRow
   return (
     <div>
       <div className="flex flex-wrap items-end justify-between gap-3 mb-6">
-        <h1 className="text-2xl font-bold">דוח מקדמות</h1>
+        <div>
+          <h1 className="text-2xl font-bold">דוח מקדמות לדיור</h1>
+          <p className="text-sm text-gray-500 mt-1">עובדים שמסומנים לשכר לניכוי סכום מהמשכורת לטובת השכירות/המגורים.</p>
+        </div>
         <div className="flex gap-2">
           <a href={exportUrl} className="text-sm px-3 py-2 rounded-lg border border-gray-300 bg-white hover:bg-gray-50">⬇ ייצוא לאקסל</a>
           <button type="button" onClick={() => setShowForm((v) => !v)} className="text-sm px-3 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700 font-semibold">
-            + רישום מקדמה
+            + סימון עובד/ת לניכוי
           </button>
         </div>
       </div>
@@ -155,11 +169,6 @@ export function AdvancesContent({ rows, workers, loadError }: { rows: AdvanceRow
                 <div className="flex items-center justify-between border border-gray-300 rounded-lg px-3 py-2 text-sm bg-gray-50">
                   <span>
                     <b>{selectedWorker.name}</b> · {selectedWorker.phone ?? "—"} · {selectedWorker.hired_client ?? "ללא מעסיק"}
-                    {eligibleDays !== null && (
-                      <span className={`mr-2 text-xs ${eligibleDays >= 10 ? "text-emerald-700" : "text-amber-700"}`}>
-                        ({eligibleDays} ימי עבודה{eligibleDays < 10 ? " — פחות מ-10" : ""})
-                      </span>
-                    )}
                   </span>
                   <button type="button" onClick={() => setLeadId("")} className="text-gray-400 hover:text-gray-700 text-xs">שנה</button>
                 </div>
@@ -187,14 +196,20 @@ export function AdvancesContent({ rows, workers, loadError }: { rows: AdvanceRow
               )}
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">סכום (₪)</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">סכום לניכוי (₪)</label>
               <input type="number" min={1} value={amount} onChange={(e) => setAmount(e.target.value)} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" dir="ltr" />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">תאריך תשלום</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">תאריך / חודש שכר</label>
               <input type="date" value={paidAt} onChange={(e) => setPaidAt(e.target.value)} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" />
             </div>
-            <div className="md:col-span-3">
+            <div className="md:col-span-2">
+              <label className="block text-sm font-medium text-gray-700 mb-1">סיבה</label>
+              <select value={reason} onChange={(e) => setReason(e.target.value as AdvanceReason)} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white">
+                {(Object.keys(REASON_LABELS) as AdvanceReason[]).map((k) => <option key={k} value={k}>{REASON_LABELS[k]}</option>)}
+              </select>
+            </div>
+            <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">הערה</label>
               <input value={notes} onChange={(e) => setNotes(e.target.value)} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" placeholder="אופציונלי" />
             </div>
@@ -213,15 +228,15 @@ export function AdvancesContent({ rows, workers, loadError }: { rows: AdvanceRow
       <div className="grid gap-3 sm:grid-cols-3 mb-6">
         <div className="bg-cyan-50 border border-cyan-200 rounded-xl px-5 py-4">
           <div className="text-2xl font-bold text-cyan-700">{ILS.format(total)}</div>
-          <div className="text-sm text-cyan-700">סה&quot;כ מקדמות (בסינון)</div>
+          <div className="text-sm text-cyan-700">סה&quot;כ לניכוי (בסינון)</div>
         </div>
         <div className="bg-white border rounded-xl px-5 py-4">
           <div className="text-2xl font-bold text-gray-800">{filtered.length}</div>
-          <div className="text-sm text-gray-500">תשלומים</div>
+          <div className="text-sm text-gray-500">רישומים</div>
         </div>
         <div className="bg-white border rounded-xl px-5 py-4">
           <div className="text-2xl font-bold text-gray-800">{perWorker.length}</div>
-          <div className="text-sm text-gray-500">עובדים שקיבלו</div>
+          <div className="text-sm text-gray-500">עובדים</div>
         </div>
       </div>
 
@@ -231,6 +246,10 @@ export function AdvancesContent({ rows, workers, loadError }: { rows: AdvanceRow
         <select value={employer} onChange={(e) => setEmployer(e.target.value)} className="border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white">
           <option value="">כל המעסיקים</option>
           {employerOptions.map((o) => <option key={o} value={o}>{o}</option>)}
+        </select>
+        <select value={reasonF} onChange={(e) => setReasonF(e.target.value)} className="border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white">
+          <option value="">כל הסיבות</option>
+          {(Object.keys(REASON_LABELS) as AdvanceReason[]).map((k) => <option key={k} value={k}>{REASON_LABELS[k]}</option>)}
         </select>
         <div>
           <label className="block text-xs text-gray-500 mb-1">מתאריך</label>
@@ -243,7 +262,7 @@ export function AdvancesContent({ rows, workers, loadError }: { rows: AdvanceRow
       </div>
 
       {filtered.length === 0 ? (
-        <div className="text-center py-16 text-gray-500">אין מקדמות להצגה. לחצי &quot;רישום מקדמה&quot; כדי להוסיף.</div>
+        <div className="text-center py-16 text-gray-500">אין רישומים להצגה. לחצי &quot;סימון עובד/ת לניכוי&quot; כדי להוסיף.</div>
       ) : (
         <div className="grid gap-6 lg:grid-cols-[1fr_300px]">
           <div className="bg-white rounded-xl border shadow-sm overflow-x-auto">
@@ -255,7 +274,8 @@ export function AdvancesContent({ rows, workers, loadError }: { rows: AdvanceRow
                   <th className="px-4 py-3 font-semibold text-gray-700">טלפון</th>
                   <th className="px-4 py-3 font-semibold text-gray-700">מעסיק</th>
                   <th className="px-4 py-3 font-semibold text-gray-700">תפקיד</th>
-                  <th className="px-4 py-3 font-semibold text-gray-700">סכום</th>
+                  <th className="px-4 py-3 font-semibold text-gray-700">סכום לניכוי</th>
+                  <th className="px-4 py-3 font-semibold text-gray-700">סיבה</th>
                   <th className="px-4 py-3 font-semibold text-gray-700">הערה</th>
                   <th className="px-2 py-3"></th>
                 </tr>
@@ -269,6 +289,7 @@ export function AdvancesContent({ rows, workers, loadError }: { rows: AdvanceRow
                     <td className="px-4 py-3 text-gray-600">{r.employer ?? "—"}</td>
                     <td className="px-4 py-3 text-gray-600">{r.position ?? "—"}</td>
                     <td className="px-4 py-3 font-semibold text-gray-900 whitespace-nowrap">{ILS.format(r.amount)}</td>
+                    <td className="px-4 py-3"><span className={`text-xs rounded-full px-2 py-0.5 whitespace-nowrap ${REASON_STYLE[r.reason]}`}>{REASON_LABELS[r.reason]}</span></td>
                     <td className="px-4 py-3 text-gray-500 max-w-[220px] truncate" title={r.notes ?? ""}>{r.notes ?? ""}</td>
                     <td className="px-2 py-3"><button type="button" onClick={() => remove(r.id)} className="text-xs text-gray-400 hover:text-red-600" title="מחיקה">✕</button></td>
                   </tr>

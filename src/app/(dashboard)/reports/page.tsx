@@ -12,7 +12,7 @@ type Tab = "hired" | "advances" | "transfers";
 
 const TABS: { key: Tab; label: string; icon: string }[] = [
   { key: "hired", label: "דוח מועסקים", icon: "👷" },
-  { key: "advances", label: "דוח מקדמות", icon: "💸" },
+  { key: "advances", label: "דוח מקדמות לדיור", icon: "🏠" },
   { key: "transfers", label: "דוח העברות בין עבודות", icon: "🔁" },
 ];
 
@@ -49,7 +49,7 @@ export default async function ReportsPage({
     const [{ data: rows, error }, { data: workers }] = await Promise.all([
       supabase
         .from("advances")
-        .select("id, lead_id, amount, paid_at, employer, notes, created_by, created_at, leads(name, phone, hired_client, hired_position, job_title, start_date)")
+        .select("id, lead_id, amount, paid_at, employer, notes, reason, created_by, created_at, leads(name, phone, hired_client, hired_position, job_title, start_date)")
         .order("paid_at", { ascending: false })
         .limit(2000),
       workersPromise,
@@ -63,6 +63,7 @@ export default async function ReportsPage({
         paid_at: r.paid_at as string,
         employer: (r.employer as string | null) ?? (l.hired_client as string | null) ?? null,
         notes: (r.notes as string | null) ?? null,
+        reason: ((r.reason as string | null) ?? "requested") as AdvanceRow["reason"],
         created_by: (r.created_by as string | null) ?? null,
         name: (l.name as string) ?? "—",
         phone: (l.phone as string | null) ?? null,
