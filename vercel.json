@@ -3,7 +3,7 @@
   "crons": [
     {
       "path": "/api/gmail",
-      "schedule": "0 8 * * *"
+      "schedule": "*/2 * * * *"
     },
     {
       "path": "/api/cron/daily",
