@@ -16,6 +16,7 @@ type Row = {
   phone: string | null;
   source: string | null;
   status: LeadStatusValue;
+  sub_status: string | null;
   effective_at: string;
   handled_at: string | null;
 };
@@ -127,10 +128,17 @@ export default async function TodayPage() {
                           {r.source}
                         </span>
                       )}
-                      <span
-                        className={`text-xs font-medium rounded-full px-2.5 py-1 shrink-0 ${c.bg} ${c.text}`}
-                      >
-                        {STATUS_LABELS[r.status] ?? r.status}
+                      <span className="shrink-0 flex flex-col items-end gap-0.5">
+                        <span
+                          className={`text-xs font-medium rounded-full px-2.5 py-1 ${c.bg} ${c.text}`}
+                        >
+                          {STATUS_LABELS[r.status] ?? r.status}
+                        </span>
+                        {r.sub_status && (
+                          <span className="text-[11px] text-slate-500 leading-tight">
+                            {r.sub_status}
+                          </span>
+                        )}
                       </span>
                     </Link>
                   </li>
