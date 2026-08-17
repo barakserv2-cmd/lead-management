@@ -13,6 +13,7 @@ export interface TimelineEvent {
   text: string;
   created_by: string;
   created_at: string;
+  editable?: boolean; // true only for manual journal entries (lead_events)
 }
 
 export async function GET(
@@ -52,8 +53,9 @@ export async function GET(
     kind: "event" as const,
     event_type: e.event_type,
     text: e.event_text,
-    created_by: e.created_by,
+    created_by: e.created_by || "מערכת",
     created_at: e.created_at,
+    editable: true,
   }));
 
   const statusChanges: TimelineEvent[] = (historyRes.data ?? []).map((h) => ({
@@ -139,6 +141,49 @@ export async function POST(
       { error: missing ? "טבלת האירועים עדיין לא הוקמה — יש להריץ את מיגרציה 00035" : error.message },
       { status: missing ? 503 : 500 }
     );
+  }
+
+  return NextResponse.json({ event: data });
+}
+
+// Edit an existing manual journal entry (lead_events only). Status-change and
+// interaction rows are not editable here. The original author (created_by) is
+// preserved so accountability isn't lost.
+export async function PATCH(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  const { id: leadId } = await params;
+
+  let body: { event_id?: string; event_text?: string };
+  try {
+    body = await request.json();
+  } catch {
+    return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
+  }
+
+  const text = body.event_text?.trim();
+  if (!body.event_id || !text) {
+    return NextResponse.json({ error: "חסר מזהה אירוע או תוכן" }, { status: 400 });
+  }
+
+  const { data, error } = await supabase
+    .from("lead_events")
+    .update({ event_text: text })
+    .eq("id", body.event_id)
+    .eq("lead_id", leadId) // guard: the event must belong to this lead
+    .select("id, event_type, event_text, created_by, created_at")
+    .single();
+
+  if (error) {
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+  if (!data) {
+    return NextResponse.json({ error: "האירוע לא נמצא" }, { status: 404 });
   }
 
   return NextResponse.json({ event: data });

@@ -4,9 +4,10 @@ import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import type { TimelineEvent } from "@/app/api/leads/[id]/events/route";
 
-// יומן אירועים למועמד: תיעוד append-only (בלי עריכה/מחיקה) של כל מה
-// שקרה עם העובד — שיחות, אזהרות, תיאומים, תלונות — ממוזג עם שינויי
-// הסטטוס האוטומטיים. המטרה: כשיש מחלוקת, היומן הוא האמת.
+// יומן אירועים למועמד: תיעוד של כל מה שקרה עם העובד — שיחות, אזהרות,
+// תיאומים, תלונות — ממוזג עם שינויי הסטטוס האוטומטיים. כל רשומה מציגה מי
+// כתב אותה (created_by). רשומות ידניות (lead_events) ניתנות לעריכה; שינויי
+// סטטוס אוטומטיים לא. המטרה: כשיש מחלוקת, היומן הוא האמת.
 
 const EVENT_TYPES = ["שיחה", "אזהרה", "תיאום", "תלונה", "שיבוץ", "אחר"] as const;
 
@@ -42,6 +43,9 @@ export function LeadEventsSection({ leadId }: { leadId: string }) {
   const [text, setText] = useState("");
   const [eventType, setEventType] = useState<string>("שיחה");
   const [saving, setSaving] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editText, setEditText] = useState("");
+  const [savingEdit, setSavingEdit] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -88,6 +92,43 @@ export function LeadEventsSection({ leadId }: { leadId: string }) {
       }
     } finally {
       setSaving(false);
+    }
+  }
+
+  function startEdit(ev: TimelineEvent) {
+    setEditingId(ev.id);
+    setEditText(ev.text);
+  }
+
+  function cancelEdit() {
+    setEditingId(null);
+    setEditText("");
+  }
+
+  async function saveEdit(eventId: string) {
+    const trimmed = editText.trim();
+    if (!trimmed || savingEdit) return;
+    setSavingEdit(true);
+    try {
+      const res = await fetch(`/api/leads/${leadId}/events`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ event_id: eventId, event_text: trimmed }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        toast.error(data.error ?? "שגיאה בעריכת האירוע");
+      } else {
+        setTimeline((prev) =>
+          prev.map((ev) =>
+            ev.id === eventId ? { ...ev, text: trimmed } : ev
+          )
+        );
+        cancelEdit();
+        toast.success("ההערה עודכנה");
+      }
+    } finally {
+      setSavingEdit(false);
     }
   }
 
@@ -157,8 +198,48 @@ export function LeadEventsSection({ leadId }: { leadId: string }) {
                   {ev.event_type}
                 </span>
                 <span className="text-[10px] text-gray-400 mr-auto">{formatDateTime(ev.created_at)}</span>
+                {ev.editable && editingId !== ev.id && (
+                  <button
+                    type="button"
+                    onClick={() => startEdit(ev)}
+                    className="text-[10px] text-cyan-600 hover:text-cyan-700 hover:underline shrink-0"
+                  >
+                    ערוך
+                  </button>
+                )}
               </div>
-              <div className={ev.kind === "status" ? "text-gray-500" : "text-gray-800"}>{ev.text}</div>
+
+              {editingId === ev.id ? (
+                <div className="space-y-1.5">
+                  <textarea
+                    value={editText}
+                    onChange={(e) => setEditText(e.target.value)}
+                    rows={3}
+                    className="w-full px-2 py-1.5 border border-cyan-300 rounded-md text-xs focus:outline-none focus:ring-2 focus:ring-cyan-500 resize-none bg-white"
+                    autoFocus
+                  />
+                  <div className="flex justify-end gap-1.5">
+                    <button
+                      type="button"
+                      onClick={cancelEdit}
+                      className="px-2.5 py-1 text-[11px] text-gray-500 hover:text-gray-700"
+                    >
+                      ביטול
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => saveEdit(ev.id)}
+                      disabled={!editText.trim() || savingEdit}
+                      className="px-3 py-1 bg-cyan-600 text-white text-[11px] font-semibold rounded-md hover:bg-cyan-700 disabled:opacity-50"
+                    >
+                      {savingEdit ? "שומר..." : "שמור"}
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className={ev.kind === "status" ? "text-gray-500" : "text-gray-800"}>{ev.text}</div>
+              )}
+
               <div className="text-[10px] text-gray-400 mt-1">מאת: {ev.created_by}</div>
             </div>
           ))}
