@@ -51,13 +51,14 @@ function LeadsTabs({ active, newCount }: { active: "queue" | "folders" | "all"; 
 export default async function LeadsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ page?: string; q?: string; statuses?: string; tags?: string; source?: string; view?: string; from?: string; to?: string }>;
+  searchParams: Promise<{ page?: string; q?: string; statuses?: string; sub?: string; tags?: string; source?: string; view?: string; from?: string; to?: string }>;
 }) {
   const params = await searchParams;
   const currentPage = Math.max(1, parseInt(params.page ?? "1", 10) || 1);
   const searchQuery = params.q?.trim() ?? "";
   const statusFilter = params.statuses?.split(",").filter(Boolean) ?? [];
   const tagFilter = params.tags?.split(",").filter(Boolean) ?? [];
+  const subStatusFilter = params.sub?.split(",").filter(Boolean) ?? [];
   const sourceParam = params.source ?? null;
   const dateFrom = /^\d{4}-\d{2}-\d{2}$/.test(params.from ?? "") ? params.from! : null;
   const dateTo = /^\d{4}-\d{2}-\d{2}$/.test(params.to ?? "") ? params.to! : null;
@@ -192,6 +193,7 @@ export default async function LeadsPage({
   if (searchFilter) dataQuery = dataQuery.or(searchFilter);
   if (effectiveStatusFilter.length > 0) dataQuery = dataQuery.in("status", effectiveStatusFilter);
   if (tagFilter.length > 0) dataQuery = dataQuery.overlaps("tags", tagFilter);
+  if (subStatusFilter.length > 0) dataQuery = dataQuery.in("sub_status", subStatusFilter);
   if (sourceFilter === "__none__") dataQuery = dataQuery.is("source", null);
   else if (sourceFilter) dataQuery = dataQuery.eq("source", sourceFilter);
 

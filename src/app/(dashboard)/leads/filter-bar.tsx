@@ -8,6 +8,12 @@ import {
   STATUS_COLORS,
   type LeadStatusValue,
 } from "@/lib/stateMachine";
+import { SUB_STATUSES } from "@/lib/constants";
+
+// Sub-statuses (flattened, labelled with their parent status).
+const SUB_STATUS_OPTIONS = Object.entries(SUB_STATUSES).flatMap(([status, subs]) =>
+  subs.map((sub) => ({ value: sub, label: sub, parent: STATUS_LABELS[status as LeadStatusValue] ?? status }))
+);
 
 const STATUS_OPTIONS = ALL_STATUSES.map((value) => ({
   value,
@@ -170,9 +176,11 @@ export function FilterBar({ allTags }: { allTags: string[] }) {
 
   const initialStatuses = searchParams.get("statuses")?.split(",").filter(Boolean) ?? [];
   const initialTags = searchParams.get("tags")?.split(",").filter(Boolean) ?? [];
+  const initialSubs = searchParams.get("sub")?.split(",").filter(Boolean) ?? [];
 
   const [selectedStatuses, setSelectedStatuses] = useState<Set<string>>(new Set(initialStatuses));
   const [selectedTags, setSelectedTags] = useState<Set<string>>(new Set(initialTags));
+  const [selectedSubs, setSelectedSubs] = useState<Set<string>>(new Set(initialSubs));
   const [dateFrom, setDateFrom] = useState<string>(searchParams.get("from") ?? "");
   const [dateTo, setDateTo] = useState<string>(searchParams.get("to") ?? "");
 
@@ -180,6 +188,7 @@ export function FilterBar({ allTags }: { allTags: string[] }) {
   useEffect(() => {
     setSelectedStatuses(new Set(searchParams.get("statuses")?.split(",").filter(Boolean) ?? []));
     setSelectedTags(new Set(searchParams.get("tags")?.split(",").filter(Boolean) ?? []));
+    setSelectedSubs(new Set(searchParams.get("sub")?.split(",").filter(Boolean) ?? []));
     setDateFrom(searchParams.get("from") ?? "");
     setDateTo(searchParams.get("to") ?? "");
   }, [searchParams]);
@@ -192,8 +201,14 @@ export function FilterBar({ allTags }: { allTags: string[] }) {
     router.push(`/leads?${params.toString()}`);
   }
 
-  function applyFilters(statuses: Set<string>, tags: Set<string>) {
+  function applyFilters(statuses: Set<string>, tags: Set<string>, subs: Set<string> = selectedSubs) {
     const params = new URLSearchParams(searchParams.toString());
+
+    if (subs.size > 0) {
+      params.set("sub", Array.from(subs).join(","));
+    } else {
+      params.delete("sub");
+    }
 
     if (statuses.size > 0) {
       params.set("statuses", Array.from(statuses).join(","));
@@ -222,13 +237,26 @@ export function FilterBar({ allTags }: { allTags: string[] }) {
     applyFilters(selectedStatuses, next);
   }
 
+  function handleSubChange(next: Set<string>) {
+    setSelectedSubs(next);
+    applyFilters(selectedStatuses, selectedTags, next);
+  }
+
+  function removeSub(value: string) {
+    const next = new Set(selectedSubs);
+    next.delete(value);
+    setSelectedSubs(next);
+    applyFilters(selectedStatuses, selectedTags, next);
+  }
+
   function clearAll() {
     setSelectedStatuses(new Set());
     setSelectedTags(new Set());
+    setSelectedSubs(new Set());
     setDateFrom("");
     setDateTo("");
     const params = new URLSearchParams(searchParams.toString());
-    ["statuses", "tags", "from", "to", "page"].forEach((k) => params.delete(k));
+    ["statuses", "sub", "tags", "from", "to", "page"].forEach((k) => params.delete(k));
     router.push(`/leads?${params.toString()}`);
   }
 
@@ -249,7 +277,7 @@ export function FilterBar({ allTags }: { allTags: string[] }) {
   const statusOptions = STATUS_OPTIONS.map((s) => ({ value: s.value, label: s.label }));
   const tagOptions = allTags.map((t) => ({ value: t, label: t }));
 
-  const hasFilters = selectedStatuses.size > 0 || selectedTags.size > 0 || !!dateFrom || !!dateTo;
+  const hasFilters = selectedStatuses.size > 0 || selectedSubs.size > 0 || selectedTags.size > 0 || !!dateFrom || !!dateTo;
 
   return (
     <div className="mb-4">
@@ -265,6 +293,22 @@ export function FilterBar({ allTags }: { allTags: string[] }) {
               <span className="flex items-center gap-1.5">
                 <span className={`w-2 h-2 rounded-full flex-shrink-0 ${statusDef?.dot ?? "bg-gray-400"}`} />
                 {opt.label}
+              </span>
+            );
+          }}
+        />
+
+        <MultiSelectDropdown
+          label="סינון לפי תת-סטטוס"
+          options={SUB_STATUS_OPTIONS.map((o) => ({ value: o.value, label: o.label }))}
+          selected={selectedSubs}
+          onChange={handleSubChange}
+          renderOption={(opt) => {
+            const def = SUB_STATUS_OPTIONS.find((o) => o.value === opt.value);
+            return (
+              <span className="flex items-center justify-between gap-2 w-full">
+                <span>{opt.label}</span>
+                <span className="text-[10px] text-gray-400">{def?.parent}</span>
               </span>
             );
           }}
@@ -348,6 +392,15 @@ export function FilterBar({ allTags }: { allTags: string[] }) {
                 </span>
               );
             })}
+
+            {Array.from(selectedSubs).map((s) => (
+              <span key={`sub-${s}`} className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-[11px] font-medium bg-violet-50 text-violet-700 border border-violet-200">
+                {s}
+                <button type="button" onClick={() => removeSub(s)} className="hover:text-red-600 transition-colors">
+                  <XIcon />
+                </button>
+              </span>
+            ))}
 
             {Array.from(selectedTags).map((t) => (
               <span key={`t-${t}`} className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-[11px] font-medium bg-amber-50 text-amber-700 border border-amber-200">
