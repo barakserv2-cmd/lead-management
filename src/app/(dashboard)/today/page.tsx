@@ -129,8 +129,11 @@ export default async function TodayPage() {
                       href={`/leads/${r.lead_id}`}
                       className="flex items-center gap-3 px-5 py-3 hover:bg-slate-50 transition-colors"
                     >
-                      <span className="text-xs text-slate-400 w-12 shrink-0 tabular-nums">
-                        {ilTime(r.effective_at)}
+                      <span
+                        className="text-xs text-slate-400 w-12 shrink-0 tabular-nums"
+                        title={r.handled_at ? `עדכון אחרון ${ilTime(r.handled_at)} · הגיע ${ilTime(r.effective_at)}` : `הגיע ${ilTime(r.effective_at)} — טרם טופל`}
+                      >
+                        {ilTime(r.handled_at ?? r.effective_at)}
                       </span>
                       <span className="font-medium text-slate-800 truncate min-w-0 flex-1">
                         {r.lead_name || "ללא שם"}
