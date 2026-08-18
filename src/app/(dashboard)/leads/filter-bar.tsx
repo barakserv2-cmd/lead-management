@@ -15,6 +15,40 @@ const STATUS_OPTIONS = ALL_STATUSES.map((value) => ({
   dot: STATUS_COLORS[value].dot,
 }));
 
+// YYYY-MM-DD for a Date in Israel time (en-CA formats as YYYY-MM-DD).
+function ilDateStr(d: Date): string {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Jerusalem",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(d);
+}
+
+function monthRange(y: number, m: number): { from: string; to: string } {
+  const mm = String(m).padStart(2, "0");
+  const lastDay = new Date(y, m, 0).getDate(); // last calendar day of month m
+  return { from: `${y}-${mm}-01`, to: `${y}-${mm}-${String(lastDay).padStart(2, "0")}` };
+}
+
+function datePresets(): { label: string; from: string; to: string }[] {
+  const DAY = 86_400_000;
+  const now = Date.now();
+  const today = ilDateStr(new Date(now));
+  const tomorrow = ilDateStr(new Date(now + DAY));
+  const weekAgo = ilDateStr(new Date(now - 6 * DAY));
+  const [ty, tm] = today.split("-").map(Number);
+  const cur = monthRange(ty, tm);
+  const prev = monthRange(tm === 1 ? ty - 1 : ty, tm === 1 ? 12 : tm - 1);
+  return [
+    { label: "היום", from: today, to: today },
+    { label: "מחר", from: tomorrow, to: tomorrow },
+    { label: "7 ימים", from: weekAgo, to: today },
+    { label: "חודש נוכחי", from: cur.from, to: cur.to },
+    { label: "חודש קודם", from: prev.from, to: prev.to },
+  ];
+}
+
 function FilterIcon() {
   return (
     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-3.5 h-3.5">
@@ -278,6 +312,25 @@ export function FilterBar({ allTags }: { allTags: string[] }) {
             </button>
           )}
         </div>
+
+        {/* Quick date presets */}
+        {datePresets().map((p) => {
+          const active = dateFrom === p.from && dateTo === p.to;
+          return (
+            <button
+              key={p.label}
+              type="button"
+              onClick={() => { setDateFrom(p.from); setDateTo(p.to); applyDates(p.from, p.to); }}
+              className={`px-2.5 py-1 rounded-full text-[11px] font-medium border transition-colors ${
+                active
+                  ? "border-cyan-400 bg-cyan-600 text-white"
+                  : "border-gray-200 bg-white text-gray-600 hover:border-cyan-300"
+              }`}
+            >
+              {p.label}
+            </button>
+          );
+        })}
 
         {hasFilters && (
           <>
