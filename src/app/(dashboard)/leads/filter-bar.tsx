@@ -35,14 +35,14 @@ function datePresets(): { label: string; from: string; to: string }[] {
   const DAY = 86_400_000;
   const now = Date.now();
   const today = ilDateStr(new Date(now));
-  const tomorrow = ilDateStr(new Date(now + DAY));
+  const yesterday = ilDateStr(new Date(now - DAY));
   const weekAgo = ilDateStr(new Date(now - 6 * DAY));
   const [ty, tm] = today.split("-").map(Number);
   const cur = monthRange(ty, tm);
   const prev = monthRange(tm === 1 ? ty - 1 : ty, tm === 1 ? 12 : tm - 1);
   return [
     { label: "היום", from: today, to: today },
-    { label: "מחר", from: tomorrow, to: tomorrow },
+    { label: "אתמול", from: yesterday, to: yesterday },
     { label: "7 ימים", from: weekAgo, to: today },
     { label: "חודש נוכחי", from: cur.from, to: cur.to },
     { label: "חודש קודם", from: prev.from, to: prev.to },
