@@ -139,12 +139,24 @@ export function FilterBar({ allTags }: { allTags: string[] }) {
 
   const [selectedStatuses, setSelectedStatuses] = useState<Set<string>>(new Set(initialStatuses));
   const [selectedTags, setSelectedTags] = useState<Set<string>>(new Set(initialTags));
+  const [dateFrom, setDateFrom] = useState<string>(searchParams.get("from") ?? "");
+  const [dateTo, setDateTo] = useState<string>(searchParams.get("to") ?? "");
 
   // Sync from URL when searchParams change externally
   useEffect(() => {
     setSelectedStatuses(new Set(searchParams.get("statuses")?.split(",").filter(Boolean) ?? []));
     setSelectedTags(new Set(searchParams.get("tags")?.split(",").filter(Boolean) ?? []));
+    setDateFrom(searchParams.get("from") ?? "");
+    setDateTo(searchParams.get("to") ?? "");
   }, [searchParams]);
+
+  function applyDates(from: string, to: string) {
+    const params = new URLSearchParams(searchParams.toString());
+    if (from) params.set("from", from); else params.delete("from");
+    if (to) params.set("to", to); else params.delete("to");
+    params.delete("page");
+    router.push(`/leads?${params.toString()}`);
+  }
 
   function applyFilters(statuses: Set<string>, tags: Set<string>) {
     const params = new URLSearchParams(searchParams.toString());
@@ -179,7 +191,11 @@ export function FilterBar({ allTags }: { allTags: string[] }) {
   function clearAll() {
     setSelectedStatuses(new Set());
     setSelectedTags(new Set());
-    applyFilters(new Set(), new Set());
+    setDateFrom("");
+    setDateTo("");
+    const params = new URLSearchParams(searchParams.toString());
+    ["statuses", "tags", "from", "to", "page"].forEach((k) => params.delete(k));
+    router.push(`/leads?${params.toString()}`);
   }
 
   function removeStatus(value: string) {
@@ -199,7 +215,7 @@ export function FilterBar({ allTags }: { allTags: string[] }) {
   const statusOptions = STATUS_OPTIONS.map((s) => ({ value: s.value, label: s.label }));
   const tagOptions = allTags.map((t) => ({ value: t, label: t }));
 
-  const hasFilters = selectedStatuses.size > 0 || selectedTags.size > 0;
+  const hasFilters = selectedStatuses.size > 0 || selectedTags.size > 0 || !!dateFrom || !!dateTo;
 
   return (
     <div className="mb-4">
@@ -228,6 +244,40 @@ export function FilterBar({ allTags }: { allTags: string[] }) {
             onChange={handleTagChange}
           />
         )}
+
+        {/* Date search (by arrival date) */}
+        <div className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-xs ${
+          dateFrom || dateTo ? "border-cyan-300 bg-cyan-50 text-cyan-700" : "border-gray-200 bg-white text-gray-600"
+        }`}>
+          <span className="text-[11px] font-medium">תאריך:</span>
+          <input
+            type="date"
+            value={dateFrom}
+            max={dateTo || undefined}
+            onChange={(e) => { setDateFrom(e.target.value); applyDates(e.target.value, dateTo); }}
+            className="bg-transparent text-xs outline-none w-[7.5rem] cursor-pointer"
+            aria-label="מתאריך"
+          />
+          <span className="text-gray-400">–</span>
+          <input
+            type="date"
+            value={dateTo}
+            min={dateFrom || undefined}
+            onChange={(e) => { setDateTo(e.target.value); applyDates(dateFrom, e.target.value); }}
+            className="bg-transparent text-xs outline-none w-[7.5rem] cursor-pointer"
+            aria-label="עד תאריך"
+          />
+          {(dateFrom || dateTo) && (
+            <button
+              type="button"
+              onClick={() => { setDateFrom(""); setDateTo(""); applyDates("", ""); }}
+              className="hover:text-red-600 transition-colors"
+              aria-label="נקה תאריך"
+            >
+              <XIcon />
+            </button>
+          )}
+        </div>
 
         {hasFilters && (
           <>

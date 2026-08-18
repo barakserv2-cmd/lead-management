@@ -51,7 +51,7 @@ function LeadsTabs({ active, newCount }: { active: "queue" | "folders" | "all"; 
 export default async function LeadsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ page?: string; q?: string; statuses?: string; tags?: string; source?: string; view?: string }>;
+  searchParams: Promise<{ page?: string; q?: string; statuses?: string; tags?: string; source?: string; view?: string; from?: string; to?: string }>;
 }) {
   const params = await searchParams;
   const currentPage = Math.max(1, parseInt(params.page ?? "1", 10) || 1);
@@ -59,6 +59,8 @@ export default async function LeadsPage({
   const statusFilter = params.statuses?.split(",").filter(Boolean) ?? [];
   const tagFilter = params.tags?.split(",").filter(Boolean) ?? [];
   const sourceParam = params.source ?? null;
+  const dateFrom = /^\d{4}-\d{2}-\d{2}$/.test(params.from ?? "") ? params.from! : null;
+  const dateTo = /^\d{4}-\d{2}-\d{2}$/.test(params.to ?? "") ? params.to! : null;
   const viewParam = params.view ?? null;
   const from = (currentPage - 1) * PAGE_SIZE;
   const to = from + PAGE_SIZE - 1;
@@ -192,6 +194,23 @@ export default async function LeadsPage({
   if (tagFilter.length > 0) dataQuery = dataQuery.overlaps("tags", tagFilter);
   if (sourceFilter === "__none__") dataQuery = dataQuery.is("source", null);
   else if (sourceFilter) dataQuery = dataQuery.eq("source", sourceFilter);
+
+  // Date search on arrival time (effective_at), by Asia/Jerusalem calendar day.
+  // ilDayStartUTC gives the UTC instant of local midnight for the given date.
+  if (dateFrom || dateTo) {
+    const ilDayStartUTC = (dateStr: string): Date => {
+      const noon = new Date(`${dateStr}T12:00:00Z`);
+      const offsetMs =
+        new Date(noon.toLocaleString("en-US", { timeZone: "Asia/Jerusalem" })).getTime() -
+        new Date(noon.toLocaleString("en-US", { timeZone: "UTC" })).getTime();
+      return new Date(new Date(`${dateStr}T00:00:00Z`).getTime() - offsetMs);
+    };
+    if (dateFrom) dataQuery = dataQuery.gte("effective_at", ilDayStartUTC(dateFrom).toISOString());
+    if (dateTo) {
+      const end = new Date(ilDayStartUTC(dateTo).getTime() + 24 * 60 * 60 * 1000);
+      dataQuery = dataQuery.lt("effective_at", end.toISOString());
+    }
+  }
   // Sort by true arrival time: email leads use their email send date, others
   // fall back to created_at (both via the generated effective_at column). This
   // keeps a backlog email ingested today from jumping above genuinely newer leads.
