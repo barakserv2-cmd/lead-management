@@ -365,7 +365,7 @@ export async function fetchUnreadEmails(
     // noise. Landing-page keywords (נחיתה/eilatjobs/ליד) were added so Elementor
     // form emails, which carry none of the job-board keywords, match too.
     // False positives are harmless — parseEmailWithAI drops anything that isn't a lead.
-    q: "newer_than:4d -from:maskyoo.co.il {AllJobs CV קורות חיים משרה פנייה מועמד lead candidate CASHIERS \"FB JOBS\" INFINES נחיתה eilatjobs ליד}",
+    q: "newer_than:1d -from:maskyoo.co.il {AllJobs CV קורות חיים משרה פנייה מועמד lead candidate CASHIERS \"FB JOBS\" INFINES נחיתה eilatjobs ליד}",
     maxResults,
   });
 

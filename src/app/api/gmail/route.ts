@@ -4,6 +4,10 @@ import { fetchUnreadEmails, parseFromHeader, detectSource } from "@/lib/gmail";
 import { parseEmailWithAI } from "@/lib/ai/parse-email";
 import { LEAD_STATUSES } from "@/lib/constants";
 
+// Let the run finish instead of being cut off mid-batch — a truncated run left
+// newer lead emails un-ingested. Pro allows up to 300s.
+export const maxDuration = 300;
+
 // Use service-level Supabase client (not cookie-based) for API route
 function getSupabaseAdmin() {
   return createClient(
