@@ -18,6 +18,7 @@ export const LeadStatus = {
   REJECTED: "REJECTED",
   LOST_CONTACT: "LOST_CONTACT",
   NOT_SUITABLE: "NOT_SUITABLE",
+  INVALID_PHONE: "INVALID_PHONE",
 } as const;
 
 export type LeadStatusValue = (typeof LeadStatus)[keyof typeof LeadStatus];
@@ -39,6 +40,7 @@ export const STATUS_LABELS: Record<LeadStatusValue, string> = {
   [LeadStatus.REJECTED]: "נדחה",
   [LeadStatus.LOST_CONTACT]: "אבד קשר",
   [LeadStatus.NOT_SUITABLE]: "לא מתאים",
+  [LeadStatus.INVALID_PHONE]: "מספר לא תקין",
 };
 
 // ── Status Colors ───────────────────────────────────────────
@@ -56,6 +58,7 @@ export const STATUS_COLORS: Record<LeadStatusValue, { bg: string; text: string; 
   [LeadStatus.REJECTED]:              { bg: "bg-gray-200",   text: "text-gray-700",   dot: "bg-gray-500" },
   [LeadStatus.LOST_CONTACT]:          { bg: "bg-rose-100",   text: "text-rose-800",   dot: "bg-rose-500" },
   [LeadStatus.NOT_SUITABLE]:          { bg: "bg-stone-200",  text: "text-stone-700",  dot: "bg-stone-500" },
+  [LeadStatus.INVALID_PHONE]:         { bg: "bg-yellow-100", text: "text-yellow-800", dot: "bg-yellow-500" },
 };
 
 // ── Transition Rules ────────────────────────────────────────
@@ -66,11 +69,13 @@ const TRANSITION_MAP: Record<LeadStatusValue, LeadStatusValue[]> = {
     LeadStatus.CONTACTED,
     LeadStatus.REJECTED,
     LeadStatus.LOST_CONTACT,
+    LeadStatus.INVALID_PHONE,
   ],
   [LeadStatus.CONTACTED]: [
     LeadStatus.SCREENING_IN_PROGRESS,
     LeadStatus.REJECTED,
     LeadStatus.LOST_CONTACT,
+    LeadStatus.INVALID_PHONE,
   ],
   [LeadStatus.SCREENING_IN_PROGRESS]: [
     LeadStatus.FIT_FOR_INTERVIEW,
@@ -110,8 +115,15 @@ const TRANSITION_MAP: Record<LeadStatusValue, LeadStatusValue[]> = {
   [LeadStatus.LOST_CONTACT]: [
     LeadStatus.CONTACTED,
     LeadStatus.REJECTED,
+    LeadStatus.INVALID_PHONE,
   ],
   [LeadStatus.NOT_SUITABLE]: [
+    LeadStatus.NEW_LEAD,
+    LeadStatus.REJECTED,
+  ],
+  // Bad/unreachable number — recover to NEW_LEAD if the number is corrected,
+  // otherwise reject.
+  [LeadStatus.INVALID_PHONE]: [
     LeadStatus.NEW_LEAD,
     LeadStatus.REJECTED,
   ],
