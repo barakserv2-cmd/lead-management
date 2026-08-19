@@ -40,6 +40,7 @@ export const SUB_STATUSES: Record<string, string[]> = {
     "לא תואם דרישות",
     "לא תואם גאוגרפית",
     "לא תואם שכר",
+    "לא זמין במיידי",
   ],
 };
 
