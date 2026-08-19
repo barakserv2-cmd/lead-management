@@ -9,6 +9,8 @@ import type {
 export interface Lead {
   id: string;
   created_at: string;
+  /** set when personal data was stripped (retention job / erasure request) */
+  anonymized_at?: string | null;
   name: string;
   phone: string | null;
   email: string | null;

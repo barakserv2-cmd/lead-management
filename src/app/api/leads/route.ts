@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { LeadStatus } from "@/lib/stateMachine";
+import { logAudit } from "@/lib/audit";
 
 export async function GET() {
   return NextResponse.json({ leads: [], total: 0 });
@@ -52,6 +53,8 @@ export async function POST(request: NextRequest) {
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
+
+  await logAudit({ action: "create", leadId: lead.id, actor: user.email, request, meta: { source: body.source || "אחר" } });
 
   return NextResponse.json({ lead });
 }

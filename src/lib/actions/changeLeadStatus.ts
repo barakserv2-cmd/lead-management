@@ -10,6 +10,7 @@ import {
   type LeadGuardrailData,
 } from "@/lib/stateMachine";
 import { normalizeEmployerName } from "@/lib/employerNormalization";
+import { logAudit } from "@/lib/audit";
 
 function getSupabase() {
   return createServerClient(
@@ -176,6 +177,22 @@ export async function changeLeadStatus(input: ChangeStatusInput): Promise<Change
       journalRows.map((r) => ({ ...r, lead_id: leadId, created_by: userId ?? "system" }))
     ).then(() => undefined, () => undefined);
   }
+
+  // 7c. Audit trail (תקנה 10) — who moved which record, from/to, plus any
+  // extra fields that were written in the same transition.
+  const extraWritten = Object.entries(updateData).filter(
+    ([k]) => k !== "status" && k !== "sub_status"
+  );
+  await logAudit({
+    action: "status_change",
+    leadId,
+    actor: userId ?? "system",
+    changes: {
+      status: { from: currentStatus, to: newStatus },
+      ...Object.fromEntries(extraWritten.map(([k, v]) => [k, { from: null, to: v }])),
+    },
+    meta: notes ? { notes } : null,
+  });
 
   // 8. Revalidate
   revalidatePath("/leads");

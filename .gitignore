@@ -54,3 +54,4 @@ migration-backup/
 migrate-to-frankfurt.sh
 cutover-frankfurt.sh
 scripts/diag-gmail.mjs
+scripts/diag-newleads.mjs

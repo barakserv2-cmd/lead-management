@@ -52,6 +52,7 @@ function getStatusLabel(status: string): string {
 import { ConversationSheet } from "./conversation-sheet";
 import { ChatHistory } from "./chat-history";
 import { DuplicatesSection } from "./duplicates-section";
+import { PrivacySection } from "./privacy-section";
 
 // ── Helpers ──────────────────────────────────────────────────
 
@@ -744,6 +745,9 @@ export function LeadDetail({ lead }: { lead: Lead }) {
           </Card>
         </div>
       </div>
+
+      {/* ═══ PRIVACY / AUDIT ═════════════════════════════════════ */}
+      <PrivacySection leadId={lead.id} anonymizedAt={lead.anonymized_at} />
 
       {/* ═══ EDIT DETAILS DIALOG ═══════════════════════════════ */}
       <Dialog open={editOpen} onOpenChange={setEditOpen}>

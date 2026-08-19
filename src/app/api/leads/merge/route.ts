@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { getSupabaseAdmin } from "@/lib/api-auth";
+import { logAudit } from "@/lib/audit";
 
 // Merge two duplicate lead cards into one (see merge_leads() in migration 00043).
 // Winner = the card further along the pipeline; the loser is deleted after all
@@ -27,5 +28,12 @@ export async function POST(request: NextRequest) {
   });
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
-  return NextResponse.json({ winnerId: data });
+  const winnerId = data as string;
+  const loserId = winnerId === body.leadId ? body.duplicateId : body.leadId;
+  await Promise.all([
+    logAudit({ action: "merge", leadId: winnerId, actor: user.email, request, meta: { absorbed: loserId } }),
+    logAudit({ action: "merge", leadId: loserId, actor: user.email, request, meta: { merged_into: winnerId, deleted: true } }),
+  ]);
+
+  return NextResponse.json({ winnerId });
 }

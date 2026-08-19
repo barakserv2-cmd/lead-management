@@ -1,5 +1,7 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { createClient as createCookieClient } from "@/lib/supabase/server";
+import { logAudit } from "@/lib/audit";
 import { fetchUnreadEmails, parseFromHeader, detectSource } from "@/lib/gmail";
 import { parseEmailWithAI } from "@/lib/ai/parse-email";
 import { LEAD_STATUSES } from "@/lib/constants";
@@ -8,27 +10,54 @@ import { LEAD_STATUSES } from "@/lib/constants";
 // newer lead emails un-ingested. Pro allows up to 300s.
 export const maxDuration = 300;
 
-// Use service-level Supabase client (not cookie-based) for API route
+// Service-role client — this route writes leads and must not depend on the
+// anon RLS policies (which are being closed, see migration 00046).
 function getSupabaseAdmin() {
   return createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+    process.env.SUPABASE_SERVICE_ROLE_KEY!
   );
+}
+
+// Who may trigger a scrape:
+//   * Vercel cron  → Authorization: Bearer <CRON_SECRET> (Vercel adds it)
+//   * the settings page "סנכרון" button → signed-in recruiter session
+// Anything else is rejected. Previously this was fully public.
+async function authorize(req: NextRequest): Promise<{ ok: true; actor: string } | { ok: false }> {
+  const secret = process.env.CRON_SECRET;
+  const header = req.headers.get("authorization") ?? "";
+  if (secret && header === `Bearer ${secret}`) return { ok: true, actor: "cron" };
+  try {
+    const supabase = await createCookieClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (user) return { ok: true, actor: user.email ?? "user" };
+  } catch {
+    /* no session */
+  }
+  if (!secret && process.env.NODE_ENV !== "production") return { ok: true, actor: "dev" };
+  return { ok: false };
 }
 
 function delay(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-export async function GET() {
-  return handleFetchEmails();
+export async function GET(req: NextRequest) {
+  return handleFetchEmails(req);
 }
 
-export async function POST() {
-  return handleFetchEmails();
+export async function POST(req: NextRequest) {
+  return handleFetchEmails(req);
 }
 
-async function handleFetchEmails() {
+async function handleFetchEmails(req: NextRequest) {
+  const auth = await authorize(req);
+  if (!auth.ok) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (auth.actor !== "cron") {
+    // manual trigger from the dashboard — worth a line in the audit trail
+    await logAudit({ action: "import", entity: "gmail_scrape", actor: auth.actor, request: req, meta: { manual: true } });
+  }
+
   const summary = {
     processed: 0,
     new_leads: 0,

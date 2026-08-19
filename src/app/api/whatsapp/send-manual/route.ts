@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient as createServerClient } from "@supabase/supabase-js";
 import { sendWhatsAppMessage } from "@/lib/whatsappService";
+import { createClient as createCookieClient } from "@/lib/supabase/server";
 
 function getSupabase() {
   return createServerClient(
@@ -11,6 +12,13 @@ function getSupabase() {
 
 // POST — Recruiter sends a manual WhatsApp message from the CRM chat
 export async function POST(req: NextRequest) {
+  // Only a signed-in recruiter may send from the business number.
+  const cookieClient = await createCookieClient();
+  const { data: { user } } = await cookieClient.auth.getUser();
+  if (!user) {
+    return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
+  }
+
   try {
     const { leadId, message } = await req.json();
 

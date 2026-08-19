@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { diffFields, logAudit } from "@/lib/audit";
 
 // עדכון פרטי מועמד מחלון העריכה הצף. fetch+API ולא server action —
 // הדפוס הקבוע בפרויקט (Next 16 מפיל טפסים דרך server actions).
@@ -52,6 +53,13 @@ export async function PATCH(
     return NextResponse.json({ error: "אין שדות לעדכון" }, { status: 400 });
   }
 
+  // snapshot before the write so the audit row carries a real from→to diff
+  const { data: before } = await supabase
+    .from("leads")
+    .select("name, phone, email, job_title, location, experience, age")
+    .eq("id", leadId)
+    .maybeSingle();
+
   const { data, error } = await supabase
     .from("leads")
     .update(updateData)
@@ -61,6 +69,18 @@ export async function PATCH(
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+
+  const changes = diffFields(before as Record<string, unknown> | null, updateData);
+  if (changes) {
+    await logAudit({
+      action: "update",
+      leadId,
+      actor: user.email,
+      changes,
+      request,
+      meta: { via: "PATCH /api/leads/[id]" },
+    });
   }
 
   return NextResponse.json({ lead: data });

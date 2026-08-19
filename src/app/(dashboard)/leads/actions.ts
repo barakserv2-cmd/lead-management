@@ -6,6 +6,7 @@ import { createClient as createCookieClient } from "@/lib/supabase/server";
 import { revalidatePath } from "next/cache";
 import { LeadStatus } from "@/lib/stateMachine";
 import { normalizeEmployerName, type NormalizationResult } from "@/lib/employerNormalization";
+import { logAudit, diffFields } from "@/lib/audit";
 
 function getSupabase() {
   return createServerClient(
@@ -31,6 +32,9 @@ export async function updateLeadSubStatus(leadId: string, subStatus: string | nu
     .update({ sub_status: subStatus })
     .eq("id", leadId);
 
+  if (!error) {
+    await logAudit({ action: "update", leadId, changes: { sub_status: { from: null, to: subStatus } } });
+  }
   return { error: error?.message ?? null };
 }
 
@@ -92,6 +96,11 @@ export async function updateLeadNotes(leadId: string, notes: string) {
       created_by: author,
     }).then(() => undefined, () => undefined);
   }
+  if (!error) {
+    // the note text itself lives in lead_events; the audit row only says
+    // "notes field was written" (length) to avoid duplicating PII in the log
+    await logAudit({ action: "note", leadId, meta: { length: notes.trim().length } });
+  }
 
   return { error: error?.message ?? null };
 }
@@ -105,6 +114,9 @@ export async function updateLeadPreferences(
     .update({ preferences })
     .eq("id", leadId);
 
+  if (!error) {
+    await logAudit({ action: "update", leadId, meta: { fields: ["preferences"] } });
+  }
   return { error: error?.message ?? null };
 }
 
@@ -113,11 +125,22 @@ export async function updateLeadField(
   field: string,
   value: string
 ) {
-  const { error } = await getSupabase()
+  const supabase = getSupabase();
+  const { data: before } = await supabase
+    .from("leads")
+    .select(field)
+    .eq("id", leadId)
+    .maybeSingle();
+
+  const { error } = await supabase
     .from("leads")
     .update({ [field]: value })
     .eq("id", leadId);
 
+  if (!error) {
+    const changes = diffFields(before as Record<string, unknown> | null, { [field]: value });
+    if (changes) await logAudit({ action: "update", leadId, changes });
+  }
   return { error: error?.message ?? null };
 }
 
@@ -237,12 +260,21 @@ export async function updateLeadDetails(
     updateData.hired_client = hiredClient;
   }
 
-  const { error } = await getSupabase()
+  const supabase = getSupabase();
+  const { data: before } = await supabase
+    .from("leads")
+    .select(Object.keys(updateData).join(","))
+    .eq("id", leadId)
+    .maybeSingle();
+
+  const { error } = await supabase
     .from("leads")
     .update(updateData)
     .eq("id", leadId);
 
   if (!error) {
+    const changes = diffFields(before as Record<string, unknown> | null, updateData);
+    if (changes) await logAudit({ action: "update", leadId, changes });
     revalidatePath(`/leads/${leadId}`);
   }
 
@@ -260,6 +292,7 @@ export async function clearAllArrivalDates(): Promise<{ cleared: number; error: 
     .select("id");
 
   if (error) return { cleared: 0, error: error.message };
+  await logAudit({ action: "update", entity: "leads_bulk", meta: { op: "clearAllArrivalDates", count: data?.length ?? 0 } });
   revalidatePath("/leads");
   return { cleared: data?.length ?? 0, error: null };
 }
@@ -277,6 +310,11 @@ export async function nukeAllExtrasLeads(): Promise<{ deleted: number; error: st
     .select("id");
 
   if (error) return { deleted: 0, error: error.message };
+  await logAudit({
+    action: "delete",
+    entity: "leads_bulk",
+    meta: { op: "nukeAllExtrasLeads", count: data?.length ?? 0, ids: (data ?? []).map((d) => d.id) },
+  });
   revalidatePath("/leads");
   revalidatePath("/campaigns");
   return { deleted: data?.length ?? 0, error: null };
@@ -507,6 +545,11 @@ export async function bulkImportLeads(
     }
   }
 
+  await logAudit({
+    action: "import",
+    entity: "leads_bulk",
+    meta: { source, total: result.total, imported: result.imported, updated: result.updated, skipped: result.skipped },
+  });
   revalidatePath("/leads");
   return result;
 }
