@@ -13,6 +13,7 @@ export interface Lead {
   anonymized_at?: string | null;
   name: string;
   phone: string | null;
+  phone2: string | null;
   email: string | null;
   location: string | null;
   experience: string | null;

@@ -246,6 +246,7 @@ export function LeadDetail({ lead }: { lead: Lead }) {
   const router = useRouter();
   const [displayName, setDisplayName] = useState(lead.name);
   const [displayPhone, setDisplayPhone] = useState(lead.phone);
+  const [displayPhone2, setDisplayPhone2] = useState(lead.phone2 ?? null);
   const [displayEmail, setDisplayEmail] = useState(lead.email);
   const [displayJobTitle, setDisplayJobTitle] = useState(lead.job_title);
 
@@ -265,6 +266,7 @@ export function LeadDetail({ lead }: { lead: Lead }) {
   const [editOpen, setEditOpen] = useState(false);
   const [editName, setEditName] = useState(lead.name);
   const [editPhone, setEditPhone] = useState(lead.phone ?? "");
+  const [editPhone2, setEditPhone2] = useState(lead.phone2 ?? "");
   const [editEmail, setEditEmail] = useState(lead.email ?? "");
   const [editJobTitle, setEditJobTitle] = useState(lead.job_title ?? "");
   const [editLocation, setEditLocation] = useState(lead.location ?? "");
@@ -303,6 +305,7 @@ export function LeadDetail({ lead }: { lead: Lead }) {
   function openEditDialog() {
     setEditName(displayName);
     setEditPhone(displayPhone ?? "");
+    setEditPhone2(displayPhone2 ?? "");
     setEditEmail(displayEmail ?? "");
     setEditJobTitle(displayJobTitle ?? "");
     setEditLocation(lead.location ?? "");
@@ -323,6 +326,7 @@ export function LeadDetail({ lead }: { lead: Lead }) {
     const result = await updateLeadDetails(lead.id, {
       name: editName.trim(),
       phone: editPhone.trim(),
+      phone2: editPhone2.trim(),
       email: editEmail.trim(),
       job_title: editJobTitle.trim(),
       location: editLocation.trim(),
@@ -333,13 +337,22 @@ export function LeadDetail({ lead }: { lead: Lead }) {
     });
     setSavingEdit(false);
     if (result.error) {
-      toast.error("שגיאה בעדכון הפרטים");
+      if (result.duplicate) {
+        const dup = result.duplicate;
+        toast.error(result.error, {
+          duration: 8000,
+          action: { label: `פתח את ${dup.name || "הכרטיס הקיים"}`, onClick: () => router.push(`/leads/${dup.id}`) },
+        });
+      } else {
+        toast.error(`שגיאה בעדכון הפרטים: ${result.error}`);
+      }
     } else {
       if (result.normalizedEmployer && editHiredClient.trim() && result.normalizedEmployer !== editHiredClient.trim()) {
         toast.success(`שם מעסיק תוקן אוטומטית ל: "${result.normalizedEmployer}"`);
       }
       setDisplayName(editName.trim());
       setDisplayPhone(editPhone.trim() || null);
+      setDisplayPhone2(editPhone2.trim() || null);
       setDisplayEmail(editEmail.trim() || null);
       setDisplayJobTitle(editJobTitle.trim() || null);
       setEditOpen(false);
@@ -587,6 +600,29 @@ export function LeadDetail({ lead }: { lead: Lead }) {
                   </div>
                 </div>
 
+                {displayPhone2 && (
+                  <div className="flex items-center gap-3">
+                    <div className="flex-shrink-0 w-9 h-9 rounded-lg bg-cyan-50 flex items-center justify-center text-cyan-600">
+                      <PhoneIcon className="w-4 h-4" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-[11px] text-gray-400 font-medium">טלפון נוסף</p>
+                      <p className="text-sm font-semibold text-gray-800 flex items-center gap-2" dir="ltr">
+                        <a href={"tel:" + displayPhone2} className="hover:text-cyan-700">{displayPhone2}</a>
+                        <a
+                          href={"https://api.whatsapp.com/send?phone=" + formatPhone(displayPhone2)}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-[10px] font-bold text-emerald-600 hover:text-emerald-800"
+                          title="וואטסאפ למספר הנוסף"
+                        >
+                          WA
+                        </a>
+                      </p>
+                    </div>
+                  </div>
+                )}
+
                 <div className="flex items-center gap-3">
                   <div className="flex-shrink-0 w-9 h-9 rounded-lg bg-violet-50 flex items-center justify-center text-violet-600">
                     <MailIcon className="w-4 h-4" />
@@ -772,6 +808,16 @@ export function LeadDetail({ lead }: { lead: Lead }) {
                 value={editPhone}
                 onChange={(e) => setEditPhone(e.target.value)}
                 placeholder="050-1234567"
+                dir="ltr"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="edit-phone2">טלפון נוסף</Label>
+              <Input
+                id="edit-phone2"
+                value={editPhone2}
+                onChange={(e) => setEditPhone2(e.target.value)}
+                placeholder="מספר שני / הורה / שותף"
                 dir="ltr"
               />
             </div>

@@ -3,6 +3,8 @@
 import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
+import { DuplicatesSection } from "./[id]/duplicates-section";
+import { normalizePhone } from "@/lib/phone";
 import type { Lead } from "@/types/leads";
 import {
   Sheet,
@@ -287,10 +289,18 @@ export function LeadDetailDrawer({
     });
     setSavingEdit(false);
     if (result.error) {
-      toast.error("שגיאה בעדכון הפרטים");
+      if (result.duplicate) {
+        const dup = result.duplicate;
+        toast.error(result.error, {
+          duration: 8000,
+          action: { label: `פתח את ${dup.name || "הכרטיס הקיים"}`, onClick: () => router.push(`/leads/${dup.id}`) },
+        });
+      } else {
+        toast.error(`שגיאה בעדכון הפרטים: ${result.error}`);
+      }
     } else {
       setDisplayName(editName.trim());
-      setDisplayPhone(editPhone.trim() || null);
+      setDisplayPhone(normalizePhone(editPhone) || null);
       setDisplayEmail(editEmail.trim() || null);
       setDisplayJobTitle(editJobTitle.trim() || null);
       setEditOpen(false);
@@ -444,6 +454,8 @@ export function LeadDetailDrawer({
                     </div>
                   </div>
                 ))}
+                {/* duplicate-candidate banner + manual merge */}
+                <DuplicatesSection leadId={lead.id} compact onMerged={(w) => { if (w !== lead.id) onClose(); }} />
                 {/* Extra info row */}
                 <div className="flex gap-4 text-xs text-gray-500 pt-1">
                   {lead.experience && (

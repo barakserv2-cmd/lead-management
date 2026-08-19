@@ -169,14 +169,14 @@ export default async function LeadsPage({
   const ownershipFilter = `assigned_to.is.null,assigned_at.lt.${cutoff},assigned_to.eq.${myId}`;
 
   const searchFilter = searchQuery
-    ? `name.ilike.%${searchQuery}%,phone.ilike.%${searchQuery}%,job_title.ilike.%${searchQuery}%`
+    ? `name.ilike.%${searchQuery}%,phone.ilike.%${searchQuery}%,phone2.ilike.%${searchQuery}%,job_title.ilike.%${searchQuery}%`
     : null;
 
   // רק השדות שהטבלה, הקנבן, כרטיס הליד והחלונות הקטנים באמת קוראים
   // (מיפוי מ-13/08/2026 — grep על lead.* בכל רכיבי העמוד). שדות כבדים
   // שאינם בשימוש (גוף מייל, preferences, שדות ניהול) לא נמשכים בכלל.
   const LEAD_LIST_COLUMNS =
-    "id, created_at, name, phone, email, age, location, experience, job_title, source, status, sub_status, " +
+    "id, created_at, name, phone, phone2, email, age, location, experience, job_title, source, status, sub_status, " +
     "rejection_reason, hired_client, hired_position, start_date, arrival_date, interview_date, " +
     "interview_notes, followup_notes, notes, tags, screening_score, screening_motivation_score, " +
     "screening_fit_score, screening_availability_score, screening_experience_score, extracted_availability, " +

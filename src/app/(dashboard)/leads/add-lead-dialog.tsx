@@ -48,9 +48,23 @@ export function AddLeadDialog() {
         }),
       });
 
-      const data = (await res.json().catch(() => ({}))) as { error?: string };
+      const data = (await res.json().catch(() => ({}))) as {
+        error?: string;
+        code?: string;
+        existing?: { id: string; name: string | null };
+      };
 
-      if (!res.ok) {
+      if (res.status === 409 && data.existing) {
+        // one candidate = one phone — send the recruiter to the existing card
+        const ex = data.existing;
+        toast.error(data.error ?? "מספר הטלפון כבר קיים במערכת", {
+          duration: 8000,
+          action: {
+            label: `פתח את ${ex.name || "הכרטיס הקיים"}`,
+            onClick: () => router.push(`/leads/${ex.id}`),
+          },
+        });
+      } else if (!res.ok) {
         toast.error(`שגיאה ביצירת ליד: ${data.error ?? res.statusText}`);
       } else {
         toast.success("ליד נוסף בהצלחה!");

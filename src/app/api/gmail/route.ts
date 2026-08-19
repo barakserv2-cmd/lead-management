@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { normalizePhone } from "@/lib/phone";
 import { createClient } from "@supabase/supabase-js";
 import { createClient as createCookieClient } from "@/lib/supabase/server";
 import { logAudit } from "@/lib/audit";
@@ -120,18 +121,15 @@ async function handleFetchEmails(req: NextRequest) {
 
         const name = aiResult.name || parseFromHeader(email.from) || "לא ידוע";
         const job_title = aiResult.job_title || null;
-        const phone = aiResult.phone;
+        // canonical 10-digit form (migration 00047) — same candidate, one card
+        const phone = normalizePhone(aiResult.phone);
 
         // 2d. Check for duplicate by phone number
         if (phone) {
-          // Normalize phone for comparison (remove hyphens)
-          const normalizedPhone = phone.replace(/-/g, "");
           const { data: existingByPhone } = await supabase
             .from("leads")
             .select("id")
-            .or(
-              `phone.eq.${phone},phone.eq.${normalizedPhone}`
-            )
+            .eq("phone", phone)
             .limit(1);
 
           if (existingByPhone && existingByPhone.length > 0) {
@@ -149,7 +147,7 @@ async function handleFetchEmails(req: NextRequest) {
         // 2e. Insert new lead
         const { error: insertError } = await supabase.from("leads").insert({
           name,
-          phone: aiResult.phone,
+          phone,
           email: aiResult.email,
           location: aiResult.location,
           experience: aiResult.experience,

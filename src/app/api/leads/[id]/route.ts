@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { diffFields, logAudit } from "@/lib/audit";
+import { normalizePhone } from "@/lib/phone";
+import { findLeadByPhone, duplicatePhonePayload, isPhoneUniqueViolation } from "@/lib/leadPhoneGuard";
 
 // עדכון פרטי מועמד מחלון העריכה הצף. fetch+API ולא server action —
 // הדפוס הקבוע בפרויקט (Next 16 מפיל טפסים דרך server actions).
@@ -43,10 +45,18 @@ export async function PATCH(
       const name = String(value ?? "").trim();
       if (!name) return NextResponse.json({ error: "שם הוא שדה חובה" }, { status: 400 });
       updateData.name = name;
+    } else if (key === "phone") {
+      updateData.phone = normalizePhone(String(value ?? ""));
     } else {
       const s = String(value ?? "").trim();
       updateData[key] = s || null;
     }
+  }
+
+  // One candidate = one phone: another card already owns this number?
+  if (typeof updateData.phone === "string") {
+    const existing = await findLeadByPhone(supabase, updateData.phone, leadId);
+    if (existing) return NextResponse.json(duplicatePhonePayload(existing), { status: 409 });
   }
 
   if (Object.keys(updateData).length === 0) {
@@ -68,6 +78,10 @@ export async function PATCH(
     .single();
 
   if (error) {
+    if (isPhoneUniqueViolation(error) && typeof updateData.phone === "string") {
+      const existing = await findLeadByPhone(supabase, updateData.phone, leadId);
+      if (existing) return NextResponse.json(duplicatePhonePayload(existing), { status: 409 });
+    }
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 

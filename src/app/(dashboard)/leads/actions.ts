@@ -7,6 +7,8 @@ import { revalidatePath } from "next/cache";
 import { LeadStatus } from "@/lib/stateMachine";
 import { normalizeEmployerName, type NormalizationResult } from "@/lib/employerNormalization";
 import { logAudit, diffFields } from "@/lib/audit";
+import { findLeadByPhone, isPhoneUniqueViolation, DUPLICATE_PHONE_MESSAGE } from "@/lib/leadPhoneGuard";
+import { normalizePhone } from "@/lib/phone";
 
 function getSupabase() {
   return createServerClient(
@@ -226,6 +228,7 @@ export async function updateLeadDetails(
   details: {
     name: string;
     phone: string;
+    phone2?: string;
     email: string;
     job_title: string;
     location: string;
@@ -246,7 +249,8 @@ export async function updateLeadDetails(
 
   const updateData: Record<string, unknown> = {
     name: details.name,
-    phone: details.phone || null,
+    phone: normalizePhone(details.phone),
+    phone2: normalizePhone(details.phone2),
     email: details.email || null,
     job_title: details.job_title || null,
     location: details.location || null,
@@ -261,6 +265,18 @@ export async function updateLeadDetails(
   }
 
   const supabase = getSupabase();
+
+  // Phone must stay unique across candidates (00047). Pre-check so the UI can
+  // link to the existing card instead of showing a raw constraint error.
+  const existing = await findLeadByPhone(supabase, details.phone, leadId);
+  if (existing) {
+    return {
+      error: DUPLICATE_PHONE_MESSAGE,
+      normalizedEmployer: null as string | null,
+      duplicate: { id: existing.id, name: existing.name },
+    };
+  }
+
   const { data: before } = await supabase
     .from("leads")
     .select(Object.keys(updateData).join(","))
@@ -278,7 +294,16 @@ export async function updateLeadDetails(
     revalidatePath(`/leads/${leadId}`);
   }
 
-  return { error: error?.message ?? null, normalizedEmployer: hiredClient };
+  if (error && isPhoneUniqueViolation(error)) {
+    const dup = await findLeadByPhone(supabase, details.phone, leadId);
+    return {
+      error: DUPLICATE_PHONE_MESSAGE,
+      normalizedEmployer: null as string | null,
+      duplicate: dup ? { id: dup.id, name: dup.name } : undefined,
+    };
+  }
+
+  return { error: error?.message ?? null, normalizedEmployer: hiredClient, duplicate: undefined as { id: string; name: string | null } | undefined };
 }
 
 // ── Clear arrival dates (dev tool) ──────────────────────────
@@ -364,7 +389,9 @@ export async function bulkImportLeads(
   for (const row of rows) {
     const name = row.name?.trim();
     if (!name) { result.skipped++; continue; }
-    const rawPhone = row.phone?.trim() || null;
+    // canonical 10-digit form so the existing-phone check and the
+    // ON CONFLICT (phone) upsert both work per candidate, not per string
+    const rawPhone = normalizePhone(row.phone);
     const isDummy = !rawPhone || rawPhone.startsWith("no-phone-");
     validRows.push({ row, name, phone: isDummy ? null : rawPhone, isDummy });
   }

@@ -202,7 +202,15 @@ export function LeadSheet({
     });
     setSavingEdit(false);
     if (result.error) {
-      toast.error("שגיאה בעדכון הפרטים");
+      if (result.duplicate) {
+        const dup = result.duplicate;
+        toast.error(result.error, {
+          duration: 8000,
+          action: { label: `פתח את ${dup.name || "הכרטיס הקיים"}`, onClick: () => router.push(`/leads/${dup.id}`) },
+        });
+      } else {
+        toast.error(`שגיאה בעדכון הפרטים: ${result.error}`);
+      }
     } else {
       setDisplayName(editName.trim());
       setDisplayPhone(editPhone.trim() || null);

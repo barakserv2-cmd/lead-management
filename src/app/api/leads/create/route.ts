@@ -1,13 +1,18 @@
 import { NextRequest, NextResponse } from "next/server";
 import { validateApiKey, unauthorizedResponse, getSupabaseAdmin } from "@/lib/api-auth";
 import { sendWelcomeMessage } from "@/lib/whatsappWelcome";
+import { normalizePhone } from "@/lib/phone";
+import { findLeadByPhone, isPhoneUniqueViolation } from "@/lib/leadPhoneGuard";
 
 export async function POST(request: NextRequest) {
   if (!validateApiKey(request)) return unauthorizedResponse();
 
   try {
     const body = await request.json();
-    const { name, phone, role, source } = body;
+    const { name, role, source } = body;
+    // canonical form (10 digits) — the DB trigger does the same, but we
+    // normalise here so the duplicate pre-check matches by candidate, not string
+    const phone = normalizePhone(body.phone);
 
     if (!name) {
       return NextResponse.json(
@@ -20,12 +25,7 @@ export async function POST(request: NextRequest) {
 
     // Check for duplicate by phone (if provided)
     if (phone) {
-      const { data: existing } = await supabase
-        .from("leads")
-        .select("id, name")
-        .eq("phone", phone)
-        .single();
-
+      const existing = await findLeadByPhone(supabase, phone);
       if (existing) {
         return NextResponse.json(
           {
@@ -52,6 +52,18 @@ export async function POST(request: NextRequest) {
       .single();
 
     if (insertError) {
+      if (isPhoneUniqueViolation(insertError)) {
+        const existing = await findLeadByPhone(supabase, phone);
+        return NextResponse.json(
+          {
+            success: false,
+            error: "duplicate",
+            message: `ליד עם טלפון ${phone} כבר קיים${existing ? ` (${existing.name})` : ""}`,
+            existing_lead_id: existing?.id ?? null,
+          },
+          { status: 409 }
+        );
+      }
       return NextResponse.json(
         { error: `Insert failed: ${insertError.message}` },
         { status: 500 }
