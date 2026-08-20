@@ -176,16 +176,30 @@ function LeadDetailsForm({ lead }: { lead: Lead }) {
   );
 }
 
+function formatShortDateTime(d: string | null): string {
+  if (!d) return "—";
+  return new Date(d).toLocaleString("he-IL", {
+    timeZone: "Asia/Jerusalem",
+    day: "2-digit",
+    month: "2-digit",
+    year: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
 function LeadMiniWindow({
   lead,
   minimized,
   initialTab = "details",
+  recruiterNames = {},
   onClose,
   onToggleMinimize,
 }: {
   lead: Lead;
   minimized: boolean;
   initialTab?: "details" | "chat";
+  recruiterNames?: Record<string, string>;
   onClose: () => void;
   onToggleMinimize: () => void;
 }) {
@@ -194,6 +208,9 @@ function LeadMiniWindow({
   const statusColor = STATUS_COLORS[lead.status as LeadStatusValue];
   const statusLabel = STATUS_LABELS[lead.status as LeadStatusValue] ?? lead.status;
   const intlPhone = formatPhone(lead.phone);
+  const recruiterName = lead.handled_by
+    ? recruiterNames[lead.handled_by] ?? lead.handled_by.split("@")[0]
+    : null;
 
   return (
     <div
@@ -274,6 +291,20 @@ function LeadMiniWindow({
             <StatusSelect leadId={lead.id} currentStatus={lead.status} currentSubStatus={lead.sub_status} />
           </div>
 
+          {/* רכזת מטפלת + תאריכי יצירה/עדכון */}
+          <div className="flex items-center gap-x-3 gap-y-0.5 flex-wrap px-3 py-1 border-b border-gray-100 bg-white flex-shrink-0 text-[10px] text-gray-500">
+            <span>
+              רכזת:{" "}
+              {recruiterName ? (
+                <span className="font-semibold text-emerald-700" title={lead.handled_by ?? undefined}>{recruiterName}</span>
+              ) : (
+                <span className="text-gray-400">ללא שיוך</span>
+              )}
+            </span>
+            <span>נוצר: <span className="text-gray-700 tabular-nums" dir="ltr">{formatShortDateTime(lead.created_at)}</span></span>
+            <span>עודכן: <span className="text-gray-700 tabular-nums" dir="ltr">{formatShortDateTime(lead.updated_at)}</span></span>
+          </div>
+
           {/* Tabs: פרטים (ברירת מחדל) / צ'אט */}
           <div className="flex border-b border-gray-100 flex-shrink-0">
             {([
@@ -314,6 +345,7 @@ export function LeadWindowManager({
   leads,
   openLeadIds,
   chatFirstIds,
+  recruiterNames,
   onOpenLead,
   onCloseLead,
 }: {
@@ -321,6 +353,7 @@ export function LeadWindowManager({
   openLeadIds: string[];
   // חלונות שנפתחו בגלל הודעה נכנסת — נפתחים ישר על טאב הצ'אט
   chatFirstIds?: Set<string>;
+  recruiterNames?: Record<string, string>;
   onOpenLead: (id: string) => void;
   onCloseLead: (id: string) => void;
 }) {
@@ -362,6 +395,7 @@ export function LeadWindowManager({
             lead={lead}
             minimized={minimizedIds.has(lead.id)}
             initialTab={chatFirstIds?.has(lead.id) ? "chat" : "details"}
+            recruiterNames={recruiterNames}
             onClose={() => handleClose(lead.id)}
             onToggleMinimize={() => toggleMinimize(lead.id)}
           />

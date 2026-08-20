@@ -391,6 +391,7 @@ export function LeadsContent({
         leads={[...leads, ...incomingLeads]}
         openLeadIds={openLeadIds}
         chatFirstIds={chatFirstIds}
+        recruiterNames={recruiterNames}
         onOpenLead={openLeadWindow}
         onCloseLead={closeLeadWindow}
       />
@@ -411,6 +412,7 @@ export function LeadsContent({
         lead={panelLead}
         open={panelLeadId !== null}
         onOpenChange={(open) => { if (!open) setPanelLeadId(null); }}
+        recruiterNames={recruiterNames}
       />
     </>
   );

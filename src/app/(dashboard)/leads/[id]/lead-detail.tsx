@@ -67,6 +67,18 @@ function getInitials(name: string) {
   return name.slice(0, 2);
 }
 
+function formatDateTime(d: string | null): string {
+  if (!d) return "—";
+  return new Date(d).toLocaleString("he-IL", {
+    timeZone: "Asia/Jerusalem",
+    day: "2-digit",
+    month: "2-digit",
+    year: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
 // ── Icons ────────────────────────────────────────────────────
 
 function PhoneIcon({ className = "w-5 h-5" }: { className?: string }) {
@@ -99,6 +111,26 @@ function BriefcaseIcon({ className = "w-5 h-5" }: { className?: string }) {
     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
       <path d="M16 20V4a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16" />
       <rect width="20" height="14" x="2" y="6" rx="2" />
+    </svg>
+  );
+}
+
+function UserIcon({ className = "w-4 h-4" }: { className?: string }) {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+      <path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2" />
+      <circle cx="12" cy="7" r="4" />
+    </svg>
+  );
+}
+
+function CalendarIcon({ className = "w-4 h-4" }: { className?: string }) {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+      <path d="M8 2v4" />
+      <path d="M16 2v4" />
+      <rect width="18" height="18" x="3" y="4" rx="2" />
+      <path d="M3 10h18" />
     </svg>
   );
 }
@@ -242,7 +274,14 @@ function HistoryTimeline({
 
 // ── Main Component ──────────────────────────────────────────
 
-export function LeadDetail({ lead }: { lead: Lead }) {
+export function LeadDetail({
+  lead,
+  recruiterName = null,
+}: {
+  lead: Lead;
+  /** display name of the recruiter behind lead.handled_by (resolved server-side) */
+  recruiterName?: string | null;
+}) {
   const router = useRouter();
   const [displayName, setDisplayName] = useState(lead.name);
   const [displayPhone, setDisplayPhone] = useState(lead.phone);
@@ -669,6 +708,32 @@ export function LeadDetail({ lead }: { lead: Lead }) {
                       {lead.start_date
                         ? new Date(lead.start_date).toLocaleDateString("he-IL")
                         : "לא הוגדר"}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-3">
+                  <div className="flex-shrink-0 w-9 h-9 rounded-lg bg-rose-50 flex items-center justify-center text-rose-600">
+                    <UserIcon className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <p className="text-[11px] text-gray-400 font-medium">רכזת מטפלת</p>
+                    <p className="text-sm font-semibold text-gray-800" title={lead.handled_by ?? undefined}>
+                      {recruiterName ?? (lead.handled_by ? lead.handled_by.split("@")[0] : "ללא שיוך")}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-3">
+                  <div className="flex-shrink-0 w-9 h-9 rounded-lg bg-sky-50 flex items-center justify-center text-sky-600">
+                    <CalendarIcon className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <p className="text-[11px] text-gray-400 font-medium">תאריך יצירה · עדכון אחרון</p>
+                    <p className="text-sm font-semibold text-gray-800 tabular-nums">
+                      {formatDateTime(lead.created_at)}
+                      <span className="text-gray-300 mx-1.5">·</span>
+                      {formatDateTime(lead.updated_at)}
                     </p>
                   </div>
                 </div>

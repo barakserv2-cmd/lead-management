@@ -184,7 +184,7 @@ export default async function LeadsPage({
     "screening_fit_score, screening_availability_score, screening_experience_score, extracted_availability, " +
     "extracted_salary_expectation, extracted_location_pref, extracted_interests, needs_attention, " +
     "attention_reason, needs_human_attention, human_attention_reason, human_attention_raised_at, " +
-    "handled_by, handled_at";
+    "handled_by, handled_at, updated_at";
 
   // שאילתה אחת מחזירה גם נתונים וגם ספירה כוללת (count: "exact") —
   // במקום שאילתת ספירה נפרדת וכפולה.

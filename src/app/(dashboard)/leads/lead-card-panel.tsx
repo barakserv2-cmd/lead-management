@@ -110,9 +110,11 @@ interface LeadCardPanelProps {
   lead: Lead | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  /** email → display name, for the רכזת מטפלת row */
+  recruiterNames?: Record<string, string>;
 }
 
-export function LeadCardPanel({ lead, open, onOpenChange }: LeadCardPanelProps) {
+export function LeadCardPanel({ lead, open, onOpenChange, recruiterNames = {} }: LeadCardPanelProps) {
   const { summary, loading, error, retry } = useAISummary(lead, open);
 
   // Local mirror of the assignment so the button reacts instantly on click.
@@ -178,6 +180,22 @@ export function LeadCardPanel({ lead, open, onOpenChange }: LeadCardPanelProps) 
       year: "numeric",
     });
   };
+
+  const formatDateTime = (d: string | null) => {
+    if (!d) return null;
+    return new Date(d).toLocaleString("he-IL", {
+      timeZone: "Asia/Jerusalem",
+      day: "numeric",
+      month: "short",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  };
+
+  const recruiterName = lead.handled_by
+    ? recruiterNames[lead.handled_by] ?? lead.handled_by.split("@")[0]
+    : null;
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
@@ -333,7 +351,9 @@ export function LeadCardPanel({ lead, open, onOpenChange }: LeadCardPanelProps) 
             <DetailRow label="גיל" value={lead.age?.toString()} />
             <DetailRow label="ניסיון" value={lead.experience} />
             <DetailRow label="תפקיד" value={lead.job_title} />
-            <DetailRow label="תאריך יצירה" value={formatDate(lead.created_at)} />
+            <DetailRow label="רכזת מטפלת" value={recruiterName} />
+            <DetailRow label="תאריך יצירה" value={formatDateTime(lead.created_at)} />
+            <DetailRow label="עדכון אחרון" value={formatDateTime(lead.updated_at)} />
           </div>
         </div>
 
