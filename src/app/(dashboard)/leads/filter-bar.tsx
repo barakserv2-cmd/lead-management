@@ -170,17 +170,25 @@ function MultiSelectDropdown({
   );
 }
 
-export function FilterBar({ allTags }: { allTags: string[] }) {
+export function FilterBar({
+  allTags,
+  recruiters = [],
+}: {
+  allTags: string[];
+  recruiters?: { email: string; name: string }[];
+}) {
   const router = useRouter();
   const searchParams = useSearchParams();
 
   const initialStatuses = searchParams.get("statuses")?.split(",").filter(Boolean) ?? [];
   const initialTags = searchParams.get("tags")?.split(",").filter(Boolean) ?? [];
   const initialSubs = searchParams.get("sub")?.split(",").filter(Boolean) ?? [];
+  const initialHandlers = searchParams.get("handler")?.split(",").filter(Boolean) ?? [];
 
   const [selectedStatuses, setSelectedStatuses] = useState<Set<string>>(new Set(initialStatuses));
   const [selectedTags, setSelectedTags] = useState<Set<string>>(new Set(initialTags));
   const [selectedSubs, setSelectedSubs] = useState<Set<string>>(new Set(initialSubs));
+  const [selectedHandlers, setSelectedHandlers] = useState<Set<string>>(new Set(initialHandlers));
   const [dateFrom, setDateFrom] = useState<string>(searchParams.get("from") ?? "");
   const [dateTo, setDateTo] = useState<string>(searchParams.get("to") ?? "");
 
@@ -189,6 +197,7 @@ export function FilterBar({ allTags }: { allTags: string[] }) {
     setSelectedStatuses(new Set(searchParams.get("statuses")?.split(",").filter(Boolean) ?? []));
     setSelectedTags(new Set(searchParams.get("tags")?.split(",").filter(Boolean) ?? []));
     setSelectedSubs(new Set(searchParams.get("sub")?.split(",").filter(Boolean) ?? []));
+    setSelectedHandlers(new Set(searchParams.get("handler")?.split(",").filter(Boolean) ?? []));
     setDateFrom(searchParams.get("from") ?? "");
     setDateTo(searchParams.get("to") ?? "");
   }, [searchParams]);
@@ -201,13 +210,24 @@ export function FilterBar({ allTags }: { allTags: string[] }) {
     router.push(`/leads?${params.toString()}`);
   }
 
-  function applyFilters(statuses: Set<string>, tags: Set<string>, subs: Set<string> = selectedSubs) {
+  function applyFilters(
+    statuses: Set<string>,
+    tags: Set<string>,
+    subs: Set<string> = selectedSubs,
+    handlers: Set<string> = selectedHandlers
+  ) {
     const params = new URLSearchParams(searchParams.toString());
 
     if (subs.size > 0) {
       params.set("sub", Array.from(subs).join(","));
     } else {
       params.delete("sub");
+    }
+
+    if (handlers.size > 0) {
+      params.set("handler", Array.from(handlers).join(","));
+    } else {
+      params.delete("handler");
     }
 
     if (statuses.size > 0) {
@@ -249,14 +269,27 @@ export function FilterBar({ allTags }: { allTags: string[] }) {
     applyFilters(selectedStatuses, selectedTags, next);
   }
 
+  function handleHandlerChange(next: Set<string>) {
+    setSelectedHandlers(next);
+    applyFilters(selectedStatuses, selectedTags, selectedSubs, next);
+  }
+
+  function removeHandler(value: string) {
+    const next = new Set(selectedHandlers);
+    next.delete(value);
+    setSelectedHandlers(next);
+    applyFilters(selectedStatuses, selectedTags, selectedSubs, next);
+  }
+
   function clearAll() {
     setSelectedStatuses(new Set());
     setSelectedTags(new Set());
     setSelectedSubs(new Set());
+    setSelectedHandlers(new Set());
     setDateFrom("");
     setDateTo("");
     const params = new URLSearchParams(searchParams.toString());
-    ["statuses", "sub", "tags", "from", "to", "page"].forEach((k) => params.delete(k));
+    ["statuses", "sub", "tags", "handler", "from", "to", "page"].forEach((k) => params.delete(k));
     router.push(`/leads?${params.toString()}`);
   }
 
@@ -276,8 +309,15 @@ export function FilterBar({ allTags }: { allTags: string[] }) {
 
   const statusOptions = STATUS_OPTIONS.map((s) => ({ value: s.value, label: s.label }));
   const tagOptions = allTags.map((t) => ({ value: t, label: t }));
+  // רכזות + "ללא שיוך" (לידים שאף רכזת עוד לא נגעה בהם)
+  const handlerOptions = [
+    ...recruiters.map((r) => ({ value: r.email, label: r.name })),
+    { value: "__none__", label: "ללא שיוך" },
+  ];
+  const handlerLabel = (value: string) =>
+    value === "__none__" ? "ללא שיוך" : recruiters.find((r) => r.email === value)?.name ?? value;
 
-  const hasFilters = selectedStatuses.size > 0 || selectedSubs.size > 0 || selectedTags.size > 0 || !!dateFrom || !!dateTo;
+  const hasFilters = selectedStatuses.size > 0 || selectedSubs.size > 0 || selectedTags.size > 0 || selectedHandlers.size > 0 || !!dateFrom || !!dateTo;
 
   return (
     <div className="mb-4">
@@ -312,6 +352,13 @@ export function FilterBar({ allTags }: { allTags: string[] }) {
               </span>
             );
           }}
+        />
+
+        <MultiSelectDropdown
+          label="סינון לפי רכזת"
+          options={handlerOptions}
+          selected={selectedHandlers}
+          onChange={handleHandlerChange}
         />
 
         {tagOptions.length > 0 && (
@@ -397,6 +444,15 @@ export function FilterBar({ allTags }: { allTags: string[] }) {
               <span key={`sub-${s}`} className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-[11px] font-medium bg-violet-50 text-violet-700 border border-violet-200">
                 {s}
                 <button type="button" onClick={() => removeSub(s)} className="hover:text-red-600 transition-colors">
+                  <XIcon />
+                </button>
+              </span>
+            ))}
+
+            {Array.from(selectedHandlers).map((h) => (
+              <span key={`h-${h}`} className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-[11px] font-medium bg-emerald-50 text-emerald-700 border border-emerald-200">
+                {handlerLabel(h)}
+                <button type="button" onClick={() => removeHandler(h)} className="hover:text-red-600 transition-colors">
                   <XIcon />
                 </button>
               </span>

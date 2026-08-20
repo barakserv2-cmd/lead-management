@@ -45,6 +45,9 @@ export interface Lead {
   tags: string[] | null;
   preferences: Record<string, unknown> | null;
   is_candidate: boolean;
+  /** email of the recruiter who last moved the lead's status (see changeLeadStatus) */
+  handled_by: string | null;
+  handled_at: string | null;
   needs_attention: boolean;
   needs_attention_at: string | null;
   attention_reason: string | null;

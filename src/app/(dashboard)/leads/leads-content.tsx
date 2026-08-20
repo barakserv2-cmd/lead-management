@@ -84,7 +84,13 @@ function waitingChip(lead: Lead): { classes: string; label: string } {
 
 const INCOMING_POLL_MS = 7000;
 
-export function LeadsContent({ leads }: { leads: Lead[] }) {
+export function LeadsContent({
+  leads,
+  recruiterNames = {},
+}: {
+  leads: Lead[];
+  recruiterNames?: Record<string, string>;
+}) {
   const [openLeadIds, setOpenLeadIds] = useState<string[]>([]);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [waDialogOpen, setWaDialogOpen] = useState(false);
@@ -196,6 +202,7 @@ export function LeadsContent({ leads }: { leads: Lead[] }) {
             <th className="px-4 py-3 text-right font-medium text-gray-600">תפקיד</th>
             <th className="px-4 py-3 text-right font-medium text-gray-600">סטטוס</th>
             <th className="px-4 py-3 text-right font-medium text-gray-600">מקור</th>
+            <th className="px-4 py-3 text-right font-medium text-gray-600">רכזת</th>
             <th className="px-4 py-3 text-right font-medium text-gray-600">תאריך</th>
             <th className="px-4 py-3 text-right font-medium text-gray-600">פעולות</th>
           </tr>
@@ -203,7 +210,7 @@ export function LeadsContent({ leads }: { leads: Lead[] }) {
         <tbody>
           {leads.length === 0 ? (
             <tr>
-              <td colSpan={8} className="px-4 py-12 text-center text-gray-400">
+              <td colSpan={9} className="px-4 py-12 text-center text-gray-400">
                 אין לידים עדיין. חבר את Gmail כדי להתחיל.
               </td>
             </tr>
@@ -267,6 +274,18 @@ export function LeadsContent({ leads }: { leads: Lead[] }) {
                     <span className={"inline-block px-2.5 py-1 rounded-full text-xs font-medium " + sourceColor}>
                       {lead.source ?? "—"}
                     </span>
+                  </td>
+                  <td className="px-4 py-3">
+                    {lead.handled_by ? (
+                      <span
+                        className="inline-block px-2.5 py-1 rounded-full text-xs font-medium bg-emerald-50 text-emerald-700"
+                        title={lead.handled_by}
+                      >
+                        {recruiterNames[lead.handled_by] ?? lead.handled_by.split("@")[0]}
+                      </span>
+                    ) : (
+                      <span className="text-gray-300 text-xs">—</span>
+                    )}
                   </td>
                   <td className="px-4 py-3">
                     {(() => {

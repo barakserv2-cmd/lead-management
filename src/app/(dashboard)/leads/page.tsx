@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { getSupabaseAdmin } from "@/lib/api-auth";
 import type { Lead } from "@/types/leads";
 import Link from "next/link";
 import { LeadsContent } from "./leads-content";
@@ -51,7 +52,7 @@ function LeadsTabs({ active, newCount }: { active: "queue" | "folders" | "all"; 
 export default async function LeadsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ page?: string; q?: string; statuses?: string; sub?: string; tags?: string; source?: string; view?: string; from?: string; to?: string }>;
+  searchParams: Promise<{ page?: string; q?: string; statuses?: string; sub?: string; tags?: string; source?: string; view?: string; from?: string; to?: string; handler?: string }>;
 }) {
   const params = await searchParams;
   const currentPage = Math.max(1, parseInt(params.page ?? "1", 10) || 1);
@@ -59,6 +60,7 @@ export default async function LeadsPage({
   const statusFilter = params.statuses?.split(",").filter(Boolean) ?? [];
   const tagFilter = params.tags?.split(",").filter(Boolean) ?? [];
   const subStatusFilter = params.sub?.split(",").filter(Boolean) ?? [];
+  const handlerFilter = params.handler?.split(",").filter(Boolean) ?? [];
   const sourceParam = params.source ?? null;
   const dateFrom = /^\d{4}-\d{2}-\d{2}$/.test(params.from ?? "") ? params.from! : null;
   const dateTo = /^\d{4}-\d{2}-\d{2}$/.test(params.to ?? "") ? params.to! : null;
@@ -181,7 +183,8 @@ export default async function LeadsPage({
     "interview_notes, followup_notes, notes, tags, screening_score, screening_motivation_score, " +
     "screening_fit_score, screening_availability_score, screening_experience_score, extracted_availability, " +
     "extracted_salary_expectation, extracted_location_pref, extracted_interests, needs_attention, " +
-    "attention_reason, needs_human_attention, human_attention_reason, human_attention_raised_at";
+    "attention_reason, needs_human_attention, human_attention_reason, human_attention_raised_at, " +
+    "handled_by, handled_at";
 
   // שאילתה אחת מחזירה גם נתונים וגם ספירה כוללת (count: "exact") —
   // במקום שאילתת ספירה נפרדת וכפולה.
@@ -196,6 +199,19 @@ export default async function LeadsPage({
   if (subStatusFilter.length > 0) dataQuery = dataQuery.in("sub_status", subStatusFilter);
   if (sourceFilter === "__none__") dataQuery = dataQuery.is("source", null);
   else if (sourceFilter) dataQuery = dataQuery.eq("source", sourceFilter);
+
+  // סינון לפי רכזת מטפלת (handled_by = אימייל הרכזת). "__none__" = ללא שיוך.
+  if (handlerFilter.length > 0) {
+    const handlerEmails = handlerFilter.filter((h) => h !== "__none__");
+    if (handlerFilter.includes("__none__")) {
+      const parts = ["handled_by.is.null"];
+      if (handlerEmails.length > 0)
+        parts.push(`handled_by.in.(${handlerEmails.map((e) => `"${e}"`).join(",")})`);
+      dataQuery = dataQuery.or(parts.join(","));
+    } else {
+      dataQuery = dataQuery.in("handled_by", handlerEmails);
+    }
+  }
 
   // Date search on arrival time (effective_at), by Asia/Jerusalem calendar day.
   // ilDayStartUTC gives the UTC instant of local midnight for the given date.
@@ -222,10 +238,23 @@ export default async function LeadsPage({
   // scanning of every row in JS). Cached via Next.js fetch dedup.
   const tagsRpc = supabase.rpc("get_distinct_lead_tags");
 
-  const [{ data: leads, count }, { data: tagsData }] = await Promise.all([
+  // רשימת הרכזות לסינון ולהצגת שם במקום אימייל — user_profiles נקרא רק
+  // דרך service role (אין עליו policy ל-authenticated), כמו בדף "היום".
+  const recruitersQuery = getSupabaseAdmin()
+    .from("user_profiles")
+    .select("name, email")
+    .order("name");
+
+  const [{ data: leads, count }, { data: tagsData }, { data: profilesData }] = await Promise.all([
     dataQuery,
     tagsRpc,
+    recruitersQuery,
   ]);
+
+  const recruiters = ((profilesData as { name: string | null; email: string }[] | null) ?? [])
+    .filter((p) => p.email)
+    .map((p) => ({ email: p.email, name: p.name || p.email }));
+  const recruiterNames = Object.fromEntries(recruiters.map((r) => [r.email, r.name]));
 
   // supabase-js לא מצליח לנתח את מחרוזת העמודות הארוכה — הידוע לנו טוב ממנו
   const typedLeads = (leads ?? []) as unknown as Lead[];
@@ -268,7 +297,7 @@ export default async function LeadsPage({
         <SearchInput />
       </Suspense>
       <Suspense fallback={null}>
-        <FilterBar allTags={allTags} />
+        <FilterBar allTags={allTags} recruiters={recruiters} />
       </Suspense>
       <Suspense fallback={null}>
         <Pagination
@@ -279,7 +308,7 @@ export default async function LeadsPage({
           className="mb-4"
         />
       </Suspense>
-      <LeadsContent leads={typedLeads} />
+      <LeadsContent leads={typedLeads} recruiterNames={recruiterNames} />
       <Suspense fallback={null}>
         <Pagination
           currentPage={currentPage}

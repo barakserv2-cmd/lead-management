@@ -43,7 +43,12 @@ function ilToday(): string {
   });
 }
 
-export default async function TodayPage() {
+export default async function TodayPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ recruiter?: string }>;
+}) {
+  const { recruiter: recruiterParam } = await searchParams;
   const supabase = getSupabaseAdmin();
   const { data, error } = await supabase.rpc("get_today_leads_by_recruiter");
   const rows = (data ?? []) as Row[];
@@ -74,6 +79,14 @@ export default async function TodayPage() {
     return b[1].rows.length - a[1].rows.length;
   });
 
+  // סינון לפי רכזת: הכפתורים נבנים מכל הקבוצות של היום (עם ספירה),
+  // והרשימה מציגה רק את הקבוצה שנבחרה. router.refresh שומר על ה-URL.
+  const activeRecruiter = recruiterParam && groups.has(recruiterParam) ? recruiterParam : null;
+  const visible = activeRecruiter
+    ? ordered.filter(([key]) => key === activeRecruiter)
+    : ordered;
+  const visibleCount = visible.reduce((sum, [, g]) => sum + g.rows.length, 0);
+
   return (
     <div dir="rtl" className="p-6 max-w-5xl mx-auto">
       {/* refresh the board every 15s so handling/new leads appear near-live */}
@@ -82,9 +95,38 @@ export default async function TodayPage() {
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-slate-800">לידים של היום</h1>
         <p className="text-sm text-slate-500 mt-1">
-          {ilToday()} · {rows.length} לידים · מחולק לפי הרכזת שטיפלה · מתעדכן אוטומטית
+          {ilToday()} · {activeRecruiter ? `${visibleCount} מתוך ${rows.length}` : rows.length} לידים · מחולק לפי הרכזת שטיפלה · מתעדכן אוטומטית
         </p>
       </div>
+
+      {/* סינון לפי רכזת */}
+      {ordered.length > 1 && (
+        <div className="flex items-center gap-2 flex-wrap mb-5">
+          <Link
+            href="/today"
+            className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-colors ${
+              !activeRecruiter
+                ? "border-cyan-400 bg-cyan-600 text-white"
+                : "border-slate-200 bg-white text-slate-600 hover:border-cyan-300"
+            }`}
+          >
+            הכל ({rows.length})
+          </Link>
+          {ordered.map(([key, group]) => (
+            <Link
+              key={key}
+              href={`/today?recruiter=${encodeURIComponent(key)}`}
+              className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-colors ${
+                activeRecruiter === key
+                  ? "border-cyan-400 bg-cyan-600 text-white"
+                  : "border-slate-200 bg-white text-slate-600 hover:border-cyan-300"
+              }`}
+            >
+              {group.name} ({group.rows.length})
+            </Link>
+          ))}
+        </div>
+      )}
 
       {error && (
         <div className="rounded-lg bg-red-50 text-red-700 px-4 py-3 text-sm">
@@ -99,7 +141,7 @@ export default async function TodayPage() {
       )}
 
       <div className="space-y-6">
-        {ordered.map(([key, group]) => (
+        {visible.map(([key, group]) => (
           <section
             key={key}
             className="rounded-xl border border-slate-200 bg-white overflow-hidden"
