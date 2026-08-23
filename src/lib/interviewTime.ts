@@ -1,7 +1,7 @@
 // ולידציה לשעת ראיון — השעה היא מועד ההגעה של המועמד למשרד.
 // חוסם הזנות שגויות (תאריך בלי שעה → 00:00, שעות לילה) לפני שהן נשמרות.
-export const INTERVIEW_HOUR_MIN = 7;
-export const INTERVIEW_HOUR_MAX = 22;
+export const INTERVIEW_HOUR_MIN = 6;
+export const INTERVIEW_HOUR_MAX = 16;
 
 /** מקבל ערך datetime-local ("YYYY-MM-DDTHH:mm"). מחזיר הודעת שגיאה או null. */
 export function validateInterviewLocal(value: string): string | null {
