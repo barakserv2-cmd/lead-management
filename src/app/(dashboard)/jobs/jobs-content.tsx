@@ -1,89 +1,73 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { toast } from "sonner";
+import {
+  AlertTriangle,
+  Building2,
+  ChevronDown,
+  ChevronLeft,
+  Minus,
+  Pause,
+  Pencil,
+  Play,
+  Plus,
+  Search,
+  Users,
+  X,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Badge } from "@/components/ui/badge";
-import { MapPin, Users, Clock, CheckCircle, Pencil } from "lucide-react";
 import {
   Dialog,
   DialogContent,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
-  DialogFooter,
 } from "@/components/ui/dialog";
-import type { JobWithClient } from "@/types/jobs";
+import type { JobStatus, JobWithClient } from "@/types/jobs";
 import type { Client } from "@/types/clients";
-import { createJob, updateJob } from "./actions";
+import { STATUS_LABELS, type LeadStatusValue } from "@/lib/stateMachine";
+import { createJob, setJobNeeded, setJobStatus, setJobUrgent, updateJob } from "./actions";
 import { JobMatchesSheet } from "./job-matches-sheet";
 
-// ── Status helpers ───────────────────────────────────────────
+// ── Types shared with page.tsx ──────────────────────────────
 
-type StaffingStatus = "critical" | "partial" | "full";
-
-function getStaffingStatus(assigned: number, needed: number): StaffingStatus {
-  if (assigned === 0) return "critical";
-  if (assigned < needed) return "partial";
-  return "full";
+export interface StaffedLead {
+  id: string;
+  name: string;
+  status: string;
+  date: string | null;
 }
 
-const STATUS_CONFIG: Record<StaffingStatus, {
-  label: string;
-  border: string;
-  badgeBg: string;
-  badgeText: string;
-  actionLabel: string;
-  actionStyle: string;
-}> = {
-  critical: {
-    label: "ללא איוש",
-    border: "border-r-4 border-r-red-500",
-    badgeBg: "bg-red-100",
-    badgeText: "text-red-700 font-bold",
-    actionLabel: "מצא עובדים",
-    actionStyle: "bg-red-600 text-white hover:bg-red-700",
-  },
-  partial: {
-    label: "איוש חלקי",
-    border: "border-r-4 border-r-orange-400",
-    badgeBg: "bg-orange-100",
-    badgeText: "text-orange-700 font-bold",
-    actionLabel: "השלם איוש",
-    actionStyle: "bg-orange-500 text-white hover:bg-orange-600",
-  },
-  full: {
-    label: "מאויש",
-    border: "border-r-4 border-r-emerald-500",
-    badgeBg: "bg-emerald-100",
-    badgeText: "text-emerald-700 font-bold",
-    actionLabel: "צפה בעובדים",
-    actionStyle: "border border-gray-300 bg-white text-gray-700 hover:bg-gray-50",
-  },
+export interface JobStaffing {
+  hired: StaffedLead[];
+  inProcess: StaffedLead[];
+}
+
+type StatusTab = "Open" | "On Hold" | "Closed";
+
+const STATUS_TAB_LABELS: Record<StatusTab, string> = {
+  Open: "פתוחות",
+  "On Hold": "מוקפאות",
+  Closed: "סגורות",
 };
 
-// ── Helpers ──────────────────────────────────────────────────
+// ── Helpers ─────────────────────────────────────────────────
 
-function formatPhone(phone: string | null): string | null {
+function waLink(phone: string | null | undefined): string | null {
   if (!phone) return null;
-  return phone.replace(/[\s\-()]/g, "").replace(/^0/, "972");
+  const d = phone.replace(/\D/g, "");
+  return `https://wa.me/${d.startsWith("0") ? "972" + d.slice(1) : d}`;
 }
 
-function sortByPriority(jobs: JobWithClient[]): JobWithClient[] {
-  const order: Record<StaffingStatus, number> = { critical: 0, partial: 1, full: 2 };
-  return [...jobs].sort((a, b) => {
-    const sa = getStaffingStatus(a.assigned_count, a.needed_count);
-    const sb = getStaffingStatus(b.assigned_count, b.needed_count);
-    if (order[sa] !== order[sb]) return order[sa] - order[sb];
-    // Within same status, urgent first
-    if (a.urgent !== b.urgent) return a.urgent ? -1 : 1;
-    return 0;
-  });
+function fmtDate(d: string | null): string {
+  if (!d) return "";
+  return new Date(d).toLocaleDateString("he-IL", { day: "numeric", month: "short" });
 }
-
-// ── Icons ────────────────────────────────────────────────────
 
 function WhatsAppIcon({ className = "w-4 h-4" }: { className?: string }) {
   return (
@@ -93,285 +77,563 @@ function WhatsAppIcon({ className = "w-4 h-4" }: { className?: string }) {
   );
 }
 
-function PlusIcon({ className = "w-4 h-4" }: { className?: string }) {
-  return (
-    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
-      <path d="M5 12h14" /><path d="M12 5v14" />
-    </svg>
-  );
-}
-
-// ── Summary Bar ─────────────────────────────────────────────
-
-function JobSummaryBar({ jobs }: { jobs: JobWithClient[] }) {
-  const critical = jobs.filter(j => j.assigned_count === 0).length;
-  const partial = jobs.filter(j => j.assigned_count > 0 && j.assigned_count < j.needed_count).length;
-  const stable = jobs.filter(j => j.assigned_count >= j.needed_count).length;
-
-  return (
-    <div className="grid grid-cols-3 gap-4 mb-6">
-      <div className="bg-red-50 border-l-4 border-red-500 p-4 rounded shadow-sm">
-        <div className="text-red-800 text-sm font-bold uppercase tracking-wider">קריטי (לא מאויש)</div>
-        <div className="text-3xl font-bold text-red-900">{critical}</div>
-      </div>
-      <div className="bg-orange-50 border-l-4 border-orange-500 p-4 rounded shadow-sm">
-        <div className="text-orange-800 text-sm font-bold uppercase tracking-wider">דורש תשומת לב</div>
-        <div className="text-3xl font-bold text-orange-900">{partial}</div>
-      </div>
-      <div className="bg-green-50 border-l-4 border-green-500 p-4 rounded shadow-sm">
-        <div className="text-green-800 text-sm font-bold uppercase tracking-wider">יציב (מאויש מלא)</div>
-        <div className="text-3xl font-bold text-green-900">{stable}</div>
-      </div>
-    </div>
-  );
-}
-
-// ── Component ────────────────────────────────────────────────
+// ── Component ───────────────────────────────────────────────
 
 export function JobsContent({
-  jobs: initialJobs,
+  jobs,
+  staffing,
   clients,
 }: {
   jobs: JobWithClient[];
+  staffing: Record<string, JobStaffing>;
   clients: Pick<Client, "id" | "name">[];
 }) {
   const router = useRouter();
+  const [pending, startTransition] = useTransition();
+
+  const [tab, setTab] = useState<StatusTab>("Open");
   const [search, setSearch] = useState("");
+  const [onlyUrgent, setOnlyUrgent] = useState(false);
+  const [onlyUnfilled, setOnlyUnfilled] = useState(false);
+  const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
+  const [expandedJob, setExpandedJob] = useState<string | null>(null);
+
+  const [matchesJob, setMatchesJob] = useState<JobWithClient | null>(null);
+
+  // Dialog state
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingJob, setEditingJob] = useState<JobWithClient | null>(null);
-
-  // Form state
-  const [formClientId, setFormClientId] = useState("");
-  const [formTitle, setFormTitle] = useState("");
-  const [formNeeded, setFormNeeded] = useState("1");
-  const [formPayRate, setFormPayRate] = useState("");
-  const [formLocation, setFormLocation] = useState("");
-  const [formUrgent, setFormUrgent] = useState(false);
-  const [saving, setSaving] = useState(false);
+  const [form, setForm] = useState({
+    client_id: "",
+    title: "",
+    needed: "1",
+    pay_rate: "",
+    location: "",
+    requirements: "",
+    notes: "",
+    urgent: false,
+  });
   const [formError, setFormError] = useState("");
+  const [saving, setSaving] = useState(false);
 
-  // Sort by priority + search filter
-  const sorted = useMemo(() => {
-    let result = sortByPriority(initialJobs);
+  const stat = (j: JobWithClient) => staffing[j.id] ?? { hired: [], inProcess: [] };
+  const missing = (j: JobWithClient) => Math.max(0, j.needed_count - stat(j).hired.length);
 
-    if (search.trim()) {
-      const q = search.trim().toLowerCase();
-      result = result.filter(
-        (j) =>
-          j.title.toLowerCase().includes(q) ||
-          (j.location?.toLowerCase().includes(q) ?? false) ||
-          j.clients.name.toLowerCase().includes(q)
+  // ── KPIs over OPEN jobs (regardless of tab) ──
+  const kpi = useMemo(() => {
+    const open = jobs.filter((j) => j.status === "Open");
+    return {
+      openJobs: open.length,
+      missing: open.reduce((s, j) => s + missing(j), 0),
+      urgent: open.filter((j) => j.urgent && missing(j) > 0).length,
+      inProcess: open.reduce((s, j) => s + stat(j).inProcess.length, 0),
+      employers: new Set(open.map((j) => j.client_id)).size,
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [jobs, staffing]);
+
+  const tabCounts = useMemo(() => {
+    const c: Record<StatusTab, number> = { Open: 0, "On Hold": 0, Closed: 0 };
+    for (const j of jobs) c[j.status as StatusTab] = (c[j.status as StatusTab] ?? 0) + 1;
+    return c;
+  }, [jobs]);
+
+  // ── Filter + group by employer ──
+  const groups = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    const list = jobs.filter((j) => {
+      if (j.status !== tab) return false;
+      if (onlyUrgent && !j.urgent) return false;
+      if (onlyUnfilled && missing(j) === 0) return false;
+      if (!q) return true;
+      return (
+        j.title.toLowerCase().includes(q) ||
+        j.clients?.name?.toLowerCase().includes(q) ||
+        (j.location ?? "").toLowerCase().includes(q) ||
+        (j.requirements ?? []).some((r) => r.toLowerCase().includes(q)) ||
+        (j.notes ?? "").toLowerCase().includes(q)
       );
+    });
+
+    const map = new Map<string, { name: string; phone: string | null; jobs: JobWithClient[] }>();
+    for (const j of list) {
+      const g = map.get(j.client_id) ?? {
+        name: j.clients?.name ?? "ללא מעסיק",
+        phone: j.clients?.phone ?? null,
+        jobs: [],
+      };
+      g.jobs.push(j);
+      map.set(j.client_id, g);
     }
+    const arr = [...map.entries()].map(([id, g]) => {
+      const needed = g.jobs.reduce((s, j) => s + j.needed_count, 0);
+      const hired = g.jobs.reduce((s, j) => s + stat(j).hired.length, 0);
+      const inProcess = g.jobs.reduce((s, j) => s + stat(j).inProcess.length, 0);
+      const urgent = g.jobs.some((j) => j.urgent && missing(j) > 0);
+      // urgent + unfilled first inside the group
+      g.jobs.sort((a, b) => {
+        const ua = a.urgent && missing(a) > 0 ? 0 : 1;
+        const ub = b.urgent && missing(b) > 0 ? 0 : 1;
+        if (ua !== ub) return ua - ub;
+        return missing(b) - missing(a);
+      });
+      return { id, ...g, needed, hired, inProcess, missing: needed - hired, urgent };
+    });
+    // employers with the most open headcount first
+    arr.sort((a, b) => {
+      if (a.urgent !== b.urgent) return a.urgent ? -1 : 1;
+      if (b.missing !== a.missing) return b.missing - a.missing;
+      return a.name.localeCompare(b.name, "he");
+    });
+    return arr;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [jobs, staffing, tab, search, onlyUrgent, onlyUnfilled]);
 
-    return result;
-  }, [initialJobs, search]);
+  const visibleCount = groups.reduce((s, g) => s + g.jobs.length, 0);
 
-  function openAddDialog() {
+  function toggleGroup(id: string) {
+    setCollapsed((prev) => {
+      const n = new Set(prev);
+      if (n.has(id)) n.delete(id);
+      else n.add(id);
+      return n;
+    });
+  }
+
+  // ── Quick actions ──
+  function act(fn: () => Promise<{ error: string | null }>, ok: string) {
+    startTransition(async () => {
+      const r = await fn();
+      if (r.error) toast.error(r.error);
+      else {
+        toast.success(ok);
+        router.refresh();
+      }
+    });
+  }
+
+  // ── Dialog ──
+  function openAdd(clientId?: string) {
     setEditingJob(null);
-    setFormClientId(clients[0]?.id ?? "");
-    setFormTitle("");
-    setFormNeeded("1");
-    setFormPayRate("");
-    setFormLocation("");
-    setFormUrgent(false);
+    setForm({
+      client_id: clientId ?? clients[0]?.id ?? "",
+      title: "",
+      needed: "1",
+      pay_rate: "",
+      location: "",
+      requirements: "",
+      notes: "",
+      urgent: false,
+    });
     setFormError("");
     setDialogOpen(true);
   }
 
-  function openEditDialog(job: JobWithClient) {
+  function openEdit(job: JobWithClient) {
     setEditingJob(job);
-    setFormClientId(job.client_id);
-    setFormTitle(job.title);
-    setFormNeeded(String(job.needed_count));
-    setFormPayRate(job.pay_rate ?? "");
-    setFormLocation(job.location ?? "");
-    setFormUrgent(job.urgent);
+    setForm({
+      client_id: job.client_id,
+      title: job.title,
+      needed: String(job.needed_count),
+      pay_rate: job.pay_rate ?? "",
+      location: job.location ?? "",
+      requirements: (job.requirements ?? []).join(", "),
+      notes: job.notes ?? "",
+      urgent: job.urgent,
+    });
     setFormError("");
     setDialogOpen(true);
   }
 
   async function handleSave() {
-    if (!formTitle.trim()) {
-      setFormError("כותרת היא שדה חובה");
-      return;
-    }
-    if (!editingJob && !formClientId) {
-      setFormError("מעסיק הוא שדה חובה");
-      return;
-    }
-    const neededNum = parseInt(formNeeded, 10);
-    if (isNaN(neededNum) || neededNum < 1) {
-      setFormError("מספר עובדים חייב להיות 1 לפחות");
-      return;
-    }
+    if (!form.title.trim()) return setFormError("כותרת היא שדה חובה");
+    if (!editingJob && !form.client_id) return setFormError("מעסיק הוא שדה חובה");
+    const needed = parseInt(form.needed, 10);
+    if (isNaN(needed) || needed < 1) return setFormError("מספר תקנים חייב להיות 1 לפחות");
     setFormError("");
     setSaving(true);
-
     const payload = {
-      title: formTitle.trim(),
-      needed_count: neededNum,
-      pay_rate: formPayRate.trim(),
-      location: formLocation.trim(),
-      urgent: formUrgent,
+      title: form.title.trim(),
+      needed_count: needed,
+      pay_rate: form.pay_rate.trim(),
+      location: form.location.trim(),
+      urgent: form.urgent,
+      requirements: form.requirements.split(",").map((s) => s.trim()).filter(Boolean),
+      notes: form.notes,
     };
-
-    const result = editingJob
+    const r = editingJob
       ? await updateJob(editingJob.id, payload)
-      : await createJob({ ...payload, client_id: formClientId });
-
+      : await createJob({ ...payload, client_id: form.client_id });
     setSaving(false);
-    if (result.error) {
-      setFormError(result.error);
-    } else {
-      toast.success(editingJob ? "משרה עודכנה בהצלחה!" : "משרה נוספה בהצלחה!");
-      setDialogOpen(false);
-      setEditingJob(null);
-      router.refresh();
-    }
+    if (r.error) return setFormError(r.error);
+    toast.success(editingJob ? "המשרה עודכנה" : "המשרה נוספה");
+    setDialogOpen(false);
+    setEditingJob(null);
+    router.refresh();
   }
 
   return (
-    <div>
-      {/* ═══ HEADER ═══════════════════════════════════════════ */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
-        <h1 className="text-2xl font-bold text-gray-800">לוח בקרה - משרות ושיבוצים</h1>
-        <div className="flex items-center gap-3">
+    <div className={pending ? "opacity-70 transition-opacity" : ""}>
+      {/* ═══ Header ═══ */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-800">משרות</h1>
+          <p className="text-sm text-gray-500">
+            איוש מחושב חי מהלידים — מי שסומן &quot;התקבל&quot; / &quot;התחיל לעבוד&quot; על המשרה.
+          </p>
+        </div>
+        <Button onClick={() => openAdd()} className="gap-1.5">
+          <Plus className="w-4 h-4" />
+          משרה חדשה
+        </Button>
+      </div>
+
+      {/* ═══ KPIs ═══ */}
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-5">
+        <Kpi label="משרות פתוחות" value={kpi.openJobs} />
+        <Kpi label="תקנים חסרים" value={kpi.missing} tone={kpi.missing > 0 ? "red" : "green"} />
+        <Kpi label="דחופות לא מאוישות" value={kpi.urgent} tone={kpi.urgent > 0 ? "amber" : "gray"} />
+        <Kpi label="מועמדים בתהליך" value={kpi.inProcess} tone="blue" />
+        <Kpi label="מעסיקים עם משרות" value={kpi.employers} />
+      </div>
+
+      {/* ═══ Filters ═══ */}
+      <div className="flex flex-col lg:flex-row lg:items-center gap-3 mb-4">
+        <div className="flex rounded-lg border bg-white p-0.5">
+          {(Object.keys(STATUS_TAB_LABELS) as StatusTab[]).map((t) => (
+            <button
+              key={t}
+              onClick={() => setTab(t)}
+              className={`px-3 py-1.5 text-sm rounded-md transition-colors ${
+                tab === t ? "bg-gray-900 text-white" : "text-gray-600 hover:bg-gray-100"
+              }`}
+            >
+              {STATUS_TAB_LABELS[t]}
+              <span className={`ms-1.5 text-xs ${tab === t ? "text-white/70" : "text-gray-400"}`}>
+                {tabCounts[t]}
+              </span>
+            </button>
+          ))}
+        </div>
+
+        <div className="relative flex-1 max-w-md">
+          <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
           <Input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="חיפוש כותרת / מיקום / מעסיק..."
-            className="w-72 text-sm"
+            placeholder="חיפוש משרה / מעסיק / דרישה..."
+            className="pr-9"
           />
-          <Button onClick={openAddDialog} className="gap-1.5">
-            <PlusIcon className="w-4 h-4" />
-            משרה חדשה
-          </Button>
+          {search && (
+            <button
+              onClick={() => setSearch("")}
+              className="absolute left-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          )}
+        </div>
+
+        <div className="flex gap-2">
+          <Chip active={onlyUrgent} onClick={() => setOnlyUrgent((v) => !v)} tone="amber">
+            <AlertTriangle className="w-3.5 h-3.5" /> רק דחופות
+          </Chip>
+          <Chip active={onlyUnfilled} onClick={() => setOnlyUnfilled((v) => !v)} tone="red">
+            <Users className="w-3.5 h-3.5" /> רק לא מאוישות
+          </Chip>
+          {groups.length > 1 && (
+            <button
+              onClick={() =>
+                setCollapsed(collapsed.size ? new Set() : new Set(groups.map((g) => g.id)))
+              }
+              className="text-xs text-gray-500 hover:text-gray-800 px-2"
+            >
+              {collapsed.size ? "פתח הכל" : "כווץ הכל"}
+            </button>
+          )}
         </div>
       </div>
 
-      {/* ═══ SUMMARY BAR ══════════════════════════════════════ */}
-      {initialJobs.length > 0 && <JobSummaryBar jobs={initialJobs} />}
+      <p className="text-xs text-gray-400 mb-2">
+        {visibleCount} משרות אצל {groups.length} מעסיקים
+      </p>
 
-      {/* ═══ CARD GRID (Sorted by priority) ═══════════════════ */}
-      {sorted.length === 0 ? (
-        <div className="text-center py-12 text-gray-500">
-          {search ? (
-            <p className="font-medium">לא נמצאו תוצאות</p>
-          ) : (
-            <>
-              <p className="font-medium">אין משרות פתוחות כרגע. הכל רגוע :)</p>
-              <Button onClick={openAddDialog} variant="outline" className="mt-4 gap-1.5">
-                <PlusIcon className="w-4 h-4" />
-                הוסף משרה ראשונה
-              </Button>
-            </>
-          )}
+      {/* ═══ Groups ═══ */}
+      {groups.length === 0 ? (
+        <div className="bg-white border rounded-xl p-12 text-center text-gray-500">
+          אין משרות שמתאימות לסינון.
         </div>
       ) : (
-        <div className="space-y-4">
-          {sorted.map((job) => (
-            <JobCard key={job.id} job={job} onEdit={openEditDialog} />
-          ))}
+        <div className="space-y-3">
+          {groups.map((g) => {
+            const isCollapsed = collapsed.has(g.id);
+            const wa = waLink(g.phone);
+            return (
+              <section key={g.id} className="bg-white border rounded-xl overflow-hidden shadow-sm">
+                {/* Employer header */}
+                <div className="flex items-center gap-3 px-4 py-3 bg-gray-50/80 border-b">
+                  <button onClick={() => toggleGroup(g.id)} className="flex items-center gap-2 min-w-0">
+                    {isCollapsed ? (
+                      <ChevronLeft className="w-4 h-4 text-gray-400" />
+                    ) : (
+                      <ChevronDown className="w-4 h-4 text-gray-400" />
+                    )}
+                    <Building2 className="w-4 h-4 text-gray-500 shrink-0" />
+                    <span className="font-semibold text-gray-800 truncate">{g.name}</span>
+                  </button>
+                  <span className="text-xs text-gray-500">{g.jobs.length} משרות</span>
+
+                  <div className="ms-auto flex items-center gap-2 text-xs">
+                    <StaffPill hired={g.hired} needed={g.needed} />
+                    {g.inProcess > 0 && (
+                      <span className="px-2 py-0.5 rounded-full bg-blue-50 text-blue-700">
+                        {g.inProcess} בתהליך
+                      </span>
+                    )}
+                    {g.urgent && (
+                      <span className="px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 font-medium">
+                        דחוף
+                      </span>
+                    )}
+                    {wa && (
+                      <a
+                        href={wa}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-green-600 hover:text-green-700"
+                        title="וואטסאפ למעסיק"
+                      >
+                        <WhatsAppIcon />
+                      </a>
+                    )}
+                    <button
+                      onClick={() => openAdd(g.id)}
+                      className="text-gray-400 hover:text-gray-700"
+                      title="הוסף משרה למעסיק"
+                    >
+                      <Plus className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+
+                {/* Rows */}
+                {!isCollapsed && (
+                  <div className="divide-y">
+                    {g.jobs.map((job) => {
+                      const s = stat(job);
+                      const miss = missing(job);
+                      const expanded = expandedJob === job.id;
+                      return (
+                        <div key={job.id} className={job.urgent && miss > 0 ? "bg-amber-50/40" : ""}>
+                          <div className="grid grid-cols-12 items-center gap-2 px-4 py-2.5">
+                            {/* Title + meta */}
+                            <div className="col-span-12 md:col-span-5 min-w-0">
+                              <div className="flex items-center gap-2 min-w-0">
+                                <button
+                                  onClick={() => act(() => setJobUrgent(job.id, !job.urgent), job.urgent ? "הוסר סימון דחוף" : "סומן דחוף")}
+                                  title={job.urgent ? "בטל דחוף" : "סמן דחוף"}
+                                  className={job.urgent ? "text-amber-500" : "text-gray-300 hover:text-amber-400"}
+                                >
+                                  <AlertTriangle className="w-4 h-4" />
+                                </button>
+                                <span className="font-medium text-gray-900 truncate">{job.title}</span>
+                                {job.location && (
+                                  <span className="text-xs text-gray-400 truncate">· {job.location}</span>
+                                )}
+                              </div>
+                              {(job.requirements?.length > 0 || job.notes) && (
+                                <div className="flex flex-wrap gap-1 mt-1 ps-6">
+                                  {job.requirements?.map((r) => (
+                                    <span key={r} className="text-[11px] px-1.5 py-0.5 rounded bg-gray-100 text-gray-600">
+                                      {r}
+                                    </span>
+                                  ))}
+                                  {job.notes &&
+                                    job.notes.split("|").map((n) => n.trim()).filter(Boolean).map((n) => (
+                                      <span key={n} className="text-[11px] px-1.5 py-0.5 rounded bg-sky-50 text-sky-700">
+                                        {n}
+                                      </span>
+                                    ))}
+                                </div>
+                              )}
+                            </div>
+
+                            {/* Pay */}
+                            <div className="col-span-4 md:col-span-2 text-sm text-gray-700" dir="ltr">
+                              {job.pay_rate ? (
+                                <span className="font-mono">{/^\d/.test(job.pay_rate) ? `₪${job.pay_rate}` : job.pay_rate}</span>
+                              ) : (
+                                <span className="text-gray-300">—</span>
+                              )}
+                            </div>
+
+                            {/* Staffing */}
+                            <div className="col-span-5 md:col-span-3">
+                              <button
+                                onClick={() => setExpandedJob(expanded ? null : job.id)}
+                                className="w-full text-right"
+                                title="הצג מועמדים"
+                              >
+                                <div className="flex items-center gap-2">
+                                  <StaffPill hired={s.hired.length} needed={job.needed_count} />
+                                  {s.inProcess.length > 0 && (
+                                    <span className="text-[11px] text-blue-700">+{s.inProcess.length} בתהליך</span>
+                                  )}
+                                </div>
+                                <div className="h-1.5 mt-1 rounded-full bg-gray-100 overflow-hidden flex">
+                                  <div
+                                    className="h-full bg-emerald-500"
+                                    style={{ width: `${Math.min(100, (s.hired.length / job.needed_count) * 100)}%` }}
+                                  />
+                                  <div
+                                    className="h-full bg-blue-300"
+                                    style={{
+                                      width: `${Math.min(
+                                        100 - Math.min(100, (s.hired.length / job.needed_count) * 100),
+                                        (s.inProcess.length / job.needed_count) * 100
+                                      )}%`,
+                                    }}
+                                  />
+                                </div>
+                              </button>
+                            </div>
+
+                            {/* Actions */}
+                            <div className="col-span-3 md:col-span-2 flex items-center justify-end gap-1">
+                              <div className="hidden md:flex items-center border rounded-md">
+                                <button
+                                  className="px-1.5 py-1 text-gray-500 hover:bg-gray-100 disabled:opacity-30"
+                                  disabled={job.needed_count <= 1}
+                                  onClick={() => act(() => setJobNeeded(job.id, job.needed_count - 1), "תקן הופחת")}
+                                  title="הפחת תקן"
+                                >
+                                  <Minus className="w-3.5 h-3.5" />
+                                </button>
+                                <span className="px-1 text-xs text-gray-600 tabular-nums">{job.needed_count}</span>
+                                <button
+                                  className="px-1.5 py-1 text-gray-500 hover:bg-gray-100"
+                                  onClick={() => act(() => setJobNeeded(job.id, job.needed_count + 1), "תקן נוסף")}
+                                  title="הוסף תקן"
+                                >
+                                  <Plus className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+                              <IconBtn title="מועמדים מתאימים" onClick={() => setMatchesJob(job)}>
+                                <Users className="w-4 h-4" />
+                              </IconBtn>
+                              <IconBtn title="עריכה" onClick={() => openEdit(job)}>
+                                <Pencil className="w-4 h-4" />
+                              </IconBtn>
+                              {job.status === "Open" ? (
+                                <IconBtn title="הקפא משרה" onClick={() => act(() => setJobStatus(job.id, "On Hold"), "המשרה הוקפאה")}>
+                                  <Pause className="w-4 h-4" />
+                                </IconBtn>
+                              ) : (
+                                <IconBtn title="פתח מחדש" onClick={() => act(() => setJobStatus(job.id, "Open"), "המשרה נפתחה מחדש")}>
+                                  <Play className="w-4 h-4" />
+                                </IconBtn>
+                              )}
+                              {job.status !== "Closed" && (
+                                <IconBtn
+                                  title="סגור משרה"
+                                  onClick={() => {
+                                    if (confirm(`לסגור את המשרה "${job.title}" אצל ${g.name}?`))
+                                      act(() => setJobStatus(job.id, "Closed" as JobStatus), "המשרה נסגרה");
+                                  }}
+                                >
+                                  <X className="w-4 h-4" />
+                                </IconBtn>
+                              )}
+                            </div>
+                          </div>
+
+                          {/* Expanded: who is on this job */}
+                          {expanded && (
+                            <div className="px-4 pb-3 ps-10 grid md:grid-cols-2 gap-3 text-sm">
+                              <LeadList title="מאוישים" leads={s.hired} empty="עדיין אף אחד לא התקבל למשרה" tone="emerald" />
+                              <LeadList title="בתהליך" leads={s.inProcess} empty="אין מועמדים בתהליך" tone="blue" />
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </section>
+            );
+          })}
         </div>
       )}
 
-      {/* ═══ ADD / EDIT JOB DIALOG ═════════════════════════════ */}
-      <Dialog open={dialogOpen} onOpenChange={(open) => { setDialogOpen(open); if (!open) setEditingJob(null); }}>
-        <DialogContent className="sm:max-w-md" dir="rtl">
+      {/* ═══ Matches sheet ═══ */}
+      <JobMatchesSheet
+        open={!!matchesJob}
+        jobId={matchesJob?.id ?? null}
+        jobTitle={matchesJob?.title ?? ""}
+        clientName={matchesJob?.clients?.name ?? ""}
+        onOpenChange={(o) => !o && setMatchesJob(null)}
+      />
+
+      {/* ═══ Add / Edit dialog ═══ */}
+      <Dialog open={dialogOpen} onOpenChange={(o) => { setDialogOpen(o); if (!o) setEditingJob(null); }}>
+        <DialogContent className="sm:max-w-lg" dir="rtl">
           <DialogHeader>
-            <DialogTitle>{editingJob ? "עריכת משרה" : "הוספת משרה חדשה"}</DialogTitle>
+            <DialogTitle>{editingJob ? "עריכת משרה" : "משרה חדשה"}</DialogTitle>
           </DialogHeader>
-          <div className="space-y-4 py-2">
+          <div className="grid gap-3 py-2">
             {!editingJob && (
-              <div className="space-y-2">
+              <div className="grid gap-1.5">
                 <Label htmlFor="job-client">מעסיק *</Label>
                 <select
                   id="job-client"
-                  value={formClientId}
-                  onChange={(e) => setFormClientId(e.target.value)}
-                  className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm"
+                  value={form.client_id}
+                  onChange={(e) => setForm({ ...form, client_id: e.target.value })}
+                  className="h-9 rounded-md border px-3 text-sm bg-white"
                 >
-                  <option value="" disabled>בחר מעסיק...</option>
                   {clients.map((c) => (
                     <option key={c.id} value={c.id}>{c.name}</option>
                   ))}
                 </select>
               </div>
             )}
-            <div className="space-y-2">
-              <Label htmlFor="job-title">כותרת המשרה *</Label>
-              <Input
-                id="job-title"
-                value={formTitle}
-                onChange={(e) => setFormTitle(e.target.value)}
-                placeholder="מלצר/ית, עובד/ת ניקיון..."
-              />
+            <div className="grid gap-1.5">
+              <Label htmlFor="job-title">תפקיד *</Label>
+              <Input id="job-title" value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} />
             </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-2">
-                <Label htmlFor="job-needed">מספר עובדים *</Label>
-                <Input
-                  id="job-needed"
-                  type="number"
-                  min="1"
-                  value={formNeeded}
-                  onChange={(e) => setFormNeeded(e.target.value)}
-                  dir="ltr"
-                />
+            <div className="grid grid-cols-3 gap-3">
+              <div className="grid gap-1.5">
+                <Label htmlFor="job-needed">תקנים *</Label>
+                <Input id="job-needed" type="number" min={1} value={form.needed} onChange={(e) => setForm({ ...form, needed: e.target.value })} />
               </div>
-              <div className="space-y-2">
+              <div className="grid gap-1.5">
                 <Label htmlFor="job-pay">שכר</Label>
-                <Input
-                  id="job-pay"
-                  value={formPayRate}
-                  onChange={(e) => setFormPayRate(e.target.value)}
-                  placeholder='45 ש"ח/שעה'
-                />
+                <Input id="job-pay" placeholder="45 / 40+2" value={form.pay_rate} onChange={(e) => setForm({ ...form, pay_rate: e.target.value })} />
+              </div>
+              <div className="grid gap-1.5">
+                <Label htmlFor="job-location">מיקום</Label>
+                <Input id="job-location" value={form.location} onChange={(e) => setForm({ ...form, location: e.target.value })} />
               </div>
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="job-location">מיקום</Label>
-              <Input
-                id="job-location"
-                value={formLocation}
-                onChange={(e) => setFormLocation(e.target.value)}
-                placeholder="אילת, מלון..."
-              />
+            <div className="grid gap-1.5">
+              <Label htmlFor="job-req">דרישות (מופרדות בפסיק)</Label>
+              <Input id="job-req" placeholder="אנגלית טובה, ניסיון" value={form.requirements} onChange={(e) => setForm({ ...form, requirements: e.target.value })} />
             </div>
-            <div className="flex items-center gap-3">
-              <button
-                type="button"
-                role="switch"
-                aria-checked={formUrgent}
-                onClick={() => setFormUrgent(!formUrgent)}
-                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                  formUrgent ? "bg-red-500" : "bg-gray-200"
-                }`}
-              >
-                <span
-                  className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                    formUrgent ? "translate-x-1" : "translate-x-6"
-                  }`}
-                />
-              </button>
-              <Label>דחוף</Label>
+            <div className="grid gap-1.5">
+              <Label htmlFor="job-notes">הערות (מגורים / בונוסים / שבת — מופרד ב-|)</Label>
+              <Input id="job-notes" placeholder="מגורים: יש | כולל שבת" value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} />
             </div>
-            {formError && (
-              <div className="rounded-lg bg-red-50 border border-red-200 px-3 py-2 text-xs text-red-700 font-medium">
-                {formError}
-              </div>
-            )}
+            <label className="flex items-center gap-2 text-sm cursor-pointer">
+              <input type="checkbox" checked={form.urgent} onChange={(e) => setForm({ ...form, urgent: e.target.checked })} />
+              דחוף
+            </label>
+            {formError && <p className="text-sm text-red-600">{formError}</p>}
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => { setDialogOpen(false); setEditingJob(null); }} disabled={saving}>
               ביטול
             </Button>
-            <Button
-              onClick={handleSave}
-              disabled={saving || (!editingJob && !formClientId) || !formTitle.trim()}
-            >
-              {saving ? "שומר..." : editingJob ? "שמור שינויים" : "הוסף משרה"}
+            <Button onClick={handleSave} disabled={saving}>
+              {saving ? "שומר..." : editingJob ? "שמור" : "הוסף משרה"}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -380,133 +642,116 @@ export function JobsContent({
   );
 }
 
-// ── Job Card (Operational Decision Card) ─────────────────────
+// ── Small parts ─────────────────────────────────────────────
 
-function JobCard({ job, onEdit }: { job: JobWithClient; onEdit: (job: JobWithClient) => void }) {
-  const clientPhone = formatPhone(job.clients.phone);
-  const [matchesOpen, setMatchesOpen] = useState(false);
-
-  const isCritical = job.assigned_count === 0;
-  const isStable = job.assigned_count >= job.needed_count;
-  const isPartial = !isCritical && !isStable;
-
-  let statusColor = "border-gray-200";
-  let statusBg = "bg-white";
-  let statusText = "text-gray-500";
-  let buttonStyle = "bg-gray-100 text-gray-700 hover:bg-gray-200";
-  let buttonLabel = "צפה בפרטים";
-
-  if (isCritical) {
-    statusColor = "border-l-4 border-l-red-500";
-    statusBg = "bg-red-50/10";
-    statusText = "text-red-600 font-bold";
-    buttonStyle = "bg-red-600 text-white hover:bg-red-700 shadow-md";
-    buttonLabel = "מצא עובדים דחוף";
-  } else if (isPartial) {
-    statusColor = "border-l-4 border-l-orange-500";
-    statusBg = "bg-orange-50/10";
-    statusText = "text-orange-600 font-bold";
-    buttonStyle = "bg-orange-500 text-white hover:bg-orange-600 shadow-sm";
-    buttonLabel = "השלם איוש";
-  } else if (isStable) {
-    statusColor = "border-l-4 border-l-green-500";
-    statusBg = "bg-green-50/10";
-    statusText = "text-green-600 font-bold";
-    buttonStyle = "border border-green-600 text-green-600 hover:bg-green-50";
-    buttonLabel = "צפה בצוות";
-  }
-
+function Kpi({
+  label,
+  value,
+  tone = "gray",
+}: {
+  label: string;
+  value: number;
+  tone?: "gray" | "red" | "amber" | "green" | "blue";
+}) {
+  const tones = {
+    gray: "text-gray-900",
+    red: "text-red-600",
+    amber: "text-amber-600",
+    green: "text-emerald-600",
+    blue: "text-blue-600",
+  };
   return (
-    <div className={`relative bg-white rounded-lg shadow-sm hover:shadow-md transition-all p-4 mb-3 ${statusColor} ${statusBg}`}>
-      {/* Edit button - top left */}
-      <button
-        type="button"
-        onClick={(e) => { e.stopPropagation(); onEdit(job); }}
-        className="absolute top-3 left-3 p-1.5 text-gray-400 hover:text-cyan-600 hover:bg-cyan-50 rounded-full transition-colors"
-        title="ערוך משרה"
-      >
-        <Pencil size={16} />
-      </button>
+    <div className="bg-white border rounded-xl px-4 py-3">
+      <div className="text-xs text-gray-500">{label}</div>
+      <div className={`text-2xl font-bold tabular-nums ${tones[tone]}`}>{value}</div>
+    </div>
+  );
+}
 
-      <div className="flex justify-between items-start pl-8">
+function Chip({
+  active,
+  onClick,
+  tone,
+  children,
+}: {
+  active: boolean;
+  onClick: () => void;
+  tone: "amber" | "red";
+  children: React.ReactNode;
+}) {
+  const on = tone === "amber" ? "bg-amber-100 text-amber-800 border-amber-200" : "bg-red-100 text-red-800 border-red-200";
+  return (
+    <button
+      onClick={onClick}
+      className={`inline-flex items-center gap-1 px-2.5 py-1.5 text-xs rounded-full border transition-colors ${
+        active ? on : "bg-white text-gray-600 border-gray-200 hover:bg-gray-50"
+      }`}
+    >
+      {children}
+    </button>
+  );
+}
 
-        {/* Right side - Job details */}
-        <div className="flex-1">
-          <div className="flex items-center gap-2">
-            <h3 className="text-lg font-bold text-gray-900 mb-1">{job.title}</h3>
-            {job.urgent && (
-              <Badge className="bg-red-100 text-red-700 text-[11px]">דחוף</Badge>
-            )}
-          </div>
+function StaffPill({ hired, needed }: { hired: number; needed: number }) {
+  const full = hired >= needed;
+  const none = hired === 0;
+  const cls = full
+    ? "bg-emerald-100 text-emerald-800"
+    : none
+      ? "bg-red-100 text-red-700"
+      : "bg-orange-100 text-orange-800";
+  return (
+    <span className={`px-2 py-0.5 rounded-full text-xs font-medium tabular-nums ${cls}`}>
+      {hired} / {needed} מאוישים
+    </span>
+  );
+}
 
-          <div className="flex items-center text-sm text-gray-500 mb-2 space-x-3 space-x-reverse">
-            <span className="font-medium text-gray-700">{job.clients.name}</span>
-            <span>•</span>
-            <span className="flex items-center"><MapPin className="w-3 h-3 ml-1" /> {job.location || "אילת"}</span>
-            <span>•</span>
-            <span className="flex items-center"><Clock className="w-3 h-3 ml-1" /> {job.pay_rate ? `₪${job.pay_rate}/שעה` : "שכר לא צוין"}</span>
-          </div>
+function IconBtn({ title, onClick, children }: { title: string; onClick: () => void; children: React.ReactNode }) {
+  return (
+    <button
+      onClick={onClick}
+      title={title}
+      className="p-1.5 rounded-md text-gray-400 hover:text-gray-800 hover:bg-gray-100"
+    >
+      {children}
+    </button>
+  );
+}
 
-          {/* Requirements tags */}
-          {job.requirements.length > 0 && (
-            <div className="flex flex-wrap gap-2 mt-2">
-              {job.requirements.map((req, idx) => (
-                <span key={idx} className="px-2 py-0.5 bg-gray-100 text-gray-600 text-xs rounded-full">
-                  {req}
-                </span>
-              ))}
-            </div>
-          )}
-        </div>
-
-        {/* Left side - Status & Action */}
-        <div className="flex flex-col items-end gap-3 min-w-[140px]">
-          {/* Staffing status */}
-          <div className={`flex items-center gap-1.5 ${statusText}`}>
-            {isStable ? <CheckCircle className="w-4 h-4" /> : <Users className="w-4 h-4" />}
-            <span className="text-sm">
-              {job.assigned_count} / {job.needed_count} מאוישים
-            </span>
-          </div>
-
-          {/* Primary action button — opens candidate matches */}
-          <button
-            type="button"
-            onClick={() => setMatchesOpen(true)}
-            className={`w-full py-2 px-3 rounded text-sm font-medium transition-colors ${buttonStyle}`}
-          >
-            {buttonLabel}
-          </button>
-
-          {/* WhatsApp client */}
-          {clientPhone && (
-            <button
-              type="button"
-              onClick={() => {
-                setTimeout(() => {
-                  window.open(
-                    "https://api.whatsapp.com/send?phone=" + clientPhone,
-                    "_blank",
-                    "noopener,noreferrer"
-                  );
-                }, 100);
-              }}
-              className="w-full flex items-center justify-center gap-1.5 py-1.5 px-3 rounded bg-green-50 text-green-700 text-xs font-medium hover:bg-green-100 transition-colors"
-            >
-              <WhatsAppIcon className="w-3.5 h-3.5" />
-              WhatsApp למעסיק
-            </button>
-          )}
-        </div>
-      </div>
-
-      <JobMatchesSheet
-        open={matchesOpen}
-        jobId={matchesOpen ? job.id : null}
-        jobTitle={job.title}
-        clientName={job.clients.name}
-        onOpenChange={setMatchesOpen}
-      />
+function LeadList({
+  title,
+  leads,
+  empty,
+  tone,
+}: {
+  title: string;
+  leads: StaffedLead[];
+  empty: string;
+  tone: "emerald" | "blue";
+}) {
+  const dot = tone === "emerald" ? "bg-emerald-500" : "bg-blue-400";
+  return (
+    <div>
+      <div className="text-xs font-semibold text-gray-500 mb-1">{title}</div>
+      {leads.length === 0 ? (
+        <p className="text-xs text-gray-400">{empty}</p>
+      ) : (
+        <ul className="space-y-1">
+          {leads.map((l) => (
+            <li key={l.id} className="flex items-center gap-2">
+              <span className={`w-1.5 h-1.5 rounded-full ${dot}`} />
+              <Link href={`/leads/${l.id}`} className="text-gray-800 hover:underline">
+                {l.name}
+              </Link>
+              <span className="text-xs text-gray-400">
+                {STATUS_LABELS[l.status as LeadStatusValue] ?? l.status}
+                {l.date ? ` · ${fmtDate(l.date)}` : ""}
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
     </div>
   );
 }
