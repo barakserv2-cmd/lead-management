@@ -34,6 +34,7 @@ import {
 } from "./actions";
 import { StatusSelect } from "./status-select";
 import { ConversationSheet } from "./[id]/conversation-sheet";
+import { ReminderDialog } from "./[id]/reminder-dialog";
 import { ChatHistory } from "./[id]/chat-history";
 import {
   STATUS_COLORS as SM_COLORS,
@@ -428,6 +429,12 @@ export function LeadDetailDrawer({
                       <PhoneIcon className="w-3.5 h-3.5" />
                       <span className="mr-1">התקשר</span>
                     </Button>
+                    <ReminderDialog
+                      leadId={lead.id}
+                      leadName={lead.name ?? ""}
+                      interviewDate={lead.interview_date ?? null}
+                      variant="header"
+                    />
                   </>
                 ) : null}
               </div>

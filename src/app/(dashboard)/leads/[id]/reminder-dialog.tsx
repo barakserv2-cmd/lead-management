@@ -72,10 +72,13 @@ export function ReminderDialog({
   leadId,
   leadName,
   interviewDate,
+  variant = "chat",
 }: {
   leadId: string;
   leadName: string;
   interviewDate?: string | null;
+  /** "header": bold amber button for the lead header action bar */
+  variant?: "chat" | "header";
 }) {
   const [open, setOpen] = useState(false);
   const [reminders, setReminders] = useState<Reminder[]>([]);
@@ -100,6 +103,11 @@ export function ReminderDialog({
       setLoading(false);
     }
   }
+
+  useEffect(() => {
+    load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [leadId]);
 
   useEffect(() => {
     if (!open) return;
@@ -169,19 +177,33 @@ export function ReminderDialog({
 
   return (
     <>
-      <Button
-        variant="outline"
-        size="sm"
-        onClick={() => setOpen(true)}
-        className="gap-1.5"
-        title="קבע תזכורת אוטומטית למועמד"
-      >
-        <Bell className="w-4 h-4" />
-        תזכורת
-        {pendingCount > 0 && (
-          <span className="text-[10px] bg-amber-100 text-amber-800 rounded-full px-1.5">{pendingCount}</span>
-        )}
-      </Button>
+      {variant === "header" ? (
+        <Button
+          size="sm"
+          onClick={() => setOpen(true)}
+          className="bg-amber-500 hover:bg-amber-600 text-white h-7 px-2.5 text-xs gap-1"
+          title="קבע הודעת תזכורת אוטומטית למועמד"
+        >
+          <Bell className="w-3.5 h-3.5" />
+          <span className="mr-1">קבע תזכורת</span>
+          {pendingCount > 0 && (
+            <span className="text-[10px] bg-white/30 rounded-full px-1.5">{pendingCount}</span>
+          )}
+        </Button>
+      ) : (
+        <Button
+          size="sm"
+          onClick={() => setOpen(true)}
+          className="bg-amber-500 hover:bg-amber-600 text-white gap-1.5"
+          title="קבע הודעת תזכורת אוטומטית למועמד"
+        >
+          <Bell className="w-4 h-4" />
+          קבע תזכורת
+          {pendingCount > 0 && (
+            <span className="text-[10px] bg-white/30 rounded-full px-1.5">{pendingCount}</span>
+          )}
+        </Button>
+      )}
 
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="sm:max-w-lg" dir="rtl">

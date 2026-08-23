@@ -51,6 +51,7 @@ function getStatusLabel(status: string): string {
 }
 import { ConversationSheet } from "./conversation-sheet";
 import { ChatHistory } from "./chat-history";
+import { ReminderDialog } from "./reminder-dialog";
 import { DuplicatesSection } from "./duplicates-section";
 import { PrivacySection } from "./privacy-section";
 
@@ -537,6 +538,12 @@ export function LeadDetail({
                   <span className="hidden xl:inline mr-1">אימייל</span>
                 </Button>
               )}
+              <ReminderDialog
+                leadId={lead.id}
+                leadName={lead.name ?? ""}
+                interviewDate={lead.interview_date ?? null}
+                variant="header"
+              />
             </div>
           </div>
         </div>
