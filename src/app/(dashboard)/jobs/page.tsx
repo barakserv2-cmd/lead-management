@@ -13,7 +13,10 @@ export const dynamic = "force-dynamic";
 //   hired:      status HIRED/STARTED and hired_job_id = job  (or, for older
 //               rows, hired_client + hired_position match by name)
 //   in process: status FIT_FOR_INTERVIEW / INTERVIEW_BOOKED / ARRIVED and
-//               hired_client matches the employer (position may be unset)
+//               hired_job_id = job, or hired_client + hired_position match.
+//               Leads with an employer but NO position are "pending
+//               placement" at the employer level (pendingByClient) so one
+//               lead is never counted once per job.
 // ------------------------------------------------------------
 
 const HIRED_STATUSES = [LeadStatus.HIRED, LeadStatus.STARTED] as string[];
@@ -64,6 +67,14 @@ export default async function JobsPage() {
   const leads = (leadsResult.data ?? []) as LeadRow[];
 
   const staffing: Record<string, JobStaffing> = {};
+  const pendingByClient: Record<string, StaffedLead[]> = {};
+  const clientNameById = new Map(jobs.map((j) => [j.client_id, norm(j.clients?.name)]));
+  for (const [clientId, cname] of clientNameById) {
+    if (!cname) continue;
+    pendingByClient[clientId] = leads
+      .filter((l) => PROCESS_STATUSES.includes(l.status) && !l.hired_job_id && !l.hired_position && norm(l.hired_client) === cname)
+      .map((l) => ({ id: l.id, name: l.name ?? "ללא שם", status: l.status, date: l.interview_date ?? null }));
+  }
   for (const job of jobs) {
     const hired: StaffedLead[] = [];
     const inProcess: StaffedLead[] = [];
@@ -82,8 +93,7 @@ export default async function JobsPage() {
       if (HIRED_STATUSES.includes(l.status)) {
         if (byId || (sameClient && samePos)) hired.push(row);
       } else if (PROCESS_STATUSES.includes(l.status)) {
-        // position-specific first; unassigned position counts for the employer
-        if (byId || (sameClient && (samePos || !l.hired_position))) inProcess.push(row);
+        if (byId || (sameClient && samePos)) inProcess.push(row);
       }
     }
     staffing[job.id] = { hired, inProcess };
@@ -93,6 +103,7 @@ export default async function JobsPage() {
     <JobsContent
       jobs={jobs}
       staffing={staffing}
+      pendingByClient={pendingByClient}
       clients={(clientsResult.data ?? []) as Pick<Client, "id" | "name">[]}
     />
   );

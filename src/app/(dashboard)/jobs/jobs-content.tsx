@@ -82,10 +82,13 @@ function WhatsAppIcon({ className = "w-4 h-4" }: { className?: string }) {
 export function JobsContent({
   jobs,
   staffing,
+  pendingByClient,
   clients,
 }: {
   jobs: JobWithClient[];
   staffing: Record<string, JobStaffing>;
+  /** in-process leads assigned to an employer but not yet to a specific job */
+  pendingByClient: Record<string, StaffedLead[]>;
   clients: Pick<Client, "id" | "name">[];
 }) {
   const router = useRouter();
@@ -126,11 +129,14 @@ export function JobsContent({
       openJobs: open.length,
       missing: open.reduce((s, j) => s + missing(j), 0),
       urgent: open.filter((j) => j.urgent && missing(j) > 0).length,
-      inProcess: open.reduce((s, j) => s + stat(j).inProcess.length, 0),
+      inProcess: new Set([
+        ...open.flatMap((j) => stat(j).inProcess.map((l) => l.id)),
+        ...open.flatMap((j) => (pendingByClient[j.client_id] ?? []).map((l) => l.id)),
+      ]).size,
       employers: new Set(open.map((j) => j.client_id)).size,
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [jobs, staffing]);
+  }, [jobs, staffing, pendingByClient]);
 
   const tabCounts = useMemo(() => {
     const c: Record<StatusTab, number> = { Open: 0, "On Hold": 0, Closed: 0 };
@@ -168,7 +174,8 @@ export function JobsContent({
     const arr = [...map.entries()].map(([id, g]) => {
       const needed = g.jobs.reduce((s, j) => s + j.needed_count, 0);
       const hired = g.jobs.reduce((s, j) => s + stat(j).hired.length, 0);
-      const inProcess = g.jobs.reduce((s, j) => s + stat(j).inProcess.length, 0);
+      const inProcess = new Set(g.jobs.flatMap((j) => stat(j).inProcess.map((l) => l.id))).size;
+      const pending = (pendingByClient[id] ?? []).length;
       const urgent = g.jobs.some((j) => j.urgent && missing(j) > 0);
       // urgent + unfilled first inside the group
       g.jobs.sort((a, b) => {
@@ -177,7 +184,7 @@ export function JobsContent({
         if (ua !== ub) return ua - ub;
         return missing(b) - missing(a);
       });
-      return { id, ...g, needed, hired, inProcess, missing: needed - hired, urgent };
+      return { id, ...g, needed, hired, inProcess, pending, missing: needed - hired, urgent };
     });
     // employers with the most open headcount first
     arr.sort((a, b) => {
@@ -187,7 +194,7 @@ export function JobsContent({
     });
     return arr;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [jobs, staffing, tab, search, onlyUrgent, onlyUnfilled]);
+  }, [jobs, staffing, pendingByClient, tab, search, onlyUrgent, onlyUnfilled]);
 
   const visibleCount = groups.reduce((s, g) => s + g.jobs.length, 0);
 
@@ -390,6 +397,14 @@ export function JobsContent({
                         {g.inProcess} בתהליך
                       </span>
                     )}
+                    {g.pending > 0 && (
+                      <span
+                        className="px-2 py-0.5 rounded-full bg-violet-50 text-violet-700"
+                        title={(pendingByClient[g.id] ?? []).map((l) => l.name).join(", ")}
+                      >
+                        {g.pending} ממתינים לשיבוץ לתפקיד
+                      </span>
+                    )}
                     {g.urgent && (
                       <span className="px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 font-medium">
                         דחוף
@@ -459,9 +474,13 @@ export function JobsContent({
                             </div>
 
                             {/* Pay */}
-                            <div className="col-span-4 md:col-span-2 text-sm text-gray-700" dir="ltr">
+                            <div className="col-span-4 md:col-span-2 text-sm text-gray-700">
                               {job.pay_rate ? (
-                                <span className="font-mono">{/^\d/.test(job.pay_rate) ? `₪${job.pay_rate}` : job.pay_rate}</span>
+                                /^\d/.test(job.pay_rate) ? (
+                                  <span className="font-mono" dir="ltr">₪{job.pay_rate}</span>
+                                ) : (
+                                  <span className="text-gray-500">{job.pay_rate}</span>
+                                )
                               ) : (
                                 <span className="text-gray-300">—</span>
                               )}
