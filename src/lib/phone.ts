@@ -58,6 +58,8 @@ export function phoneSearchTerm(query: string | null | undefined): string | null
   let d = raw.replace(/\D/g, "");
   if (d.length < 3) return null;
   if (d.startsWith("00972")) d = d.slice(2);
-  if (d.startsWith("972") && d.length >= 11 && d.length <= 12) d = "0" + d.slice(3);
+  // Local numbers never start with 972, so even a partial "+972 50-236" is
+  // safe to rewrite as "050236".
+  if (d.startsWith("972")) d = "0" + d.slice(3);
   return d;
 }
