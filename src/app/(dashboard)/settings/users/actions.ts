@@ -37,7 +37,7 @@ export async function createUser(user: {
     .from("user_profiles")
     .insert({
       name: user.name,
-      email: user.email,
+      email: user.email.trim().toLowerCase(),
       role: user.role,
     })
     .select()
@@ -62,7 +62,7 @@ export async function updateUser(
     .from("user_profiles")
     .update({
       name: user.name,
-      email: user.email,
+      email: user.email.trim().toLowerCase(),
       role: user.role,
     })
     .eq("id", id)

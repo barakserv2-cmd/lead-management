@@ -60,7 +60,10 @@ export default async function LeadsPage({
   const statusFilter = params.statuses?.split(",").filter(Boolean) ?? [];
   const tagFilter = params.tags?.split(",").filter(Boolean) ?? [];
   const subStatusFilter = params.sub?.split(",").filter(Boolean) ?? [];
-  const handlerFilter = params.handler?.split(",").filter(Boolean) ?? [];
+  // אימיילים תמיד באותיות קטנות — כך handled_by נשמר (אימייל ההתחברות)
+  const handlerFilter = (params.handler?.split(",").filter(Boolean) ?? []).map((h) =>
+    h === "__none__" ? h : h.toLowerCase()
+  );
   const sourceParam = params.source ?? null;
   const dateFrom = /^\d{4}-\d{2}-\d{2}$/.test(params.from ?? "") ? params.from! : null;
   const dateTo = /^\d{4}-\d{2}-\d{2}$/.test(params.to ?? "") ? params.to! : null;
@@ -259,21 +262,37 @@ export default async function LeadsPage({
     p_cutoff: cutoff,
   });
 
-  const [{ data: leads, count }, { data: tagsData }, { data: profilesData }, { data: statusCountsData }] = await Promise.all([
-    dataQuery,
-    tagsRpc,
-    recruitersQuery,
-    statusCountsRpc,
-  ]);
+  // מי באמת טיפל בלידים (עם ספירה) — גם רכזת שאין לה פרופיל בהגדרות
+  const handlersRpc = supabase.rpc("get_lead_handlers");
+
+  const [{ data: leads, count }, { data: tagsData }, { data: profilesData }, { data: statusCountsData }, { data: handlersData }] =
+    await Promise.all([dataQuery, tagsRpc, recruitersQuery, statusCountsRpc, handlersRpc]);
 
   const statusCounts: Record<string, number> = {};
   for (const row of ((statusCountsData as { status: string; cnt: number }[] | null) ?? [])) {
     statusCounts[row.status] = Number(row.cnt);
   }
 
-  const recruiters = ((profilesData as { name: string | null; email: string }[] | null) ?? [])
-    .filter((p) => p.email)
-    .map((p) => ({ email: p.email, name: p.name || p.email }));
+  // שם תצוגה לפי אימייל (case-insensitive). פרופיל שהשם בו הוא אימייל →
+  // החלק שלפני ה-@.
+  const profileNames = new Map<string, string>();
+  for (const p of ((profilesData as { name: string | null; email: string }[] | null) ?? [])) {
+    if (!p.email) continue;
+    const email = p.email.toLowerCase();
+    const name = p.name && !p.name.includes("@") ? p.name : email.split("@")[0];
+    profileNames.set(email, name);
+  }
+  const displayName = (email: string) => profileNames.get(email) ?? email.split("@")[0];
+
+  // רשימת הסינון = איחוד: כל מי שטיפל בפועל (לפי ספירה) + פרופילים בלי לידים עדיין
+  const handlerCounts = new Map<string, number>();
+  for (const h of ((handlersData as { handled_by: string; cnt: number }[] | null) ?? [])) {
+    handlerCounts.set(h.handled_by, Number(h.cnt));
+  }
+  const recruiterEmails = new Set<string>([...handlerCounts.keys(), ...profileNames.keys()]);
+  const recruiters = [...recruiterEmails]
+    .map((email) => ({ email, name: displayName(email), count: handlerCounts.get(email) ?? 0 }))
+    .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name, "he"));
   const recruiterNames = Object.fromEntries(recruiters.map((r) => [r.email, r.name]));
 
   // supabase-js לא מצליח לנתח את מחרוזת העמודות הארוכה — הידוע לנו טוב ממנו

@@ -209,7 +209,7 @@ function LeadMiniWindow({
   const statusLabel = STATUS_LABELS[lead.status as LeadStatusValue] ?? lead.status;
   const intlPhone = formatPhone(lead.phone);
   const recruiterName = lead.handled_by
-    ? recruiterNames[lead.handled_by] ?? lead.handled_by.split("@")[0]
+    ? recruiterNames[lead.handled_by.toLowerCase()] ?? lead.handled_by.split("@")[0]
     : null;
 
   return (

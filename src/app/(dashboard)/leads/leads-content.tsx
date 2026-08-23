@@ -281,7 +281,7 @@ export function LeadsContent({
                         className="inline-block px-2.5 py-1 rounded-full text-xs font-medium bg-emerald-50 text-emerald-700"
                         title={lead.handled_by}
                       >
-                        {recruiterNames[lead.handled_by] ?? lead.handled_by.split("@")[0]}
+                        {recruiterNames[lead.handled_by.toLowerCase()] ?? lead.handled_by.split("@")[0]}
                       </span>
                     ) : (
                       <span className="text-gray-300 text-xs">—</span>

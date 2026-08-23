@@ -177,7 +177,7 @@ export function FilterBar({
   totalCount,
 }: {
   allTags: string[];
-  recruiters?: { email: string; name: string }[];
+  recruiters?: { email: string; name: string; count?: number }[];
   /** per-status lead counts under the current filters (excluding status) */
   statusCounts?: Record<string, number>;
   /** total leads matching ALL current filters — shown as a results chip */
@@ -382,6 +382,17 @@ export function FilterBar({
           options={handlerOptions}
           selected={selectedHandlers}
           onChange={handleHandlerChange}
+          renderOption={(opt) => {
+            const r = recruiters.find((x) => x.email === opt.value);
+            return (
+              <span className="flex items-center gap-1.5 w-full">
+                <span>{opt.label}</span>
+                {r?.count != null && (
+                  <span className="mr-auto text-[10px] font-semibold text-gray-400 tabular-nums">{r.count}</span>
+                )}
+              </span>
+            );
+          }}
         />
 
         {tagOptions.length > 0 && (

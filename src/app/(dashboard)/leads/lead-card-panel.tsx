@@ -186,7 +186,7 @@ export function LeadCardPanel({ lead, open, onOpenChange, recruiterNames = {} }:
   };
 
   const recruiterName = lead.handled_by
-    ? recruiterNames[lead.handled_by] ?? lead.handled_by.split("@")[0]
+    ? recruiterNames[lead.handled_by.toLowerCase()] ?? lead.handled_by.split("@")[0]
     : null;
 
   return (
