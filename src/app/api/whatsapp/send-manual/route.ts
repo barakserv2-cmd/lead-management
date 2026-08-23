@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient as createServerClient } from "@supabase/supabase-js";
-import { sendWhatsAppMessage } from "@/lib/whatsappService";
+import { sendWhatsAppMessage, resolveSender } from "@/lib/whatsappService";
 import { createClient as createCookieClient } from "@/lib/supabase/server";
 
 function getSupabase() {
@@ -31,6 +31,10 @@ export async function POST(req: NextRequest) {
 
     const supabase = getSupabase();
 
+    // Send from the recruiter's own WhatsApp if they linked one, otherwise
+    // from the business number.
+    const sender = await resolveSender(user.email);
+
     // Look up lead to get phone
     const { data: lead, error: leadError } = await supabase
       .from("leads")
@@ -50,6 +54,8 @@ export async function POST(req: NextRequest) {
       lead_id: leadId,
       role: "recruiter",
       content: message.trim(),
+      sent_by: user.email ?? null,
+      via_instance: sender.instanceId,
     });
 
     if (insertError) {
@@ -63,7 +69,7 @@ export async function POST(req: NextRequest) {
     let whatsappSent = false;
     let whatsappError: string | null = null;
     if (lead.phone) {
-      const result = await sendWhatsAppMessage(lead.phone, message.trim());
+      const result = await sendWhatsAppMessage(lead.phone, message.trim(), sender);
       whatsappSent = result.success;
       if (!result.success) {
         whatsappError = result.error ?? "שליחה נכשלה";
@@ -80,12 +86,18 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({
         success: false,
         savedToChat: true,
-        error: "ההודעה נשמרה בצ'אט אבל לא נשלחה לוואטסאפ — ייתכן שהחיבור נותק. פנה למנהל המערכת.",
+        error: sender.userEmail
+          ? "ההודעה נשמרה בצ'אט אבל לא נשלחה — הוואטסאפ האישי שלך כנראה מנותק. בדוק בהגדרות > וואטסאפ."
+          : "ההודעה נשמרה בצ'אט אבל לא נשלחה לוואטסאפ — ייתכן שהחיבור נותק. פנה למנהל המערכת.",
         detail: whatsappError,
       });
     }
 
-    return NextResponse.json({ success: true, whatsappSent });
+    return NextResponse.json({
+      success: true,
+      whatsappSent,
+      sentFrom: sender.label ?? sender.phone ?? null,
+    });
   } catch (err) {
     console.error("[Manual Send] Error:", err);
     return NextResponse.json(

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback } from "react";
+import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import { sendMessage } from "@/lib/actions/sendMessage";
 import { Button } from "@/components/ui/button";
@@ -12,6 +13,19 @@ interface Message {
   role: "user" | "assistant" | "system" | "recruiter";
   content: string;
   created_at: string;
+  /** recruiter email that sent it (manual / from their phone) */
+  sent_by?: string | null;
+}
+
+interface SenderInfo {
+  connected: boolean;
+  state?: string;
+  phone?: string | null;
+  label?: string | null;
+}
+
+function senderShort(email: string): string {
+  return email.split("@")[0];
 }
 
 function formatTime(dateStr: string): string {
@@ -35,7 +49,16 @@ export function ChatHistory({
   const [inputText, setInputText] = useState("");
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [sender, setSender] = useState<SenderInfo | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
+
+  // Which number will my messages go out from? (personal if linked)
+  useEffect(() => {
+    fetch("/api/whatsapp/account", { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => d && setSender(d as SenderInfo))
+      .catch(() => {});
+  }, []);
 
   const isScreening = leadStatus === LeadStatus.SCREENING_IN_PROGRESS;
 
@@ -46,7 +69,7 @@ export function ChatHistory({
     const supabase = createClient();
     const { data, error: fetchError } = await supabase
       .from("messages")
-      .select("id, role, content, created_at")
+      .select("id, role, content, created_at, sent_by")
       .eq("lead_id", leadId)
       .order("created_at", { ascending: true });
 
@@ -202,6 +225,11 @@ export function ChatHistory({
                       {msg.role === "assistant" && (
                         <span className="text-[9px] opacity-70">AI</span>
                       )}
+                      {msg.role === "recruiter" && msg.sent_by && (
+                        <span className="text-[9px] opacity-70" title={msg.sent_by}>
+                          {senderShort(msg.sent_by)}
+                        </span>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -227,6 +255,44 @@ export function ChatHistory({
       {error && (
         <div className="px-3 py-2 text-xs text-red-600 bg-red-50 rounded-md mt-2">
           {error}
+        </div>
+      )}
+
+      {/* Which number the recruiter's messages go out from */}
+      {!isScreening && sender && (
+        <div className="px-4 pt-2 text-[10px] text-gray-400 flex items-center gap-1.5">
+          <span
+            className={`inline-block w-1.5 h-1.5 rounded-full ${
+              !sender.connected
+                ? "bg-gray-300"
+                : sender.state === "authorized"
+                  ? "bg-green-500"
+                  : "bg-amber-500"
+            }`}
+          />
+          {sender.connected ? (
+            sender.state === "authorized" ? (
+              <span>
+                שולח מהוואטסאפ שלך
+                {sender.phone && (
+                  <span className="font-mono ms-1" dir="ltr">
+                    {sender.phone.replace(/^972/, "0")}
+                  </span>
+                )}
+              </span>
+            ) : (
+              <Link href="/settings/whatsapp" className="hover:underline text-amber-600">
+                הוואטסאפ שלך מנותק — לחץ לחיבור
+              </Link>
+            )
+          ) : (
+            <span>
+              שולח ממספר העסק ·{" "}
+              <Link href="/settings/whatsapp" className="hover:underline">
+                חבר את המספר שלך
+              </Link>
+            </span>
+          )}
         </div>
       )}
 

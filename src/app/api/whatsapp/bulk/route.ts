@@ -1,7 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
-import { sendWhatsAppMessage } from "@/lib/whatsappService";
+import { sendWhatsAppMessage, resolveSender } from "@/lib/whatsappService";
+import { createClient as createCookieClient } from "@/lib/supabase/server";
 
 export async function POST(req: NextRequest) {
+  const cookieClient = await createCookieClient();
+  const { data: { user } } = await cookieClient.auth.getUser();
+  if (!user) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  // Bulk goes out from the recruiter's own number when linked.
+  const sender = await resolveSender(user.email);
+
   const body = await req.json();
   const { recipients, message } = body as {
     recipients: { name: string; phone: string }[];
@@ -22,7 +31,7 @@ export async function POST(req: NextRequest) {
 
     console.log(`[WhatsApp Bulk] Sending to ${r.phone}`);
 
-    const sendResult = await sendWhatsAppMessage(r.phone, personalizedMessage);
+    const sendResult = await sendWhatsAppMessage(r.phone, personalizedMessage, sender);
     results.push({
       phone: r.phone,
       success: sendResult.success,
@@ -35,5 +44,11 @@ export async function POST(req: NextRequest) {
 
   console.log(`[WhatsApp Bulk] Total: ${sent} sent, ${failed} failed`);
 
-  return NextResponse.json({ success: true, sent, failed, results });
+  return NextResponse.json({
+    success: true,
+    sent,
+    failed,
+    results,
+    sentFrom: sender.label ?? sender.phone ?? null,
+  });
 }

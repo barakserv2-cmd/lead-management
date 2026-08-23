@@ -1,7 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient as createServerClient } from "@supabase/supabase-js";
 import { processIncomingMessage } from "@/lib/aiService";
-import { sendWhatsAppMessage, phoneFromChatId } from "@/lib/whatsappService";
+import {
+  sendWhatsAppMessage,
+  phoneFromChatId,
+  getAccountByInstance,
+} from "@/lib/whatsappService";
 import { LeadStatus } from "@/lib/stateMachine";
 import { analyzeWhatsappMessage, type WhatsAppNLU } from "@/lib/ai/parseWhatsappMessage";
 
@@ -22,8 +26,13 @@ export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
 
-    // Only handle incoming text messages
-    if (body.typeWebhook !== "incomingMessageReceived") {
+    // incomingMessageReceived — a candidate wrote to us.
+    // outgoingMessageReceived — a recruiter wrote to a candidate straight from
+    // the WhatsApp app on their own phone (personal instances only). We mirror
+    // it into the CRM chat so the conversation stays complete.
+    const isIncoming = body.typeWebhook === "incomingMessageReceived";
+    const isOutgoingFromPhone = body.typeWebhook === "outgoingMessageReceived";
+    if (!isIncoming && !isOutgoingFromPhone) {
       return NextResponse.json({ ok: true });
     }
 
@@ -36,9 +45,13 @@ export async function POST(req: NextRequest) {
       body.messageData?.extendedTextMessageData?.text ??
       "";
 
-    if (!chatId || !messageText) {
+    if (!chatId || !messageText || chatId.endsWith("@g.us")) {
       return NextResponse.json({ ok: true });
     }
+
+    // Which number received this? Personal recruiter instance or the business
+    // one. Replies go back out from the same number.
+    const account = await getAccountByInstance(body.instanceData?.idInstance);
 
     // Convert chatId to local phone for DB lookup
     const phone = phoneFromChatId(chatId);
@@ -67,12 +80,31 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: true });
     }
 
+    // Recruiter replied from their phone app → mirror as a recruiter message.
+    if (isOutgoingFromPhone) {
+      if (!account.userEmail) return NextResponse.json({ ok: true });
+      const { error: mirrorError } = await supabase.from("messages").insert({
+        lead_id: lead.id,
+        role: "recruiter",
+        content: messageText,
+        sent_by: account.userEmail,
+        via_instance: account.instanceId,
+      });
+      if (mirrorError) {
+        console.error(
+          `[WhatsApp Webhook] Failed to mirror phone message for lead ${lead.id}:`,
+          mirrorError.message
+        );
+      }
+      return NextResponse.json({ ok: true });
+    }
+
     if (lead.status === LeadStatus.SCREENING_IN_PROGRESS) {
       // Screening mode: process through AI and auto-reply
       const result = await processIncomingMessage(lead.id, messageText);
 
       if (result.success && result.aiReply) {
-        const sendResult = await sendWhatsAppMessage(phone, result.aiReply);
+        const sendResult = await sendWhatsAppMessage(phone, result.aiReply, account);
         if (!sendResult.success) {
           console.error(
             `[WhatsApp Webhook] Failed to send reply for lead ${lead.id}:`,
