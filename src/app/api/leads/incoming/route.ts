@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { getMessageScope, scopeFilter } from "@/lib/messageVisibility";
 import { createClient } from "@/lib/supabase/server";
 import { createClient as createServerClient } from "@supabase/supabase-js";
 
@@ -23,13 +24,18 @@ export async function GET(request: NextRequest) {
     : new Date(Date.now() - 60_000).toISOString();
 
   const admin = getAdmin();
-  const { data: msgs, error } = await admin
+  // Pop-ups only for conversations this recruiter may see.
+  const scope = await getMessageScope(user.email);
+  let q = admin
     .from("messages")
     .select("id, lead_id, content, created_at")
     .eq("role", "user")
     .gt("created_at", sinceIso)
     .order("created_at", { ascending: true })
     .limit(20);
+  const f = scopeFilter(scope);
+  if (f) q = q.or(f);
+  const { data: msgs, error } = await q;
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   if (!msgs || msgs.length === 0) return NextResponse.json({ items: [] });

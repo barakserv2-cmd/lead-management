@@ -449,7 +449,9 @@ function humanReasonLabel(reason?: HumanEscalationReason): string {
 
 export async function processIncomingMessage(
   leadId: string,
-  messageText: string
+  messageText: string,
+  /** Green API instance the conversation runs on (stamped on saved messages) */
+  viaInstance: string | null = null
 ): Promise<ProcessMessageResult> {
   const supabase = getSupabase();
 
@@ -483,6 +485,7 @@ export async function processIncomingMessage(
       lead_id: leadId,
       role: "user",
       content: messageText,
+      via_instance: viaInstance,
     });
     return {
       success: true,
@@ -518,6 +521,7 @@ export async function processIncomingMessage(
     lead_id: leadId,
     role: "user",
     content: messageText,
+    via_instance: viaInstance,
   });
 
   if (insertUserError) {
@@ -555,6 +559,7 @@ export async function processIncomingMessage(
     lead_id: leadId,
     role: "assistant",
     content: evaluation.reply,
+    via_instance: viaInstance,
   });
 
   if (insertAIError) {

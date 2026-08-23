@@ -2,7 +2,6 @@
 
 import { useState, useEffect, useRef, useCallback } from "react";
 import Link from "next/link";
-import { createClient } from "@/lib/supabase/client";
 import { sendMessage } from "@/lib/actions/sendMessage";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -66,23 +65,25 @@ export function ChatHistory({
   const isOutgoing = (role: string) => role === "assistant" || role === "recruiter";
 
   const fetchMessages = useCallback(async () => {
-    const supabase = createClient();
-    const { data, error: fetchError } = await supabase
-      .from("messages")
-      .select("id, role, content, created_at, sent_by")
-      .eq("lead_id", leadId)
-      .order("created_at", { ascending: true });
-
-    if (fetchError) {
-      setError(fetchError.message);
-    } else {
-      setMessages((data as Message[]) ?? []);
+    // Server-side: only conversations this recruiter may see (business
+    // number + their own personal WhatsApp; admins see all).
+    try {
+      const res = await fetch(`/api/leads/${leadId}/messages`, { cache: "no-store" });
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.error ?? "שגיאה בטעינת ההודעות");
+      } else {
+        setMessages((data.messages as Message[]) ?? []);
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "שגיאה בטעינת ההודעות");
     }
   }, [leadId]);
 
   // Fetch messages on mount
   useEffect(() => {
-    setLoading(true);
+    // async fetch — setState only runs after the network round-trip
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchMessages().finally(() => setLoading(false));
   }, [fetchMessages]);
 

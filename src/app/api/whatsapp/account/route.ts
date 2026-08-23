@@ -7,6 +7,7 @@ import {
   getInstanceQr,
   getInstanceState,
   logoutInstance,
+  businessAccount,
   type WhatsAppAccount,
 } from "@/lib/whatsappService";
 
@@ -122,7 +123,7 @@ export async function POST(req: NextRequest) {
       { status: 400 }
     );
   }
-  if (instanceId === process.env.GREEN_API_INSTANCE_ID) {
+  if (instanceId === businessAccount().instanceId) {
     return NextResponse.json(
       { error: "זה ה-instance של מספר העסק — צריך instance נפרד לכל משתמש" },
       { status: 400 }

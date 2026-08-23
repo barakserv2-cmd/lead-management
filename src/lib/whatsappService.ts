@@ -30,9 +30,10 @@ function adminClient() {
 
 /** The shared business number from env. */
 export function businessAccount(): WhatsAppAccount {
+  // .trim(): the Vercel env value carries a trailing newline.
   return {
-    instanceId: process.env.GREEN_API_INSTANCE_ID!,
-    token: process.env.GREEN_API_TOKEN!,
+    instanceId: (process.env.GREEN_API_INSTANCE_ID ?? "").trim(),
+    token: (process.env.GREEN_API_TOKEN ?? "").trim(),
     label: "מספר העסק",
   };
 }

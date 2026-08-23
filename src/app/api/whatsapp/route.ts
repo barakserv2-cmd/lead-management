@@ -101,7 +101,7 @@ export async function POST(req: NextRequest) {
 
     if (lead.status === LeadStatus.SCREENING_IN_PROGRESS) {
       // Screening mode: process through AI and auto-reply
-      const result = await processIncomingMessage(lead.id, messageText);
+      const result = await processIncomingMessage(lead.id, messageText, account.instanceId);
 
       if (result.success && result.aiReply) {
         const sendResult = await sendWhatsAppMessage(phone, result.aiReply, account);
@@ -141,6 +141,7 @@ export async function POST(req: NextRequest) {
         ai_entities: nlu?.entities ?? null,
         ai_confidence: nlu?.confidence ?? null,
         ai_summary: nlu?.summary ?? null,
+        via_instance: account.instanceId,
       });
 
       if (insertError) {
