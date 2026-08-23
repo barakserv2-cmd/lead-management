@@ -90,6 +90,8 @@ const TRANSITION_MAP: Record<LeadStatusValue, LeadStatusValue[]> = {
   [LeadStatus.INTERVIEW_BOOKED]: [
     LeadStatus.ARRIVED,
     LeadStatus.NO_SHOW,
+    // קיצור מלוח הראיונות: הראיון קרה והתקבל — בלי לעבור דרך "הגיע לראיון"
+    LeadStatus.HIRED,
     LeadStatus.REJECTED,
     LeadStatus.LOST_CONTACT,
   ],

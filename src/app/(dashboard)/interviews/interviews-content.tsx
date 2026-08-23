@@ -55,6 +55,7 @@ function normPhone(p: string): string {
 const INTERVIEW_STATUSES: LeadStatusValue[] = [
   LeadStatus.INTERVIEW_BOOKED,
   LeadStatus.ARRIVED,
+  LeadStatus.HIRED,
   LeadStatus.NO_SHOW,
   LeadStatus.REJECTED,
   LeadStatus.LOST_CONTACT,
