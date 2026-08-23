@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient as createServerClient } from "@supabase/supabase-js";
 import { sendWhatsAppMessage, resolveSender } from "@/lib/whatsappService";
+import { getMessageScope } from "@/lib/messageVisibility";
 import { createClient as createCookieClient } from "@/lib/supabase/server";
 
 function getSupabase() {
@@ -33,6 +34,13 @@ export async function POST(req: NextRequest) {
 
     // Send from the recruiter's own WhatsApp if they linked one, otherwise
     // from the business number.
+    const scope = await getMessageScope(user.email);
+    if (!scope.canSend) {
+      return NextResponse.json(
+        { success: false, error: "אין לך מספר וואטסאפ מחובר — אפשר לצפות בשיחה אבל לא לשלוח. חבר מספר בהגדרות > הוואטסאפ שלי." },
+        { status: 403 }
+      );
+    }
     const sender = await resolveSender(user.email);
 
     // Look up lead to get phone

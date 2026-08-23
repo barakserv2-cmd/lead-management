@@ -1,11 +1,13 @@
 // ============================================================
 // Message visibility — who may see which WhatsApp conversations.
 //
-// Every WhatsApp number belongs to one recruiter (whatsapp_accounts). A
-// recruiter sees only conversations on their own number, plus messages they
-// personally sent (even when they went out via the fallback number because
-// they have no number linked yet). Legacy rows with no instance stamp belong
-// to the default env instance. Admins (user_profiles.role = 'אדמין') see all.
+// Every WhatsApp number belongs to one recruiter (whatsapp_accounts).
+//   - Recruiter WITH a linked number: sees + manages only conversations on
+//     their own number. Gets pop-ups only for those.
+//   - Recruiter WITHOUT a linked number: READ-ONLY — can read every
+//     conversation's history but cannot send, and gets no pop-ups.
+//   - Admin (user_profiles.role = 'אדמין'): sees everything, can send.
+// Legacy rows with no instance stamp belong to the default env instance.
 // ============================================================
 
 import { createClient as createServerClient } from "@supabase/supabase-js";
@@ -18,8 +20,12 @@ export interface MessageScope {
   all: boolean;
   /** instance ids this user owns */
   instances: string[];
-  /** the user's email — messages they sent are always visible to them */
+  /** the user's email */
   email: string | null;
+  /** may this user send messages? (needs a linked number, or admin) */
+  canSend: boolean;
+  /** should this user get incoming-message pop-ups? */
+  notify: boolean;
 }
 
 function admin() {
@@ -32,7 +38,9 @@ function admin() {
 export async function getMessageScope(
   email: string | null | undefined
 ): Promise<MessageScope> {
-  if (!email) return { all: false, instances: [], email: null };
+  if (!email) {
+    return { all: false, instances: [], email: null, canSend: false, notify: false };
+  }
   const lower = email.toLowerCase();
 
   const [{ data: profile }, personal] = await Promise.all([
@@ -40,9 +48,20 @@ export async function getMessageScope(
     getAccountForEmail(lower),
   ]);
 
-  if (profile?.role === ADMIN_ROLE) return { all: true, instances: [], email: lower };
-
-  return { all: false, instances: personal ? [personal.instanceId] : [], email: lower };
+  if (profile?.role === ADMIN_ROLE) {
+    return { all: true, instances: [], email: lower, canSend: true, notify: true };
+  }
+  if (!personal) {
+    // read-only viewer
+    return { all: true, instances: [], email: lower, canSend: false, notify: false };
+  }
+  return {
+    all: false,
+    instances: [personal.instanceId],
+    email: lower,
+    canSend: true,
+    notify: true,
+  };
 }
 
 /**
@@ -58,7 +77,6 @@ export function scopeFilter(scope: MessageScope): string | null {
     // legacy rows (before stamping) all ran on the default env instance
     if (i === biz) parts.push("via_instance.is.null");
   }
-  if (scope.email) parts.push(`sent_by.eq.${scope.email}`);
   // nothing matches → impossible predicate
   return parts.length ? parts.join(",") : "id.eq.00000000-0000-0000-0000-000000000000";
 }

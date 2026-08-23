@@ -31,5 +31,9 @@ export async function GET(
 
   const { data, error } = await q;
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-  return NextResponse.json({ messages: data ?? [], scope: scope.all ? "all" : "own" });
+  return NextResponse.json({
+    messages: data ?? [],
+    scope: scope.all ? "all" : "own",
+    canSend: scope.canSend,
+  });
 }

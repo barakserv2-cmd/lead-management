@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { sendWhatsAppMessage, resolveSender } from "@/lib/whatsappService";
+import { getMessageScope } from "@/lib/messageVisibility";
 import { createClient as createCookieClient } from "@/lib/supabase/server";
 
 export async function POST(req: NextRequest) {
@@ -9,6 +10,13 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
   // Bulk goes out from the recruiter's own number when linked.
+  const scope = await getMessageScope(user.email);
+  if (!scope.canSend) {
+    return NextResponse.json(
+      { error: "אין לך מספר וואטסאפ מחובר — שליחה מרוכזת דורשת מספר מחובר." },
+      { status: 403 }
+    );
+  }
   const sender = await resolveSender(user.email);
 
   const body = await req.json();

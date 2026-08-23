@@ -26,6 +26,7 @@ export async function GET(request: NextRequest) {
   const admin = getAdmin();
   // Pop-ups only for conversations this recruiter may see.
   const scope = await getMessageScope(user.email);
+  if (!scope.notify) return NextResponse.json({ items: [] });
   let q = admin
     .from("messages")
     .select("id, lead_id, content, created_at")

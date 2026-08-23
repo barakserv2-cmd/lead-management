@@ -49,6 +49,7 @@ export function ChatHistory({
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [sender, setSender] = useState<SenderInfo | null>(null);
+  const [canSend, setCanSend] = useState(true);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   // Which number will my messages go out from? (personal if linked)
@@ -74,6 +75,7 @@ export function ChatHistory({
         setError(data.error ?? "שגיאה בטעינת ההודעות");
       } else {
         setMessages((data.messages as Message[]) ?? []);
+        if (typeof data.canSend === "boolean") setCanSend(data.canSend);
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : "שגיאה בטעינת ההודעות");
@@ -259,8 +261,16 @@ export function ChatHistory({
         </div>
       )}
 
+      {/* Read-only viewer (no linked number) */}
+      {!canSend && (
+        <div className="mx-4 mt-2 px-3 py-2 text-xs text-gray-600 bg-gray-100 rounded-md">
+          צפייה בלבד — אין לך מספר וואטסאפ מחובר, אז אפשר לקרוא את השיחה אבל לא לשלוח.{" "}
+          <Link href="/settings/whatsapp" className="underline">חבר מספר</Link>
+        </div>
+      )}
+
       {/* Which number the recruiter's messages go out from */}
-      {!isScreening && sender && (
+      {canSend && !isScreening && sender && (
         <div className="px-4 pt-2 text-[10px] text-gray-400 flex items-center gap-1.5">
           <span
             className={`inline-block w-1.5 h-1.5 rounded-full ${
@@ -297,7 +307,8 @@ export function ChatHistory({
         </div>
       )}
 
-      {/* Input area — always active */}
+      {/* Input area */}
+      {canSend && (
       <div className="flex gap-2 pt-3 px-4 pb-3 border-t border-gray-100">
         {isScreening && (
           <span className="self-center text-[9px] text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded font-medium flex-shrink-0">
@@ -327,6 +338,7 @@ export function ChatHistory({
           {sending ? "..." : "שלח"}
         </Button>
       </div>
+      )}
     </div>
   );
 }
