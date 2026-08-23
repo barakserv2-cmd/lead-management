@@ -60,10 +60,6 @@ export function JobSearchSelect({
     return scored.slice(0, 40).map((x) => x.j);
   }, [jobs, query]);
 
-  useEffect(() => {
-    setActive(0);
-  }, [query]);
-
   // keep the active row in view
   useEffect(() => {
     const el = listRef.current?.children[active] as HTMLElement | undefined;
@@ -116,6 +112,7 @@ export function JobSearchSelect({
           value={query}
           onChange={(e) => {
             setQuery(e.target.value);
+            setActive(0);
             setOpen(true);
           }}
           onFocus={() => setOpen(true)}
