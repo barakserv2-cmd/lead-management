@@ -77,8 +77,8 @@ export function ReminderDialog({
   leadId: string;
   leadName: string;
   interviewDate?: string | null;
-  /** "header": bold amber button for the lead header action bar */
-  variant?: "chat" | "header";
+  /** "header": amber button for the lead header; "icon": small bell for dark mini-window bars */
+  variant?: "chat" | "header" | "icon";
 }) {
   const [open, setOpen] = useState(false);
   const [reminders, setReminders] = useState<Reminder[]>([]);
@@ -177,7 +177,21 @@ export function ReminderDialog({
 
   return (
     <>
-      {variant === "header" ? (
+      {variant === "icon" ? (
+        <button
+          type="button"
+          onClick={(e) => { e.stopPropagation(); setOpen(true); }}
+          className="relative p-1 rounded hover:bg-white/20 transition-colors"
+          title="קבע תזכורת"
+        >
+          <Bell className="w-3.5 h-3.5 text-amber-300" />
+          {pendingCount > 0 && (
+            <span className="absolute -top-0.5 -left-0.5 min-w-[14px] h-[14px] px-0.5 rounded-full bg-amber-400 text-[9px] font-bold text-gray-900 flex items-center justify-center">
+              {pendingCount}
+            </span>
+          )}
+        </button>
+      ) : variant === "header" ? (
         <Button
           size="sm"
           onClick={() => setOpen(true)}
@@ -206,7 +220,7 @@ export function ReminderDialog({
       )}
 
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="sm:max-w-lg" dir="rtl">
+        <DialogContent className="sm:max-w-lg" dir="rtl" onClick={(e) => e.stopPropagation()}>
           <DialogHeader>
             <DialogTitle>תזכורת ל{leadName ? `-${leadName}` : "מועמד"}</DialogTitle>
             <DialogDescription>

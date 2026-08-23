@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import type { Lead } from "@/types/leads";
 import { StatusSelect } from "./status-select";
 import { ChatHistory } from "./[id]/chat-history";
+import { ReminderDialog } from "./[id]/reminder-dialog";
 import { STATUS_LABELS, STATUS_COLORS } from "@/lib/stateMachine";
 import type { LeadStatusValue } from "@/lib/stateMachine";
 
@@ -253,6 +254,12 @@ function LeadMiniWindow({
               >
                 <PhoneSmallIcon />
               </a>
+              <ReminderDialog
+                leadId={lead.id}
+                leadName={lead.name ?? ""}
+                interviewDate={lead.interview_date ?? null}
+                variant="icon"
+              />
             </>
           )}
           <button
