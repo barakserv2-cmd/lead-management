@@ -2,11 +2,12 @@ import Link from "next/link";
 import { getSupabaseAdmin } from "@/lib/api-auth";
 import {
   LeadStatus,
-  STATUS_LABELS,
   STATUS_COLORS,
   type LeadStatusValue,
 } from "@/lib/stateMachine";
 import { AutoRefresh } from "./auto-refresh";
+import { StatusSelect } from "../leads/status-select";
+import { LeadNotesDialog } from "../leads/lead-notes-dialog";
 
 export const dynamic = "force-dynamic";
 
@@ -21,6 +22,8 @@ type Row = {
   sub_status: string | null;
   effective_at: string;
   handled_at: string | null;
+  job_title: string | null;
+  location: string | null;
 };
 
 const UNHANDLED = "__unhandled__";        // status still NEW_LEAD — truly untouched
@@ -42,6 +45,28 @@ function ilToday(): string {
     month: "long",
   });
 }
+
+function waHref(phone: string): string {
+  const d = phone.replace(/\D/g, "");
+  return `https://wa.me/${d.startsWith("0") ? "972" + d.slice(1) : d}`;
+}
+
+// Buckets for the summary strip — what a manager wants at a glance.
+const SUMMARY: { label: string; statuses: LeadStatusValue[]; tone: string }[] = [
+  { label: "טרם טופלו", statuses: [LeadStatus.NEW_LEAD], tone: "text-amber-600" },
+  { label: "נוצר קשר", statuses: [LeadStatus.CONTACTED], tone: "text-cyan-700" },
+  {
+    label: "ראיון נקבע / הגיע",
+    statuses: [LeadStatus.FIT_FOR_INTERVIEW, LeadStatus.INTERVIEW_BOOKED, LeadStatus.ARRIVED],
+    tone: "text-violet-700",
+  },
+  { label: "התקבלו", statuses: [LeadStatus.HIRED, LeadStatus.STARTED], tone: "text-emerald-700" },
+  {
+    label: "לא מתאים / נדחה",
+    statuses: [LeadStatus.NOT_SUITABLE, LeadStatus.REJECTED, LeadStatus.LOST_CONTACT],
+    tone: "text-slate-500",
+  },
+];
 
 export default async function TodayPage({
   searchParams,
@@ -79,29 +104,55 @@ export default async function TodayPage({
     return b[1].rows.length - a[1].rows.length;
   });
 
-  // סינון לפי רכזת: הכפתורים נבנים מכל הקבוצות של היום (עם ספירה),
-  // והרשימה מציגה רק את הקבוצה שנבחרה. router.refresh שומר על ה-URL.
   const activeRecruiter = recruiterParam && groups.has(recruiterParam) ? recruiterParam : null;
   const visible = activeRecruiter
     ? ordered.filter(([key]) => key === activeRecruiter)
     : ordered;
-  const visibleCount = visible.reduce((sum, [, g]) => sum + g.rows.length, 0);
+  const visibleRows = visible.flatMap(([, g]) => g.rows);
+
+  const summary = SUMMARY.map((s) => ({
+    ...s,
+    count: visibleRows.filter((r) => s.statuses.includes(r.status)).length,
+  }));
 
   return (
-    <div dir="rtl" className="p-6 max-w-5xl mx-auto">
+    <div dir="rtl" className="p-6 max-w-6xl mx-auto">
       {/* refresh the board every 15s so handling/new leads appear near-live */}
       <AutoRefresh intervalMs={15000} />
 
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold text-slate-800">לידים של היום</h1>
-        <p className="text-sm text-slate-500 mt-1">
-          {ilToday()} · {activeRecruiter ? `${visibleCount} מתוך ${rows.length}` : rows.length} לידים · מחולק לפי הרכזת שטיפלה · מתעדכן אוטומטית
-        </p>
+      {/* ═══ Header ═══ */}
+      <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-3 mb-4">
+        <div>
+          <h1 className="text-2xl font-bold text-slate-800">לידים של היום</h1>
+          <p className="text-sm text-slate-500 mt-1">
+            {ilToday()} · מחולק לפי הרכזת שטיפלה · מתעדכן אוטומטית
+          </p>
+        </div>
+        <Link
+          href="/leads"
+          className="text-sm text-cyan-700 hover:underline"
+        >
+          לכל הלידים ←
+        </Link>
       </div>
 
-      {/* סינון לפי רכזת */}
+      {/* ═══ Summary strip ═══ */}
+      <div className="grid grid-cols-3 md:grid-cols-6 gap-2 mb-4">
+        <div className="bg-white border rounded-xl px-4 py-3">
+          <div className="text-xs text-slate-500">סה״כ היום</div>
+          <div className="text-2xl font-bold tabular-nums text-slate-900">{visibleRows.length}</div>
+        </div>
+        {summary.map((s) => (
+          <div key={s.label} className="bg-white border rounded-xl px-4 py-3">
+            <div className="text-xs text-slate-500">{s.label}</div>
+            <div className={`text-2xl font-bold tabular-nums ${s.tone}`}>{s.count}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* ═══ Recruiter filter ═══ */}
       {ordered.length > 1 && (
-        <div className="flex items-center gap-2 flex-wrap mb-5">
+        <div className="flex items-center gap-2 flex-wrap mb-4">
           <Link
             href="/today"
             className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-colors ${
@@ -119,7 +170,9 @@ export default async function TodayPage({
               className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-colors ${
                 activeRecruiter === key
                   ? "border-cyan-400 bg-cyan-600 text-white"
-                  : "border-slate-200 bg-white text-slate-600 hover:border-cyan-300"
+                  : key === UNHANDLED
+                    ? "border-amber-300 bg-amber-50 text-amber-800 hover:border-amber-400"
+                    : "border-slate-200 bg-white text-slate-600 hover:border-cyan-300"
               }`}
             >
               {group.name} ({group.rows.length})
@@ -140,75 +193,139 @@ export default async function TodayPage({
         </div>
       )}
 
-      <div className="space-y-6">
-        {visible.map(([key, group]) => (
-          <section
-            key={key}
-            className="rounded-xl border border-slate-200 bg-white overflow-hidden"
-          >
-            <div
-              className={`flex items-center justify-between px-5 py-3 border-b ${
-                key === UNHANDLED || key === UNATTRIBUTED
-                  ? "bg-slate-50 border-slate-200"
-                  : "bg-cyan-50 border-cyan-100"
-              }`}
+      {/* ═══ Groups ═══ */}
+      <div className="space-y-5">
+        {visible.map(([key, group]) => {
+          const untouched = key === UNHANDLED;
+          return (
+            <section
+              key={key}
+              className="rounded-xl border border-slate-200 bg-white overflow-hidden shadow-sm"
             >
-              <h2 className="font-semibold text-slate-800">{group.name}</h2>
-              <span className="text-sm font-medium text-slate-500 bg-white rounded-full px-3 py-0.5 border border-slate-200">
-                {group.rows.length}
-              </span>
-            </div>
-            <ul className="divide-y divide-slate-100">
-              {group.rows.map((r) => {
-                const c = STATUS_COLORS[r.status] ?? {
-                  bg: "bg-slate-100",
-                  text: "text-slate-700",
-                  dot: "bg-slate-400",
-                };
-                return (
-                  <li key={r.lead_id}>
-                    <Link
-                      href={`/leads/${r.lead_id}`}
-                      className="flex items-center gap-3 px-5 py-3 hover:bg-slate-50 transition-colors"
+              <div
+                className={`flex items-center justify-between px-4 py-2.5 border-b ${
+                  untouched
+                    ? "bg-amber-50 border-amber-200"
+                    : key === UNATTRIBUTED
+                      ? "bg-slate-50 border-slate-200"
+                      : "bg-cyan-50 border-cyan-100"
+                }`}
+              >
+                <h2 className={`font-semibold ${untouched ? "text-amber-900" : "text-slate-800"}`}>
+                  {group.name}
+                </h2>
+                <span className="text-sm font-medium text-slate-500 bg-white rounded-full px-3 py-0.5 border border-slate-200">
+                  {group.rows.length}
+                </span>
+              </div>
+
+              {/* column headers */}
+              <div className="hidden md:grid grid-cols-[56px_1.4fr_150px_1fr_190px_auto] gap-3 px-4 py-1.5 text-[11px] text-slate-400 border-b bg-slate-50/60">
+                <span>שעה</span>
+                <span>מועמד</span>
+                <span>טלפון</span>
+                <span>מקור</span>
+                <span>סטטוס</span>
+                <span className="text-left">פעולות</span>
+              </div>
+
+              <ul className="divide-y divide-slate-100">
+                {group.rows.map((r) => {
+                  const c = STATUS_COLORS[r.status] ?? {
+                    bg: "bg-slate-100",
+                    text: "text-slate-700",
+                    dot: "bg-slate-400",
+                  };
+                  return (
+                    <li
+                      key={r.lead_id}
+                      className={`grid grid-cols-1 md:grid-cols-[56px_1.4fr_150px_1fr_190px_auto] gap-x-3 gap-y-1 items-center px-4 py-2.5 hover:bg-slate-50/80 transition-colors ${
+                        untouched ? "bg-amber-50/30" : ""
+                      }`}
                     >
+                      {/* time */}
                       <span
-                        className="text-xs text-slate-400 w-12 shrink-0 tabular-nums"
-                        title={r.handled_at ? `עדכון אחרון ${ilTime(r.handled_at)} · הגיע ${ilTime(r.effective_at)}` : `הגיע ${ilTime(r.effective_at)} — טרם טופל`}
+                        className="text-xs text-slate-400 tabular-nums"
+                        title={
+                          r.handled_at
+                            ? `עדכון אחרון ${ilTime(r.handled_at)} · הגיע ${ilTime(r.effective_at)}`
+                            : `הגיע ${ilTime(r.effective_at)} — טרם טופל`
+                        }
                       >
                         {ilTime(r.handled_at ?? r.effective_at)}
                       </span>
-                      <span className="font-medium text-slate-800 truncate min-w-0 flex-1">
-                        {r.lead_name || "ללא שם"}
-                      </span>
-                      {r.phone && (
-                        <span className="text-sm text-slate-500 tabular-nums hidden sm:block">
-                          {r.phone}
-                        </span>
-                      )}
-                      {r.source && (
-                        <span className="text-xs text-slate-400 truncate max-w-[120px] hidden md:block">
-                          {r.source}
-                        </span>
-                      )}
-                      <span className="shrink-0 flex flex-col items-end gap-0.5">
-                        <span
-                          className={`text-xs font-medium rounded-full px-2.5 py-1 ${c.bg} ${c.text}`}
+
+                      {/* candidate */}
+                      <div className="min-w-0">
+                        <Link
+                          href={`/leads/${r.lead_id}`}
+                          className="font-semibold text-slate-900 hover:text-cyan-700 hover:underline truncate block"
                         >
-                          {STATUS_LABELS[r.status] ?? r.status}
-                        </span>
-                        {r.sub_status && (
-                          <span className="text-[11px] text-slate-500 leading-tight">
-                            {r.sub_status}
+                          {r.lead_name || "ללא שם"}
+                        </Link>
+                        {(r.job_title || r.location) && (
+                          <div className="text-xs text-slate-500 truncate">
+                            {r.job_title}
+                            {r.job_title && r.location ? " · " : ""}
+                            {r.location && <span>📍 {r.location}</span>}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* phone */}
+                      <div className="text-sm tabular-nums" dir="ltr">
+                        {r.phone ? (
+                          <span className="inline-flex items-center gap-2">
+                            <a href={`tel:${r.phone}`} className="text-slate-700 hover:text-cyan-700 font-medium">
+                              {r.phone}
+                            </a>
+                            <a
+                              href={waHref(r.phone)}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-emerald-600 hover:text-emerald-800 text-[11px] font-bold"
+                              title="וואטסאפ"
+                            >
+                              WA
+                            </a>
                           </span>
+                        ) : (
+                          <span className="text-slate-300">—</span>
+                        )}
+                      </div>
+
+                      {/* source */}
+                      <span className="text-xs text-slate-500 truncate">
+                        {r.source ? (
+                          <span className="bg-slate-100 rounded px-1.5 py-0.5">{r.source}</span>
+                        ) : (
+                          "—"
                         )}
                       </span>
-                    </Link>
-                  </li>
-                );
-              })}
-            </ul>
-          </section>
-        ))}
+
+                      {/* status (inline change) */}
+                      <div className="flex flex-col gap-0.5">
+                        <StatusSelect
+                          leadId={r.lead_id}
+                          currentStatus={r.status}
+                          currentSubStatus={r.sub_status}
+                        />
+                        {r.sub_status && (
+                          <span className={`text-[11px] leading-tight ${c.text}`}>{r.sub_status}</span>
+                        )}
+                      </div>
+
+                      {/* actions */}
+                      <div className="flex items-center justify-end gap-1.5">
+                        <LeadNotesDialog leadId={r.lead_id} leadName={r.lead_name || "ללא שם"} size="xs" />
+                      </div>
+                    </li>
+                  );
+                })}
+              </ul>
+            </section>
+          );
+        })}
       </div>
     </div>
   );
