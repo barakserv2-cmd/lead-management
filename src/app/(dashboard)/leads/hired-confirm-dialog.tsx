@@ -3,11 +3,14 @@
 import { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
 import { getOpenJobs } from "./actions";
+import { JobSearchSelect, type JobSearchOption } from "./job-search-select";
 
 interface JobOption {
   id: string;
   title: string;
   client_id: string;
+  pay_rate: string | null;
+  urgent: boolean;
   clients: { name: string } | null;
 }
 
@@ -43,17 +46,17 @@ export function HiredConfirmDialog({
     };
   }, [open]);
 
-  // Group jobs by client name for readability
-  const groupedJobs = useMemo(() => {
-    const groups = new Map<string, JobOption[]>();
-    for (const j of jobs) {
-      const clientName = j.clients?.name ?? "ללא לקוח";
-      const arr = groups.get(clientName) ?? [];
-      arr.push(j);
-      groups.set(clientName, arr);
-    }
-    return Array.from(groups.entries()).sort(([a], [b]) => a.localeCompare(b, "he"));
-  }, [jobs]);
+  const options = useMemo<JobSearchOption[]>(
+    () =>
+      jobs.map((j) => ({
+        id: j.id,
+        title: j.title,
+        clientName: j.clients?.name ?? "ללא לקוח",
+        payRate: j.pay_rate,
+        urgent: j.urgent,
+      })),
+    [jobs]
+  );
 
   if (!open) return null;
 
@@ -111,29 +114,13 @@ export function HiredConfirmDialog({
             <label className="block text-sm font-medium text-gray-700 mb-1">
               משרה <span className="text-red-500">*</span>
             </label>
-            <select
+            <JobSearchSelect
+              jobs={options}
               value={hiredJobId}
-              onChange={(e) => setHiredJobId(e.target.value)}
-              disabled={jobsLoading}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent disabled:opacity-50"
-            >
-              <option value="">
-                {jobsLoading
-                  ? "טוען משרות..."
-                  : jobs.length === 0
-                  ? "אין משרות פתוחות"
-                  : "בחר משרה..."}
-              </option>
-              {groupedJobs.map(([clientName, jobsForClient]) => (
-                <optgroup key={clientName} label={clientName}>
-                  {jobsForClient.map((j) => (
-                    <option key={j.id} value={j.id}>
-                      {j.title}
-                    </option>
-                  ))}
-                </optgroup>
-              ))}
-            </select>
+              onChange={setHiredJobId}
+              loading={jobsLoading}
+              autoFocus
+            />
             {!jobsLoading && jobs.length === 0 && (
               <p className="mt-1.5 text-xs text-amber-700">
                 אין משרות פתוחות. <Link href="/jobs" className="underline">פתח משרה חדשה</Link> ואז חזור לכאן.

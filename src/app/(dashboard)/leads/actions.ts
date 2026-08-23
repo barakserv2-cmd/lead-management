@@ -54,7 +54,7 @@ export async function getActiveClients() {
 export async function getOpenJobs() {
   const { data, error } = await getSupabase()
     .from("jobs")
-    .select("id, title, client_id, clients(name)")
+    .select("id, title, client_id, pay_rate, urgent, clients(name)")
     .eq("status", "Open")
     .order("created_at", { ascending: false });
 
