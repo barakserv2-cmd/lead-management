@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { diffFields, logAudit } from "@/lib/audit";
 import { normalizePhone } from "@/lib/phone";
 import { findLeadByPhone, duplicatePhonePayload, isPhoneUniqueViolation } from "@/lib/leadPhoneGuard";
+import { normalizeEmployerName } from "@/lib/employerNormalization";
 
 // עדכון פרטי מועמד מחלון העריכה הצף. fetch+API ולא server action —
 // הדפוס הקבוע בפרויקט (Next 16 מפיל טפסים דרך server actions).
@@ -16,7 +17,22 @@ const EDITABLE_FIELDS = new Set([
   "location",
   "experience",
   "age",
+  // מידע גיוס — נערך מהכרטיס המלא (lead-card-panel)
+  "screening_score",
+  "interview_date",
+  "interview_notes",
+  "hired_client",
+  "hired_position",
+  "rejection_reason",
+  "start_date",
+  "arrival_date",
+  "employment_end_date",
 ]);
+
+const DATE_FIELDS = new Set(["start_date", "arrival_date", "employment_end_date"]);
+const SNAPSHOT_COLUMNS =
+  "name, phone, email, job_title, location, experience, age, screening_score, interview_date, " +
+  "interview_notes, hired_client, hired_position, rejection_reason, start_date, arrival_date, employment_end_date";
 
 export async function PATCH(
   request: NextRequest,
@@ -47,6 +63,31 @@ export async function PATCH(
       updateData.name = name;
     } else if (key === "phone") {
       updateData.phone = normalizePhone(String(value ?? ""));
+    } else if (key === "screening_score") {
+      if (value === "" || value == null) {
+        updateData.screening_score = null;
+      } else {
+        const n = typeof value === "number" ? value : parseInt(String(value), 10);
+        if (!Number.isFinite(n) || n < 0 || n > 100) {
+          return NextResponse.json({ error: "ציון סינון חייב להיות בין 0 ל-100" }, { status: 400 });
+        }
+        updateData.screening_score = n;
+      }
+    } else if (DATE_FIELDS.has(key)) {
+      const s = String(value ?? "").trim();
+      if (s && !/^\d{4}-\d{2}-\d{2}$/.test(s)) {
+        return NextResponse.json({ error: `תאריך לא תקין: ${key}` }, { status: 400 });
+      }
+      updateData[key] = s || null;
+    } else if (key === "interview_date") {
+      const s = String(value ?? "").trim();
+      if (s && Number.isNaN(new Date(s).getTime())) {
+        return NextResponse.json({ error: "תאריך ראיון לא תקין" }, { status: 400 });
+      }
+      updateData.interview_date = s ? new Date(s).toISOString() : null;
+    } else if (key === "hired_client") {
+      const s = String(value ?? "").trim();
+      updateData.hired_client = s ? (await normalizeEmployerName(s)).normalized : null;
     } else {
       const s = String(value ?? "").trim();
       updateData[key] = s || null;
@@ -66,7 +107,7 @@ export async function PATCH(
   // snapshot before the write so the audit row carries a real from→to diff
   const { data: before } = await supabase
     .from("leads")
-    .select("name, phone, email, job_title, location, experience, age")
+    .select(SNAPSHOT_COLUMNS)
     .eq("id", leadId)
     .maybeSingle();
 
@@ -74,7 +115,7 @@ export async function PATCH(
     .from("leads")
     .update(updateData)
     .eq("id", leadId)
-    .select("id, name, phone, email, job_title, location, experience, age")
+    .select("id, " + SNAPSHOT_COLUMNS)
     .single();
 
   if (error) {

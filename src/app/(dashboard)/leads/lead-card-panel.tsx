@@ -19,6 +19,7 @@ import { claimLead, releaseLead } from "@/lib/actions/claimLead";
 import { clearLeadAttention } from "@/lib/actions/clearAttention";
 import { LeadDocumentsSection } from "./lead-documents-section";
 import { LeadEventsSection } from "./lead-events-section";
+import { RecruitmentInfoSection } from "./recruitment-info-section";
 
 // 24h lock window — must match server constant in claimLead.ts
 const LOCK_TTL_MS = 24 * 60 * 60 * 1000;
@@ -171,15 +172,6 @@ export function LeadCardPanel({ lead, open, onOpenChange, recruiterNames = {} }:
     if (parts.length >= 2) return parts[0][0] + parts[1][0];
     return lead.name.slice(0, 2);
   })();
-
-  const formatDate = (d: string | null) => {
-    if (!d) return null;
-    return new Date(d).toLocaleDateString("he-IL", {
-      day: "numeric",
-      month: "short",
-      year: "numeric",
-    });
-  };
 
   const formatDateTime = (d: string | null) => {
     if (!d) return null;
@@ -357,19 +349,9 @@ export function LeadCardPanel({ lead, open, onOpenChange, recruiterNames = {} }:
           </div>
         </div>
 
-        {/* Recruitment Info */}
+        {/* Recruitment Info — editable inline */}
+        <RecruitmentInfoSection lead={lead} />
         <div className="px-6 pb-4">
-          <h3 className="text-sm font-semibold text-gray-700 mb-2">מידע גיוס</h3>
-          <div className="bg-white rounded-lg border p-3">
-            <DetailRow label="ציון סינון" value={lead.screening_score?.toString()} />
-            <DetailRow label="תאריך ראיון" value={formatDate(lead.interview_date)} />
-            <DetailRow label="הערות ראיון" value={lead.interview_notes} />
-            <DetailRow label="לקוח" value={lead.hired_client} />
-            <DetailRow label="תפקיד שהתקבל" value={lead.hired_position} />
-            <DetailRow label="סיבת דחייה" value={lead.rejection_reason} />
-            <DetailRow label="תאריך התחלה" value={formatDate(lead.start_date)} />
-            <DetailRow label="תאריך הגעה" value={formatDate(lead.arrival_date)} />
-          </div>
           <LeadDocumentsSection leadId={lead.id} />
           <div className="mt-4">
             <LeadEventsSection leadId={lead.id} />
