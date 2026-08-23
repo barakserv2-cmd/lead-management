@@ -3,6 +3,13 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Search, X, Building2 } from "lucide-react";
 
+/** "45₪" / "₪45" / "40+2" → "₪45" / "₪40+2"; free text stays as is */
+function fmtPay(p: string | null | undefined): string {
+  if (!p) return "";
+  const clean = p.replace(/₪/g, "").trim();
+  return /^\d/.test(clean) ? `₪${clean}` : clean;
+}
+
 export interface JobSearchOption {
   id: string;
   title: string;
@@ -87,7 +94,7 @@ export function JobSearchSelect({
           <div className="font-semibold text-gray-900 truncate">{selected.title}</div>
           <div className="text-xs text-gray-600 truncate">
             {selected.clientName}
-            {selected.payRate ? ` · ₪${selected.payRate}` : ""}
+            {selected.payRate ? ` · ${fmtPay(selected.payRate)}` : ""}
           </div>
         </div>
         <button
@@ -173,7 +180,7 @@ export function JobSearchSelect({
                 </div>
                 {j.payRate && (
                   <span className="text-xs text-gray-500 font-mono shrink-0" dir="ltr">
-                    {/^\d/.test(j.payRate) ? `₪${j.payRate}` : j.payRate}
+                    {fmtPay(j.payRate)}
                   </span>
                 )}
               </li>
