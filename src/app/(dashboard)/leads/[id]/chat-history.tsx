@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback } from "react";
 import Link from "next/link";
+import { ReminderDialog } from "./reminder-dialog";
 import { sendMessage } from "@/lib/actions/sendMessage";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -39,9 +40,13 @@ const POLL_INTERVAL = 5000;
 export function ChatHistory({
   leadId,
   leadStatus,
+  leadName = "",
+  interviewDate = null,
 }: {
   leadId: string;
   leadStatus: LeadStatusValue;
+  leadName?: string;
+  interviewDate?: string | null;
 }) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [loading, setLoading] = useState(true);
@@ -272,6 +277,9 @@ export function ChatHistory({
       {/* Which number the recruiter's messages go out from */}
       {canSend && !isScreening && sender && (
         <div className="px-4 pt-2 text-[10px] text-gray-400 flex items-center gap-1.5">
+          <span className="ms-auto order-last">
+            <ReminderDialog leadId={leadId} leadName={leadName} interviewDate={interviewDate} />
+          </span>
           <span
             className={`inline-block w-1.5 h-1.5 rounded-full ${
               !sender.connected

@@ -330,7 +330,7 @@ function LeadMiniWindow({
             {tab === "details" ? (
               <LeadDetailsForm lead={lead} />
             ) : (
-              <ChatHistory leadId={lead.id} leadStatus={lead.status as LeadStatusValue} />
+              <ChatHistory leadId={lead.id} leadStatus={lead.status as LeadStatusValue} leadName={lead.name ?? ""} interviewDate={lead.interview_date ?? null} />
             )}
           </div>
         </div>

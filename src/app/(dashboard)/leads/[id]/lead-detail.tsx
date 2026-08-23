@@ -841,6 +841,8 @@ export function LeadDetail({
               <ChatHistory
                 leadId={lead.id}
                 leadStatus={lead.status as LeadStatusValue}
+                  leadName={lead.name ?? ""}
+                  interviewDate={lead.interview_date ?? null}
               />
             </CardContent>
           </Card>

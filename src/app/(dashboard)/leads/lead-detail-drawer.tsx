@@ -543,6 +543,8 @@ export function LeadDetailDrawer({
                 <ChatHistory
                   leadId={lead.id}
                   leadStatus={lead.status as LeadStatusValue}
+                  leadName={lead.name ?? ""}
+                  interviewDate={lead.interview_date ?? null}
                 />
               </div>
             </div>
