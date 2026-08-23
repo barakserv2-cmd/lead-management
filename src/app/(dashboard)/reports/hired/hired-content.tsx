@@ -2,18 +2,35 @@
 
 import { useState, useMemo } from "react";
 import type { Lead } from "@/types/leads";
+import { StatusSelect } from "../../leads/status-select";
 
-export function HiredContent({ leads }: { leads: Lead[] }) {
+// המעסיק האמיתי: hired_client (נקבע בקבלה), עם fallback להתאמת הסוכן.
+function employerOf(lead: Lead): string | null {
+  return (
+    lead.hired_client ??
+    ((lead.preferences as Record<string, unknown>)?.matched_client as string | undefined) ??
+    null
+  );
+}
+
+export function HiredContent({
+  leads,
+  hiredAt = {},
+}: {
+  leads: Lead[];
+  /** lead_id → מועד המעבר ל"התקבל" (מהיסטוריית הסטטוסים) */
+  hiredAt?: Record<string, string>;
+}) {
   const [clientFilter, setClientFilter] = useState("");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
 
-  // Derive unique clients from actual matched_client data
+  // Derive unique clients from actual employer data
   const clientOptions = useMemo(() => {
     const set = new Set<string>();
     leads.forEach((l) => {
-      const client = (l.preferences as Record<string, unknown>)?.matched_client;
-      if (typeof client === "string" && client) set.add(client);
+      const client = employerOf(l);
+      if (client) set.add(client);
     });
     return Array.from(set).sort();
   }, [leads]);
@@ -22,27 +39,21 @@ export function HiredContent({ leads }: { leads: Lead[] }) {
     let result = leads;
 
     if (clientFilter) {
-      result = result.filter(
-        (l) =>
-          (l.preferences as Record<string, unknown>)?.matched_client ===
-          clientFilter
-      );
+      result = result.filter((l) => employerOf(l) === clientFilter);
     }
 
+    // סינון תאריכים לפי מועד הקבלה (fallback: יצירת הליד)
+    const hiredDate = (l: Lead) => (hiredAt[l.id] ?? l.created_at).slice(0, 10);
     if (dateFrom) {
-      result = result.filter(
-        (l) => l.created_at.slice(0, 10) >= dateFrom
-      );
+      result = result.filter((l) => hiredDate(l) >= dateFrom);
     }
 
     if (dateTo) {
-      result = result.filter(
-        (l) => l.created_at.slice(0, 10) <= dateTo
-      );
+      result = result.filter((l) => hiredDate(l) <= dateTo);
     }
 
     return result;
-  }, [leads, clientFilter, dateFrom, dateTo]);
+  }, [leads, hiredAt, clientFilter, dateFrom, dateTo]);
 
   return (
     <div dir="rtl">
@@ -117,30 +128,44 @@ export function HiredContent({ leads }: { leads: Lead[] }) {
                 <th className="px-4 py-3 font-semibold text-gray-700">טלפון</th>
                 <th className="px-4 py-3 font-semibold text-gray-700">מעסיק</th>
                 <th className="px-4 py-3 font-semibold text-gray-700">תפקיד</th>
-                <th className="px-4 py-3 font-semibold text-gray-700">תאריך</th>
+                <th className="px-4 py-3 font-semibold text-gray-700">סטטוס</th>
+                <th className="px-4 py-3 font-semibold text-gray-700">תאריך קבלה</th>
+                <th className="px-4 py-3 font-semibold text-gray-700">תחילת עבודה</th>
               </tr>
             </thead>
             <tbody className="divide-y">
-              {filtered.map((lead) => {
-                const prefs = lead.preferences as Record<string, unknown> | null;
-                return (
-                  <tr key={lead.id} className="hover:bg-gray-50">
-                    <td className="px-4 py-3 font-medium">{lead.name}</td>
-                    <td className="px-4 py-3 text-gray-600" dir="ltr">
-                      {lead.phone}
-                    </td>
-                    <td className="px-4 py-3 text-gray-600">
-                      {(prefs?.matched_client as string) ?? "—"}
-                    </td>
-                    <td className="px-4 py-3 text-gray-600">
-                      {lead.job_title ?? "—"}
-                    </td>
-                    <td className="px-4 py-3 text-gray-600">
-                      {new Date(lead.created_at).toLocaleDateString("he-IL")}
-                    </td>
-                  </tr>
-                );
-              })}
+              {filtered.map((lead) => (
+                <tr key={lead.id} className="hover:bg-gray-50">
+                  <td className="px-4 py-3 font-medium">{lead.name}</td>
+                  {/* dir=ltr לספרות, text-right כדי שהמספר יישב בצד של העמודה ולא יברח שמאלה */}
+                  <td className="px-4 py-3 text-gray-600 text-right tabular-nums" dir="ltr">
+                    {lead.phone ?? "—"}
+                  </td>
+                  <td className="px-4 py-3 text-gray-600">
+                    {employerOf(lead) ?? "—"}
+                  </td>
+                  <td className="px-4 py-3 text-gray-600">
+                    {lead.hired_position ?? lead.job_title ?? "—"}
+                  </td>
+                  <td className="px-4 py-3">
+                    <StatusSelect
+                      leadId={lead.id}
+                      currentStatus={lead.status}
+                      currentSubStatus={lead.sub_status}
+                    />
+                  </td>
+                  <td className="px-4 py-3 text-gray-600">
+                    {hiredAt[lead.id]
+                      ? new Date(hiredAt[lead.id]).toLocaleDateString("he-IL")
+                      : "—"}
+                  </td>
+                  <td className="px-4 py-3 text-gray-600">
+                    {lead.start_date
+                      ? new Date(lead.start_date).toLocaleDateString("he-IL")
+                      : "—"}
+                  </td>
+                </tr>
+              ))}
             </tbody>
           </table>
         </div>

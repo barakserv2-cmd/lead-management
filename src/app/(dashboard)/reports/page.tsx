@@ -39,12 +39,26 @@ export default async function ReportsPage({
   let content: React.ReactNode;
 
   if (tab === "hired") {
-    const { data: leads } = await supabase
-      .from("leads")
-      .select("*")
-      .in("status", [LEAD_STATUSES.HIRED, LEAD_STATUSES.STARTED])
-      .order("created_at", { ascending: false });
-    content = <HiredContent leads={(leads ?? []) as Lead[]} />;
+    // תאריך הקבלה = המעבר האחרון ל-HIRED בהיסטוריית הסטטוסים (אין עמודה
+    // ייעודית על הליד). start_date נשאר "תאריך תחילת עבודה".
+    const [{ data: leads }, { data: hiredHistory }] = await Promise.all([
+      supabase
+        .from("leads")
+        .select("*")
+        .in("status", [LEAD_STATUSES.HIRED, LEAD_STATUSES.STARTED])
+        .order("created_at", { ascending: false }),
+      supabase
+        .from("lead_status_history")
+        .select("lead_id, changed_at")
+        .eq("to_status", LEAD_STATUSES.HIRED)
+        .order("changed_at", { ascending: false })
+        .limit(5000),
+    ]);
+    const hiredAt: Record<string, string> = {};
+    for (const h of (hiredHistory ?? []) as { lead_id: string; changed_at: string }[]) {
+      if (!hiredAt[h.lead_id]) hiredAt[h.lead_id] = h.changed_at; // ממוין יורד — הראשון הוא האחרון
+    }
+    content = <HiredContent leads={(leads ?? []) as Lead[]} hiredAt={hiredAt} />;
   } else if (tab === "advances") {
     const [{ data: rows, error }, { data: workers }] = await Promise.all([
       supabase
