@@ -34,19 +34,23 @@ async function runInterviewReminders(admin: ReturnType<typeof getAdmin>): Promis
     details: [],
   };
 
-  // Window: 22h..50h from now, so anything scheduled "tomorrow" lands here
-  // even with timezone slack.
-  const now = new Date();
-  const start = new Date(now.getTime() + 22 * 60 * 60 * 1000);
-  const end = new Date(now.getTime() + 50 * 60 * 60 * 1000);
+  // "Tomorrow" by the Israel calendar day. interview_date is stored as the
+  // Israel wall-clock time with a +00:00 label (naive), so we build the
+  // day bounds in that same naive frame instead of a rolling hour window —
+  // otherwise a 00:00 (date-only) interview two days out gets "מחר".
+  const todayIl = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Jerusalem" }).format(new Date());
+  const tomorrow = new Date(`${todayIl}T00:00:00Z`);
+  tomorrow.setUTCDate(tomorrow.getUTCDate() + 1);
+  const dayAfter = new Date(tomorrow);
+  dayAfter.setUTCDate(dayAfter.getUTCDate() + 1);
 
   const { data: leads } = await admin
     .from("leads")
     .select("id, name, phone, interview_date, interview_type")
     .eq("status", "INTERVIEW_BOOKED")
     .not("phone", "is", null)
-    .gte("interview_date", start.toISOString())
-    .lt("interview_date", end.toISOString());
+    .gte("interview_date", tomorrow.toISOString())
+    .lt("interview_date", dayAfter.toISOString());
 
   if (!leads || leads.length === 0) {
     summary.details.push("אין ראיונות מחר");
@@ -70,12 +74,16 @@ async function runInterviewReminders(admin: ReturnType<typeof getAdmin>): Promis
       continue;
     }
 
-    const hh = interviewAt.getHours().toString().padStart(2, "0");
-    const mm = interviewAt.getMinutes().toString().padStart(2, "0");
+    // Naive frame: stored UTC fields ARE the Israel wall-clock values.
+    const hh = interviewAt.getUTCHours().toString().padStart(2, "0");
+    const mm = interviewAt.getUTCMinutes().toString().padStart(2, "0");
+    const hasTime = !(hh === "00" && mm === "00"); // date-only entries
     const type = lead.interview_type === "video" ? "ראיון וידאו" : "ראיון פרונטלי";
     const message =
       `שלום ${lead.name},\n` +
-      `תזכורת אוטומטית: מחר בשעה ${hh}:${mm} יש לך ${type}.\n` +
+      (hasTime
+        ? `תזכורת אוטומטית: מחר בשעה ${hh}:${mm} יש לך ${type}.\n`
+        : `תזכורת אוטומטית: מחר יש לך ${type}.\n`) +
       `בהצלחה! 🎯`;
 
     const sendRes = await sendWhatsAppMessage(lead.phone as string, message);
