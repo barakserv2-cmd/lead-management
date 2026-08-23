@@ -1,3 +1,4 @@
+import { validateInterviewLocal } from "@/lib/interviewTime";
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { diffFields, logAudit } from "@/lib/audit";
@@ -83,6 +84,11 @@ export async function PATCH(
       const s = String(value ?? "").trim();
       if (s && Number.isNaN(new Date(s).getTime())) {
         return NextResponse.json({ error: "תאריך ראיון לא תקין" }, { status: 400 });
+      }
+      if (s) {
+        const il = new Intl.DateTimeFormat("en-GB", { timeZone: "Asia/Jerusalem", hour: "2-digit", minute: "2-digit", hour12: false }).format(new Date(s));
+        const err = validateInterviewLocal(`T${il}`);
+        if (err) return NextResponse.json({ error: err }, { status: 400 });
       }
       updateData.interview_date = s ? new Date(s).toISOString() : null;
     } else if (key === "hired_client") {

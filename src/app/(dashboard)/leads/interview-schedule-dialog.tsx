@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { validateInterviewLocal } from "@/lib/interviewTime";
 
 type InterviewType = "in_person" | "video";
 
@@ -27,7 +28,8 @@ export function InterviewScheduleDialog({
 
   if (!open) return null;
 
-  const canSubmit = !!interviewDate && !!interviewType && !loading;
+  const timeError = validateInterviewLocal(interviewDate);
+  const canSubmit = !!interviewDate && !timeError && !!interviewType && !loading;
 
   function handleConfirm() {
     if (!canSubmit) return;
@@ -126,15 +128,19 @@ export function InterviewScheduleDialog({
 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
-              תאריך ושעת ראיון <span className="text-red-500">*</span>
+              תאריך ושעת הגעה למשרד <span className="text-red-500">*</span>
             </label>
             <input
               type="datetime-local"
+              step={300}
               value={interviewDate}
               onChange={(e) => setInterviewDate(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+              className={`w-full px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent ${timeError ? "border-red-400" : "border-gray-300"}`}
               dir="ltr"
             />
+            <p className={`mt-1 text-xs ${timeError ? "text-red-600" : "text-gray-500"}`}>
+              {timeError ?? "השעה שבה המועמד אמור להגיע לראיון"}
+            </p>
           </div>
 
           <div>

@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import type { Lead } from "@/types/leads";
+import { validateInterviewLocal } from "@/lib/interviewTime";
 
 // "מידע גיוס" בכרטיס המלא — תצוגה + מצב עריכה inline.
 // שמירה דרך PATCH /api/leads/[id] (fetch+API, לא server action — הדפוס בפרויקט).
@@ -125,6 +126,8 @@ export function RecruitmentInfoSection({ lead }: { lead: Lead }) {
   }
 
   async function save() {
+    const timeError = validateInterviewLocal(form.interview_date);
+    if (timeError) { toast.error(timeError); return; }
     setSaving(true);
     try {
       const payload = {
@@ -222,7 +225,8 @@ export function RecruitmentInfoSection({ lead }: { lead: Lead }) {
               <input type="number" min={0} max={100} value={form.screening_score} onChange={(e) => set("screening_score", e.target.value)} className={inputCls} dir="ltr" placeholder="0–100" />
             </Field>
             <Field label="תאריך ראיון">
-              <input type="datetime-local" value={form.interview_date} onChange={(e) => set("interview_date", e.target.value)} className={inputCls} dir="ltr" />
+              <input type="datetime-local" step={300} value={form.interview_date} onChange={(e) => set("interview_date", e.target.value)} className={inputCls} dir="ltr" />
+              {validateInterviewLocal(form.interview_date) && <p className="mt-1 text-xs text-red-600">{validateInterviewLocal(form.interview_date)}</p>}
             </Field>
             <Field label="הערות ראיון">
               <textarea rows={2} value={form.interview_notes} onChange={(e) => set("interview_notes", e.target.value)} className={`${inputCls} resize-none`} />
