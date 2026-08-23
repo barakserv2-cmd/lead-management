@@ -3,6 +3,14 @@
 import { useState, useMemo } from "react";
 import type { Lead } from "@/types/leads";
 import { StatusSelect } from "../../leads/status-select";
+import { LeadStatus, type LeadStatusValue } from "@/lib/stateMachine";
+
+// בדוח המועסקים מציגים רק את שלושת מצבי ההעסקה
+const HIRED_REPORT_STATUSES: LeadStatusValue[] = [
+  LeadStatus.HIRED,
+  LeadStatus.STARTED,
+  LeadStatus.EMPLOYMENT_ENDED,
+];
 
 // המעסיק האמיתי: hired_client (נקבע בקבלה), עם fallback להתאמת הסוכן.
 function employerOf(lead: Lead): string | null {
@@ -160,6 +168,7 @@ export function HiredContent({
                       leadId={lead.id}
                       currentStatus={lead.status}
                       currentSubStatus={lead.sub_status}
+                      allowedStatuses={HIRED_REPORT_STATUSES}
                     />
                   </td>
                   <td className="px-4 py-3 text-gray-600">
