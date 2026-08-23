@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { phoneSearchTerm } from "@/lib/phone";
 import { getSupabaseAdmin } from "@/lib/api-auth";
 import type { Lead } from "@/types/leads";
 import Link from "next/link";
@@ -173,8 +174,12 @@ export default async function LeadsPage({
   const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
   const ownershipFilter = `assigned_to.is.null,assigned_at.lt.${cutoff},assigned_to.eq.${myId}`;
 
+  // מספר טלפון שמוקלד עם מקפים/רווחים/+972 מנורמל לספרות בלבד — ככה
+  // הטלפונים שמורים ב-DB, אחרת "052-123" לא מוצא את "0521234567".
+  const phoneTerm = phoneSearchTerm(searchQuery);
+  const effectiveSearch = phoneTerm ?? searchQuery;
   const searchFilter = searchQuery
-    ? `name.ilike.%${searchQuery}%,phone.ilike.%${searchQuery}%,phone2.ilike.%${searchQuery}%,job_title.ilike.%${searchQuery}%`
+    ? `name.ilike.%${effectiveSearch}%,phone.ilike.%${effectiveSearch}%,phone2.ilike.%${effectiveSearch}%,job_title.ilike.%${effectiveSearch}%`
     : null;
 
   // רק השדות שהטבלה, הקנבן, כרטיס הליד והחלונות הקטנים באמת קוראים
@@ -252,7 +257,7 @@ export default async function LeadsPage({
   // לכן RPC (ראה migration 00051).
   const statusCountsRpc = supabase.rpc("get_lead_status_counts", {
     p_source: sourceFilter,
-    p_search: searchQuery || null,
+    p_search: effectiveSearch || null,
     p_tags: tagFilter.length > 0 ? tagFilter : null,
     p_subs: subStatusFilter.length > 0 ? subStatusFilter : null,
     p_handlers: handlerFilter.length > 0 ? handlerFilter : null,

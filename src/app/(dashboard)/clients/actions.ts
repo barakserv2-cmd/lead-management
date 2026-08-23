@@ -1,5 +1,6 @@
 "use server";
 
+import { phoneSearchTerm } from "@/lib/phone";
 import { createClient as createServerClient } from "@supabase/supabase-js";
 import { revalidatePath } from "next/cache";
 
@@ -21,7 +22,8 @@ export async function getClients(status?: string, search?: string) {
   }
 
   if (search) {
-    query = query.or(`name.ilike.%${search}%,phone.ilike.%${search}%`);
+    const term = phoneSearchTerm(search) ?? search;
+    query = query.or(`name.ilike.%${term}%,phone.ilike.%${term}%`);
   }
 
   const { data, error } = await query.limit(100);

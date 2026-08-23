@@ -4,6 +4,7 @@
 // answers in live CRM data (leads, jobs, clients).
 // ============================================================
 
+import { phoneSearchTerm } from "@/lib/phone";
 import { betaZodTool } from "@anthropic-ai/sdk/helpers/beta/zod";
 import { z } from "zod";
 import { createClient } from "@supabase/supabase-js";
@@ -174,7 +175,7 @@ export const assistantTools = [
       if (args.source) q = q.eq("source", args.source);
       if (args.name_or_phone?.trim()) {
         const s = args.name_or_phone.trim();
-        q = q.or(`name.ilike.%${s}%,phone.ilike.%${s}%`);
+        { const t = phoneSearchTerm(s) ?? s; q = q.or(`name.ilike.%${t}%,phone.ilike.%${t}%`); }
       }
       if (args.only_needs_attention) q = q.or("needs_attention.eq.true,needs_human_attention.eq.true");
       const { data, error } = await q;
@@ -240,7 +241,7 @@ export const assistantTools = [
       if (args.job_title_query?.trim()) q = q.ilike("job_title", `%${args.job_title_query.trim()}%`);
       if (args.name_or_phone?.trim()) {
         const s = args.name_or_phone.trim();
-        q = q.or(`name.ilike.%${s}%,phone.ilike.%${s}%`);
+        { const t = phoneSearchTerm(s) ?? s; q = q.or(`name.ilike.%${t}%,phone.ilike.%${t}%`); }
       }
       const { data, error } = await q;
       if (error) return { error: error.message };
