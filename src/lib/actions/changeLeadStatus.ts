@@ -31,6 +31,7 @@ export interface ChangeStatusInput {
     hiredClient?: string;
     hiredPosition?: string;
     startDate?: string;
+    employmentEndDate?: string;
     interviewDate?: string;
     interviewType?: "in_person" | "video";
     interviewNotes?: string;
@@ -121,6 +122,13 @@ export async function changeLeadStatus(input: ChangeStatusInput): Promise<Change
     }
     if (extra?.startDate) updateData.start_date = extra.startDate;
     updateData.human_approval = true;
+  }
+
+  if (newStatus === LeadStatus.EMPLOYMENT_ENDED) {
+    // ברירת מחדל: היום (לפי לוח ישראל) אם לא נבחר תאריך בדיאלוג
+    updateData.employment_end_date =
+      extra?.employmentEndDate ??
+      new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Jerusalem" }).format(new Date());
   }
 
   if (newStatus === LeadStatus.INTERVIEW_BOOKED) {

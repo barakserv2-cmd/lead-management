@@ -31,6 +31,7 @@ const SUB_STATUS_DIALOG_CONFIG: Partial<Record<LeadStatusValue, SubStatusPickerC
 };
 import { InterviewScheduleDialog } from "./interview-schedule-dialog";
 import { HiredConfirmDialog } from "./hired-confirm-dialog";
+import { EmploymentEndDialog } from "./employment-end-dialog";
 import { SubStatusPickerDialog, type SubStatusPickerConfig } from "./sub-status-picker-dialog";
 
 const QUICK_STATUSES = ALL_STATUSES
@@ -69,6 +70,7 @@ export function StatusSelect({
   const [loading, setLoading] = useState(false);
   const [showInterviewDialog, setShowInterviewDialog] = useState(false);
   const [showHiredDialog, setShowHiredDialog] = useState(false);
+  const [showEmploymentEndDialog, setShowEmploymentEndDialog] = useState(false);
   const [subStatusDialog, setSubStatusDialog] = useState<{ open: boolean; targetStatus: LeadStatusValue | null }>({ open: false, targetStatus: null });
 
   const ref = useRef<HTMLDivElement>(null);
@@ -156,6 +158,12 @@ export function StatusSelect({
       return;
     }
 
+    // Intercept EMPLOYMENT_ENDED — ask for the end-of-employment date
+    if (newStatus === LeadStatus.EMPLOYMENT_ENDED) {
+      setShowEmploymentEndDialog(true);
+      return;
+    }
+
     // Intercept CONTACTED / NOT_SUITABLE — require a sub-status
     if (newStatus === LeadStatus.CONTACTED || newStatus === LeadStatus.NOT_SUITABLE) {
       setSubStatusDialog({ open: true, targetStatus: newStatus as LeadStatusValue });
@@ -232,6 +240,29 @@ export function StatusSelect({
       setStatus(LeadStatus.HIRED);
       setSubStatus(null);
       setToast({ message: "התקבל בהצלחה", type: "success" });
+    }
+  }
+
+  async function handleEmploymentEndConfirm(data: { employmentEndDate: string }) {
+    setLoading(true);
+
+    const result = await changeLeadStatus({
+      leadId,
+      newStatus: LeadStatus.EMPLOYMENT_ENDED,
+      userId: "user",
+      notes: `סיום העסקה בתאריך ${data.employmentEndDate}`,
+      extra: { employmentEndDate: data.employmentEndDate },
+    });
+
+    setLoading(false);
+    setShowEmploymentEndDialog(false);
+
+    if (!result.success) {
+      setToast({ message: result.error ?? "שגיאה בעדכון", type: "error" });
+    } else {
+      setStatus(LeadStatus.EMPLOYMENT_ENDED);
+      setSubStatus(null);
+      setToast({ message: "סיום ההעסקה נרשם", type: "success" });
     }
   }
 
@@ -401,6 +432,13 @@ export function StatusSelect({
         open={showHiredDialog}
         onConfirm={handleHiredConfirm}
         onCancel={() => setShowHiredDialog(false)}
+        loading={loading}
+      />
+
+      <EmploymentEndDialog
+        open={showEmploymentEndDialog}
+        onConfirm={handleEmploymentEndConfirm}
+        onCancel={() => setShowEmploymentEndDialog(false)}
         loading={loading}
       />
 

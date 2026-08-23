@@ -33,6 +33,8 @@ export interface Lead {
   financial_status: FinancialStatus;
   client_type: ClientType | null;
   start_date: string | null;
+  /** set when the lead moves to EMPLOYMENT_ENDED */
+  employment_end_date: string | null;
   recruitment_status: RecruitmentStatus;
   rejection_reason: string | null;
   hired_client: string | null;

@@ -45,7 +45,7 @@ export default async function ReportsPage({
       supabase
         .from("leads")
         .select("*")
-        .in("status", [LEAD_STATUSES.HIRED, LEAD_STATUSES.STARTED])
+        .in("status", [LEAD_STATUSES.HIRED, LEAD_STATUSES.STARTED, LEAD_STATUSES.EMPLOYMENT_ENDED])
         .order("created_at", { ascending: false }),
       supabase
         .from("lead_status_history")

@@ -61,11 +61,18 @@ export function HiredContent({
       <h1 className="text-2xl font-bold mb-6">דוח מועסקים</h1>
 
       {/* Summary Card */}
-      <div className="bg-cyan-50 border border-cyan-200 rounded-xl px-6 py-4 mb-6 flex items-center gap-3">
+      <div className="bg-cyan-50 border border-cyan-200 rounded-xl px-6 py-4 mb-6 flex items-center gap-3 flex-wrap">
         <span className="text-3xl font-bold text-cyan-700">
           {filtered.length}
         </span>
         <span className="text-cyan-700 font-medium">סה&quot;כ התקבלו</span>
+        {filtered.some((l) => l.status === "EMPLOYMENT_ENDED") && (
+          <span className="text-sm text-cyan-700/80 border-r border-cyan-200 pr-3 mr-1">
+            מועסקים כעת {filtered.filter((l) => l.status !== "EMPLOYMENT_ENDED").length}
+            {" · "}
+            סיימו העסקה {filtered.filter((l) => l.status === "EMPLOYMENT_ENDED").length}
+          </span>
+        )}
       </div>
 
       {/* Filters */}
@@ -131,6 +138,7 @@ export function HiredContent({
                 <th className="px-4 py-3 font-semibold text-gray-700">סטטוס</th>
                 <th className="px-4 py-3 font-semibold text-gray-700">תאריך קבלה</th>
                 <th className="px-4 py-3 font-semibold text-gray-700">תחילת עבודה</th>
+                <th className="px-4 py-3 font-semibold text-gray-700">סיום העסקה</th>
               </tr>
             </thead>
             <tbody className="divide-y">
@@ -163,6 +171,15 @@ export function HiredContent({
                     {lead.start_date
                       ? new Date(lead.start_date).toLocaleDateString("he-IL")
                       : "—"}
+                  </td>
+                  <td className="px-4 py-3">
+                    {lead.employment_end_date ? (
+                      <span className="text-slate-600 font-medium">
+                        {new Date(lead.employment_end_date).toLocaleDateString("he-IL")}
+                      </span>
+                    ) : (
+                      <span className="text-gray-300">—</span>
+                    )}
                   </td>
                 </tr>
               ))}
