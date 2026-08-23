@@ -215,20 +215,19 @@ export default async function LeadsPage({
 
   // Date search on arrival time (effective_at), by Asia/Jerusalem calendar day.
   // ilDayStartUTC gives the UTC instant of local midnight for the given date.
-  if (dateFrom || dateTo) {
-    const ilDayStartUTC = (dateStr: string): Date => {
-      const noon = new Date(`${dateStr}T12:00:00Z`);
-      const offsetMs =
-        new Date(noon.toLocaleString("en-US", { timeZone: "Asia/Jerusalem" })).getTime() -
-        new Date(noon.toLocaleString("en-US", { timeZone: "UTC" })).getTime();
-      return new Date(new Date(`${dateStr}T00:00:00Z`).getTime() - offsetMs);
-    };
-    if (dateFrom) dataQuery = dataQuery.gte("effective_at", ilDayStartUTC(dateFrom).toISOString());
-    if (dateTo) {
-      const end = new Date(ilDayStartUTC(dateTo).getTime() + 24 * 60 * 60 * 1000);
-      dataQuery = dataQuery.lt("effective_at", end.toISOString());
-    }
-  }
+  const ilDayStartUTC = (dateStr: string): Date => {
+    const noon = new Date(`${dateStr}T12:00:00Z`);
+    const offsetMs =
+      new Date(noon.toLocaleString("en-US", { timeZone: "Asia/Jerusalem" })).getTime() -
+      new Date(noon.toLocaleString("en-US", { timeZone: "UTC" })).getTime();
+    return new Date(new Date(`${dateStr}T00:00:00Z`).getTime() - offsetMs);
+  };
+  const fromIso = dateFrom ? ilDayStartUTC(dateFrom).toISOString() : null;
+  const toIso = dateTo
+    ? new Date(ilDayStartUTC(dateTo).getTime() + 24 * 60 * 60 * 1000).toISOString()
+    : null;
+  if (fromIso) dataQuery = dataQuery.gte("effective_at", fromIso);
+  if (toIso) dataQuery = dataQuery.lt("effective_at", toIso);
   // Sort by true arrival time: email leads use their email send date, others
   // fall back to created_at (both via the generated effective_at column). This
   // keeps a backlog email ingested today from jumping above genuinely newer leads.
@@ -245,11 +244,32 @@ export default async function LeadsPage({
     .select("name, email")
     .order("name");
 
-  const [{ data: leads, count }, { data: tagsData }, { data: profilesData }] = await Promise.all([
+  // ספירה לכל סטטוס תחת אותם פילטרים (חוץ מהסטטוס עצמו) — כדי שליד
+  // הסינון יופיע כמה לידים יש בכל סטטוס. אגרגציות חסומות ב-PostgREST,
+  // לכן RPC (ראה migration 00051).
+  const statusCountsRpc = supabase.rpc("get_lead_status_counts", {
+    p_source: sourceFilter,
+    p_search: searchQuery || null,
+    p_tags: tagFilter.length > 0 ? tagFilter : null,
+    p_subs: subStatusFilter.length > 0 ? subStatusFilter : null,
+    p_handlers: handlerFilter.length > 0 ? handlerFilter : null,
+    p_from: fromIso,
+    p_to: toIso,
+    p_my_id: myId,
+    p_cutoff: cutoff,
+  });
+
+  const [{ data: leads, count }, { data: tagsData }, { data: profilesData }, { data: statusCountsData }] = await Promise.all([
     dataQuery,
     tagsRpc,
     recruitersQuery,
+    statusCountsRpc,
   ]);
+
+  const statusCounts: Record<string, number> = {};
+  for (const row of ((statusCountsData as { status: string; cnt: number }[] | null) ?? [])) {
+    statusCounts[row.status] = Number(row.cnt);
+  }
 
   const recruiters = ((profilesData as { name: string | null; email: string }[] | null) ?? [])
     .filter((p) => p.email)
@@ -297,7 +317,7 @@ export default async function LeadsPage({
         <SearchInput />
       </Suspense>
       <Suspense fallback={null}>
-        <FilterBar allTags={allTags} recruiters={recruiters} />
+        <FilterBar allTags={allTags} recruiters={recruiters} statusCounts={statusCounts} totalCount={totalCount} />
       </Suspense>
       <Suspense fallback={null}>
         <Pagination

@@ -173,9 +173,15 @@ function MultiSelectDropdown({
 export function FilterBar({
   allTags,
   recruiters = [],
+  statusCounts = {},
+  totalCount,
 }: {
   allTags: string[];
   recruiters?: { email: string; name: string }[];
+  /** per-status lead counts under the current filters (excluding status) */
+  statusCounts?: Record<string, number>;
+  /** total leads matching ALL current filters — shown as a results chip */
+  totalCount?: number;
 }) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -322,6 +328,20 @@ export function FilterBar({
   return (
     <div className="mb-4">
       <div className="flex items-center gap-2 flex-wrap">
+        {/* מונה תוצאות — כמה לידים עונים על הסינון הנוכחי */}
+        {typeof totalCount === "number" && (
+          <span
+            className={`inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-bold tabular-nums ${
+              hasFilters
+                ? "bg-cyan-600 text-white"
+                : "bg-gray-100 text-gray-600"
+            }`}
+            title={hasFilters ? "מספר הלידים שעונים על הסינון" : "סך כל הלידים ברשימה"}
+          >
+            {totalCount.toLocaleString("he-IL")} לידים
+          </span>
+        )}
+
         <MultiSelectDropdown
           label="סינון לפי סטטוס"
           options={statusOptions}
@@ -330,9 +350,12 @@ export function FilterBar({
           renderOption={(opt) => {
             const statusDef = STATUS_OPTIONS.find((s) => s.value === opt.value);
             return (
-              <span className="flex items-center gap-1.5">
+              <span className="flex items-center gap-1.5 w-full">
                 <span className={`w-2 h-2 rounded-full flex-shrink-0 ${statusDef?.dot ?? "bg-gray-400"}`} />
                 {opt.label}
+                <span className="mr-auto text-[10px] font-semibold text-gray-400 tabular-nums">
+                  {statusCounts[opt.value] ?? 0}
+                </span>
               </span>
             );
           }}
@@ -433,6 +456,7 @@ export function FilterBar({
                 <span key={`s-${s}`} className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-[11px] font-medium bg-cyan-50 text-cyan-700 border border-cyan-200">
                   <span className={`w-1.5 h-1.5 rounded-full ${statusDef?.dot ?? "bg-gray-400"}`} />
                   {statusDef?.label ?? s}
+                  <span className="font-bold tabular-nums">({(statusCounts[s] ?? 0).toLocaleString("he-IL")})</span>
                   <button type="button" onClick={() => removeStatus(s)} className="hover:text-red-600 transition-colors">
                     <XIcon />
                   </button>
