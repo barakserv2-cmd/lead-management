@@ -1,10 +1,6 @@
 import Link from "next/link";
 import { getSupabaseAdmin } from "@/lib/api-auth";
-import {
-  LeadStatus,
-  STATUS_COLORS,
-  type LeadStatusValue,
-} from "@/lib/stateMachine";
+import { LeadStatus, type LeadStatusValue } from "@/lib/stateMachine";
 import { AutoRefresh } from "./auto-refresh";
 import { StatusSelect } from "../leads/status-select";
 import { LeadNotesDialog } from "../leads/lead-notes-dialog";
@@ -231,11 +227,6 @@ export default async function TodayPage({
 
               <ul className="divide-y divide-slate-100">
                 {group.rows.map((r) => {
-                  const c = STATUS_COLORS[r.status] ?? {
-                    bg: "bg-slate-100",
-                    text: "text-slate-700",
-                    dot: "bg-slate-400",
-                  };
                   return (
                     <li
                       key={r.lead_id}
@@ -310,9 +301,6 @@ export default async function TodayPage({
                           currentStatus={r.status}
                           currentSubStatus={r.sub_status}
                         />
-                        {r.sub_status && (
-                          <span className={`text-[11px] leading-tight ${c.text}`}>{r.sub_status}</span>
-                        )}
                       </div>
 
                       {/* actions */}
