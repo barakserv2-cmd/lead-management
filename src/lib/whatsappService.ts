@@ -34,7 +34,7 @@ export function businessAccount(): WhatsAppAccount {
   return {
     instanceId: (process.env.GREEN_API_INSTANCE_ID ?? "").trim(),
     token: (process.env.GREEN_API_TOKEN ?? "").trim(),
-    label: "מספר העסק",
+    label: "מספר ברירת המחדל",
   };
 }
 
@@ -75,9 +75,10 @@ export async function getAccountForEmail(
 export async function getAccountByInstance(
   instanceId: string | number | null | undefined
 ): Promise<WhatsAppAccount> {
-  const id = instanceId == null ? "" : String(instanceId);
+  const id = instanceId == null ? "" : String(instanceId).trim();
   const biz = businessAccount();
-  if (!id || id === biz.instanceId) return biz;
+  if (!id) return biz;
+  // DB first — the env (default) instance may itself be linked to a recruiter.
   const { data } = await adminClient()
     .from("whatsapp_accounts")
     .select("user_email, instance_id, api_token, phone, label, is_active")

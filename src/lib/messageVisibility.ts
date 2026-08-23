@@ -1,9 +1,11 @@
 // ============================================================
 // Message visibility — who may see which WhatsApp conversations.
 //
-// Conversations on the BUSINESS number (or legacy rows with no instance) are
-// shared by everyone. Conversations on a recruiter's PERSONAL number are
-// private to that recruiter. Admins (user_profiles.role = 'אדמין') see all.
+// Every WhatsApp number belongs to one recruiter (whatsapp_accounts). A
+// recruiter sees only conversations on their own number, plus messages they
+// personally sent (even when they went out via the fallback number because
+// they have no number linked yet). Legacy rows with no instance stamp belong
+// to the default env instance. Admins (user_profiles.role = 'אדמין') see all.
 // ============================================================
 
 import { createClient as createServerClient } from "@supabase/supabase-js";
@@ -14,8 +16,10 @@ const ADMIN_ROLE = "אדמין";
 export interface MessageScope {
   /** true → no filtering (admin) */
   all: boolean;
-  /** instance ids this user may see (business + own personal) */
+  /** instance ids this user owns */
   instances: string[];
+  /** the user's email — messages they sent are always visible to them */
+  email: string | null;
 }
 
 function admin() {
@@ -28,19 +32,17 @@ function admin() {
 export async function getMessageScope(
   email: string | null | undefined
 ): Promise<MessageScope> {
-  const biz = businessAccount().instanceId;
-  if (!email) return { all: false, instances: [biz] };
+  if (!email) return { all: false, instances: [], email: null };
+  const lower = email.toLowerCase();
 
   const [{ data: profile }, personal] = await Promise.all([
-    admin().from("user_profiles").select("role").ilike("email", email).maybeSingle(),
-    getAccountForEmail(email),
+    admin().from("user_profiles").select("role").ilike("email", lower).maybeSingle(),
+    getAccountForEmail(lower),
   ]);
 
-  if (profile?.role === ADMIN_ROLE) return { all: true, instances: [] };
+  if (profile?.role === ADMIN_ROLE) return { all: true, instances: [], email: lower };
 
-  const instances = [biz];
-  if (personal) instances.push(personal.instanceId);
-  return { all: false, instances };
+  return { all: false, instances: personal ? [personal.instanceId] : [], email: lower };
 }
 
 /**
@@ -49,6 +51,14 @@ export async function getMessageScope(
  */
 export function scopeFilter(scope: MessageScope): string | null {
   if (scope.all) return null;
-  const list = scope.instances.map((i) => `"${i}"`).join(",");
-  return `via_instance.is.null,via_instance.in.(${list})`;
+  const parts: string[] = [];
+  const biz = businessAccount().instanceId;
+  for (const i of scope.instances) {
+    parts.push(`via_instance.eq.${i}`);
+    // legacy rows (before stamping) all ran on the default env instance
+    if (i === biz) parts.push("via_instance.is.null");
+  }
+  if (scope.email) parts.push(`sent_by.eq.${scope.email}`);
+  // nothing matches → impossible predicate
+  return parts.length ? parts.join(",") : "id.eq.00000000-0000-0000-0000-000000000000";
 }

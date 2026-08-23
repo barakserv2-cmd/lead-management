@@ -288,7 +288,7 @@ export function ChatHistory({
             )
           ) : (
             <span>
-              שולח ממספר העסק ·{" "}
+              שולח ממספר ברירת המחדל של המערכת ·{" "}
               <Link href="/settings/whatsapp" className="hover:underline">
                 חבר את המספר שלך
               </Link>

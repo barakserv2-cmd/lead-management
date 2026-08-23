@@ -7,7 +7,6 @@ import {
   getInstanceQr,
   getInstanceState,
   logoutInstance,
-  businessAccount,
   type WhatsAppAccount,
 } from "@/lib/whatsappService";
 
@@ -120,12 +119,6 @@ export async function POST(req: NextRequest) {
   if (!instanceId || !token) {
     return NextResponse.json(
       { error: "צריך גם Instance ID וגם API Token מ-Green API" },
-      { status: 400 }
-    );
-  }
-  if (instanceId === businessAccount().instanceId) {
-    return NextResponse.json(
-      { error: "זה ה-instance של מספר העסק — צריך instance נפרד לכל משתמש" },
       { status: 400 }
     );
   }

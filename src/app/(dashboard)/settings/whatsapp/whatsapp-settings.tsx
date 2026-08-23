@@ -149,7 +149,7 @@ export function WhatsAppSettings() {
               כשהמספר שלך מחובר, כל הודעה שתשלח למועמד מהמערכת (צ&apos;אט או
               שליחה מרוכזת) תצא מהוואטסאפ שלך, ותשובות המועמדים — וגם הודעות
               שתשלח להם ישירות מהטלפון — ייכנסו לצ&apos;אט של הליד. בלי חיבור,
-              ההודעות יוצאות ממספר העסק.
+              ההודעות יוצאות ממספר ברירת המחדל של המערכת.
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -159,7 +159,7 @@ export function WhatsAppSettings() {
               <div className="flex items-center gap-3">
                 <span className="inline-block w-3 h-3 rounded-full bg-gray-300" />
                 <p className="text-sm text-gray-500">
-                  לא מחובר — ההודעות שלך יוצאות ממספר העסק
+                  לא מחובר — ההודעות שלך יוצאות ממספר ברירת המחדל של המערכת
                 </p>
               </div>
             )}
@@ -233,7 +233,7 @@ export function WhatsAppSettings() {
           <CardHeader>
             <CardTitle>{status?.connected ? "החלפת instance" : "חיבור המספר שלך"}</CardTitle>
             <CardDescription>
-              כל משתמש צריך instance משלו ב-Green API (לא של מספר העסק). פתח{" "}
+              כל משתמש צריך instance משלו ב-Green API (לא של מספר ברירת המחדל). פתח{" "}
               <a
                 href="https://console.green-api.com/"
                 target="_blank"
