@@ -19,6 +19,7 @@ const SUCCESS_STATUSES = new Set<string>([LeadStatus.HIRED, LeadStatus.STARTED])
 const NEW_STATUSES = new Set<string>([LeadStatus.NEW_LEAD]);
 const CLOSED_STATUSES = new Set<string>([
   LeadStatus.NO_SHOW,
+  LeadStatus.NOT_ACCEPTED,
   LeadStatus.REJECTED,
   LeadStatus.LOST_CONTACT,
   LeadStatus.NOT_SUITABLE,

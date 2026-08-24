@@ -15,6 +15,7 @@ export const LeadStatus = {
   HIRED: "HIRED",
   STARTED: "STARTED",
   NO_SHOW: "NO_SHOW",
+  NOT_ACCEPTED: "NOT_ACCEPTED",
   REJECTED: "REJECTED",
   LOST_CONTACT: "LOST_CONTACT",
   NOT_SUITABLE: "NOT_SUITABLE",
@@ -38,7 +39,9 @@ export const STATUS_LABELS: Record<LeadStatusValue, string> = {
   [LeadStatus.HIRED]: "התקבל",
   [LeadStatus.STARTED]: "התחיל לעבוד",
   [LeadStatus.NO_SHOW]: "לא הגיע",
-  [LeadStatus.REJECTED]: "לא התקבל",
+  // נפסל אחרי שהיה ראיון — להבדיל מ"נדחה" שסוגר ליד בכל שלב אחר
+  [LeadStatus.NOT_ACCEPTED]: "לא התקבל",
+  [LeadStatus.REJECTED]: "נדחה",
   [LeadStatus.LOST_CONTACT]: "אבד קשר",
   [LeadStatus.NOT_SUITABLE]: "לא מתאים",
   [LeadStatus.INVALID_PHONE]: "מספר לא תקין",
@@ -57,6 +60,7 @@ export const STATUS_COLORS: Record<LeadStatusValue, { bg: string; text: string; 
   [LeadStatus.HIRED]:                 { bg: "bg-green-100",  text: "text-green-800",  dot: "bg-green-500" },
   [LeadStatus.STARTED]:               { bg: "bg-emerald-100",text: "text-emerald-800",dot: "bg-emerald-500" },
   [LeadStatus.NO_SHOW]:               { bg: "bg-red-100",    text: "text-red-800",    dot: "bg-red-500" },
+  [LeadStatus.NOT_ACCEPTED]:          { bg: "bg-pink-100",   text: "text-pink-800",   dot: "bg-pink-500" },
   [LeadStatus.REJECTED]:              { bg: "bg-gray-200",   text: "text-gray-700",   dot: "bg-gray-500" },
   [LeadStatus.LOST_CONTACT]:          { bg: "bg-rose-100",   text: "text-rose-800",   dot: "bg-rose-500" },
   [LeadStatus.NOT_SUITABLE]:          { bg: "bg-stone-200",  text: "text-stone-700",  dot: "bg-stone-500" },
@@ -95,11 +99,13 @@ const TRANSITION_MAP: Record<LeadStatusValue, LeadStatusValue[]> = {
     LeadStatus.NO_SHOW,
     // קיצור מלוח הראיונות: הראיון קרה והתקבל — בלי לעבור דרך "הגיע לראיון"
     LeadStatus.HIRED,
+    LeadStatus.NOT_ACCEPTED,
     LeadStatus.REJECTED,
     LeadStatus.LOST_CONTACT,
   ],
   [LeadStatus.ARRIVED]: [
     LeadStatus.HIRED,
+    LeadStatus.NOT_ACCEPTED,
     LeadStatus.REJECTED,
   ],
   [LeadStatus.HIRED]: [
@@ -115,6 +121,11 @@ const TRANSITION_MAP: Record<LeadStatusValue, LeadStatusValue[]> = {
     LeadStatus.INTERVIEW_BOOKED,
     LeadStatus.REJECTED,
     LeadStatus.LOST_CONTACT,
+  ],
+  // נפסל אחרי ראיון — נסגר, ופותחים אותו מחדש דרך "ממתין לנציג" בדיוק
+  // כמו "נדחה", כדי שהחזרה לפייפליין תעבור שוב את כל השלבים.
+  [LeadStatus.NOT_ACCEPTED]: [
+    LeadStatus.NEW_LEAD,
   ],
   [LeadStatus.REJECTED]: [
     LeadStatus.NEW_LEAD,

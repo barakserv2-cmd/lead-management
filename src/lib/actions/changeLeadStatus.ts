@@ -94,7 +94,12 @@ export async function changeLeadStatus(input: ChangeStatusInput): Promise<Change
   };
 
   // Status-specific field updates
-  if (newStatus === LeadStatus.REJECTED && extra?.rejectionReason) {
+  // "נדחה" ו"לא התקבל" חולקים את אותו שדה סיבה — שניהם סגירה של מועמד,
+  // וההפרדה ביניהם היא בסטטוס עצמו.
+  if (
+    (newStatus === LeadStatus.REJECTED || newStatus === LeadStatus.NOT_ACCEPTED) &&
+    extra?.rejectionReason
+  ) {
     updateData.rejection_reason = extra.rejectionReason;
   }
 
@@ -176,7 +181,13 @@ export async function changeLeadStatus(input: ChangeStatusInput): Promise<Change
   // 7b. כל טקסט חופשי שהרכזת כתבה במעבר נרשם גם ביומן האירועים,
   // כדי שההיסטוריה תשמור אותו גם אחרי שהשדה יידרס בעדכון הבא.
   const journalRows: { event_type: string; event_text: string }[] = [];
-  if (extra?.rejectionReason) journalRows.push({ event_type: "דחייה", event_text: `סיבת דחייה: ${extra.rejectionReason}` });
+  if (extra?.rejectionReason) {
+    const isNotAccepted = newStatus === LeadStatus.NOT_ACCEPTED;
+    journalRows.push({
+      event_type: isNotAccepted ? "לא התקבל" : "דחייה",
+      event_text: `${isNotAccepted ? "סיבת אי-קבלה" : "סיבת דחייה"}: ${extra.rejectionReason}`,
+    });
+  }
   if (extra?.interviewNotes) journalRows.push({ event_type: "ראיון", event_text: `הערות ראיון: ${extra.interviewNotes}` });
   if (extra?.followupNotes) journalRows.push({ event_type: "מעקב", event_text: `הערות מעקב: ${extra.followupNotes}` });
   if (journalRows.length > 0) {

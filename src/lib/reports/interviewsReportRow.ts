@@ -20,7 +20,7 @@ export function leadToReportRow(l: Record<string, unknown>): InterviewReportRow 
   const accepted: InterviewReportRow["accepted"] =
     status === LeadStatus.HIRED || status === LeadStatus.STARTED
       ? "התקבל"
-      : status === LeadStatus.REJECTED
+      : status === LeadStatus.NOT_ACCEPTED || status === LeadStatus.REJECTED
         ? "לא התקבל"
         : "";
   // הסיבה ל"לא התקבל" נדחפת לעמודת ההערות הקיימת — הפורמט של המשרד

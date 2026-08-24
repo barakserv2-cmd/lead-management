@@ -18,6 +18,7 @@ export interface InterviewRow {
   interview_type: "in_person" | "video" | null;
   interview_notes: string | null;
   rejection_reason: string | null;
+  last_note: { text: string; type: string; at: string; by: string | null } | null;
   client: string | null;
   recruiter: string | null;
   source: string | null;
@@ -38,6 +39,14 @@ function ilTime(iso: string): string {
 function ilDayLabel(key: string): string {
   const d = new Date(`${key}T12:00:00`);
   return d.toLocaleDateString("he-IL", { weekday: "long", day: "numeric", month: "long" });
+}
+// "היום" / "אתמול" / "12 באוג" — מספיק כדי לדעת אם ההערה טרייה.
+function shortWhen(iso: string): string {
+  const key = ilDateKey(iso);
+  const t = todayKey();
+  if (key === t) return `היום ${ilTime(iso)}`;
+  if (key === addDays(t, -1)) return "אתמול";
+  return new Date(`${key}T12:00:00`).toLocaleDateString("he-IL", { day: "numeric", month: "short" });
 }
 function todayKey(): string {
   return ilDateKey(new Date().toISOString());
@@ -60,6 +69,7 @@ const INTERVIEW_STATUSES: LeadStatusValue[] = [
   LeadStatus.ARRIVED,
   LeadStatus.HIRED,
   LeadStatus.NO_SHOW,
+  LeadStatus.NOT_ACCEPTED,
   LeadStatus.REJECTED,
   LeadStatus.LOST_CONTACT,
 ];
@@ -109,7 +119,7 @@ export function InterviewsContent({ rows }: { rows: InterviewRow[] }) {
       if (type && r.interview_type !== type) return false;
       if (status && r.status !== status) return false;
       if (qn) {
-        const hay = `${r.name} ${r.job_title ?? ""} ${r.client ?? ""} ${r.location ?? ""} ${r.interview_notes ?? ""} ${r.rejection_reason ?? ""} ${r.recruiter ?? ""}`.toLowerCase();
+        const hay = `${r.name} ${r.job_title ?? ""} ${r.client ?? ""} ${r.location ?? ""} ${r.interview_notes ?? ""} ${r.rejection_reason ?? ""} ${r.last_note?.text ?? ""} ${r.recruiter ?? ""}`.toLowerCase();
         const phoneHit = qDigits.length >= 3 && (r.phone ?? "").replace(/\D/g, "").includes(qDigits);
         if (!hay.includes(qn) && !phoneHit) return false;
       }
@@ -259,7 +269,7 @@ export function InterviewsContent({ rows }: { rows: InterviewRow[] }) {
         </select>
         <select value={status} onChange={(e) => setStatus(e.target.value)} className="border border-slate-300 rounded-lg px-3 py-2 text-sm bg-white">
           <option value="">כל הסטטוסים</option>
-          {[LeadStatus.INTERVIEW_BOOKED, LeadStatus.ARRIVED, LeadStatus.NO_SHOW, LeadStatus.HIRED, LeadStatus.STARTED, LeadStatus.REJECTED].map((s) => (
+          {[LeadStatus.INTERVIEW_BOOKED, LeadStatus.ARRIVED, LeadStatus.NO_SHOW, LeadStatus.HIRED, LeadStatus.STARTED, LeadStatus.NOT_ACCEPTED, LeadStatus.REJECTED].map((s) => (
             <option key={s} value={s}>{STATUS_LABELS[s]}</option>
           ))}
         </select>
@@ -327,10 +337,27 @@ export function InterviewsContent({ rows }: { rows: InterviewRow[] }) {
                             {r.source && <span className="text-slate-400">{r.source}</span>}
                           </div>
                           {r.interview_notes && <div className="mt-1 text-sm text-slate-600 whitespace-pre-wrap">{r.interview_notes}</div>}
-                          {r.status === LeadStatus.REJECTED && (
-                            <div className="mt-1.5 text-sm text-gray-700 bg-gray-100 border border-gray-200 rounded-md px-2 py-1 whitespace-pre-wrap">
+                          {r.status === LeadStatus.NOT_ACCEPTED && (
+                            <div className="mt-1.5 text-sm text-pink-900 bg-pink-50 border border-pink-200 rounded-md px-2 py-1 whitespace-pre-wrap">
                               <span className="font-semibold">לא התקבל:</span>{" "}
                               {r.rejection_reason ?? <span className="text-red-600">חסר תיעוד סיבה</span>}
+                            </div>
+                          )}
+                          {r.last_note && (
+                            <div className="mt-1.5 flex items-start gap-1.5 text-sm text-slate-600">
+                              <span className="shrink-0 text-[11px] font-semibold text-violet-700 bg-violet-100 rounded px-1.5 py-0.5">
+                                {r.last_note.type}
+                              </span>
+                              <span className="min-w-0 line-clamp-2 whitespace-pre-wrap">{r.last_note.text}</span>
+                              <span className="shrink-0 text-xs text-slate-400">
+                                {shortWhen(r.last_note.at)}
+                                {r.last_note.by ? ` · ${r.last_note.by}` : ""}
+                              </span>
+                            </div>
+                          )}
+                          {r.status === LeadStatus.REJECTED && r.rejection_reason && (
+                            <div className="mt-1.5 text-sm text-gray-700 bg-gray-100 border border-gray-200 rounded-md px-2 py-1 whitespace-pre-wrap">
+                              <span className="font-semibold">נדחה:</span> {r.rejection_reason}
                             </div>
                           )}
                         </div>

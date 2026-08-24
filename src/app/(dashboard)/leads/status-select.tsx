@@ -169,8 +169,8 @@ export function StatusSelect({
       return;
     }
 
-    // Intercept REJECTED — a written reason is mandatory, no way around it
-    if (newStatus === LeadStatus.REJECTED) {
+    // Intercept NOT_ACCEPTED — a written reason is mandatory, no way around it
+    if (newStatus === LeadStatus.NOT_ACCEPTED) {
       setShowRejectionDialog(true);
       return;
     }
@@ -282,7 +282,7 @@ export function StatusSelect({
 
     const result = await changeLeadStatus({
       leadId,
-      newStatus: LeadStatus.REJECTED,
+      newStatus: LeadStatus.NOT_ACCEPTED,
       userId: "user",
       notes: `לא התקבל: ${data.rejectionReason}`,
       extra: { rejectionReason: data.rejectionReason },
@@ -296,7 +296,7 @@ export function StatusSelect({
     }
 
     setShowRejectionDialog(false);
-    setStatus(LeadStatus.REJECTED);
+    setStatus(LeadStatus.NOT_ACCEPTED);
     setSubStatus(null);
     setToast({ message: "נשמר — לא התקבל", type: "success" });
   }

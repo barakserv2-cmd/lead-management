@@ -156,7 +156,7 @@ export const assistantTools = [
     description:
       "חיפוש מועמדים/לידים לפי סטטוס, תפקיד מבוקש, גורם גיוס, שם/טלפון, או לידים תקועים (ללא עדכון X ימים). מחזיר עד 25 תוצאות עם קישור לכרטיס הליד. השתמש לשאלות כמו 'תמצאי לי מלצרים פנויים', 'מי מחכה לראיון', 'מי תקוע בסינון', 'לידים מטיקטוק'.",
     inputSchema: z.object({
-      statuses: z.array(z.enum(ALL_STATUSES as [LeadStatusValue, ...LeadStatusValue[]])).optional().describe("סטטוסים לסינון. ריק = הפייפליין הפעיל (לא כולל לא התקבל/אבד קשר/לא מתאים/התחיל לעבוד)."),
+      statuses: z.array(z.enum(ALL_STATUSES as [LeadStatusValue, ...LeadStatusValue[]])).optional().describe("סטטוסים לסינון. ריק = הפייפליין הפעיל (לא כולל נדחה/לא התקבל/אבד קשר/לא מתאים/התחיל לעבוד)."),
       job_title_query: z.string().optional().describe("מילת חיפוש בתפקיד המבוקש של המועמד"),
       source: z.enum(LEAD_SOURCES as unknown as [string, ...string[]]).optional().describe("גורם גיוס"),
       name_or_phone: z.string().optional().describe("חיפוש חופשי בשם או טלפון"),

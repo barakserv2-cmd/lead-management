@@ -75,7 +75,7 @@ export const RECRUITMENT_STATUSES = {
 export type RecruitmentStatus =
   (typeof RECRUITMENT_STATUSES)[keyof typeof RECRUITMENT_STATUSES];
 
-// ── Rejection reasons for "לא התקבל" ──────────────────────
+// ── Rejection reasons for "נדחה" ──────────────────────────
 export const REJECTION_REASONS = [
   "אין מענה 3",
   "לא מתאים",
