@@ -35,6 +35,31 @@ const SNAPSHOT_COLUMNS =
   "name, phone, email, job_title, location, experience, age, screening_score, interview_date, " +
   "interview_notes, hired_client, hired_position, rejection_reason, start_date, arrival_date, employment_end_date";
 
+// קריאת השדות שהדיאלוגים צריכים כדי לפתוח עם הערך הקיים ולא לדרוס אותו
+// (למשל תאריך תחילת עבודה כשמעבירים ל"התחיל לעבוד").
+export async function GET(
+  _request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  const { id: leadId } = await params;
+
+  const { data, error } = await supabase
+    .from("leads")
+    .select(`id, status, ${SNAPSHOT_COLUMNS}`)
+    .eq("id", leadId)
+    .single();
+
+  if (error || !data) {
+    return NextResponse.json({ error: error?.message ?? "ליד לא נמצא" }, { status: 404 });
+  }
+
+  return NextResponse.json({ lead: data });
+}
+
 export async function PATCH(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }

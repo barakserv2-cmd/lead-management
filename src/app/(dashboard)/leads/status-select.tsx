@@ -34,6 +34,7 @@ import { HiredConfirmDialog } from "./hired-confirm-dialog";
 import { EmploymentEndDialog } from "./employment-end-dialog";
 import { SubStatusPickerDialog, type SubStatusPickerConfig } from "./sub-status-picker-dialog";
 import { RejectionReasonDialog } from "./rejection-reason-dialog";
+import { StartWorkDialog } from "./start-work-dialog";
 
 const QUICK_STATUSES = ALL_STATUSES
   .map((value) => ({
@@ -76,6 +77,7 @@ export function StatusSelect({
   const [showHiredDialog, setShowHiredDialog] = useState(false);
   const [showEmploymentEndDialog, setShowEmploymentEndDialog] = useState(false);
   const [showRejectionDialog, setShowRejectionDialog] = useState(false);
+  const [showStartWorkDialog, setShowStartWorkDialog] = useState(false);
   const [subStatusDialog, setSubStatusDialog] = useState<{ open: boolean; targetStatus: LeadStatusValue | null }>({ open: false, targetStatus: null });
 
   const ref = useRef<HTMLDivElement>(null);
@@ -166,6 +168,12 @@ export function StatusSelect({
     // Intercept EMPLOYMENT_ENDED — ask for the end-of-employment date
     if (newStatus === LeadStatus.EMPLOYMENT_ENDED) {
       setShowEmploymentEndDialog(true);
+      return;
+    }
+
+    // Intercept STARTED — let the recruiter fix the actual start date
+    if (newStatus === LeadStatus.STARTED) {
+      setShowStartWorkDialog(true);
       return;
     }
 
@@ -275,6 +283,30 @@ export function StatusSelect({
       setSubStatus(null);
       setToast({ message: "סיום ההעסקה נרשם", type: "success" });
     }
+  }
+
+  async function handleStartWorkConfirm(data: { startDate: string }) {
+    setLoading(true);
+
+    const result = await changeLeadStatus({
+      leadId,
+      newStatus: LeadStatus.STARTED,
+      userId: "user",
+      notes: `תחילת עבודה בתאריך ${data.startDate}`,
+      extra: { startDate: data.startDate },
+    });
+
+    setLoading(false);
+
+    if (!result.success) {
+      setToast({ message: result.error ?? "שגיאה בעדכון", type: "error" });
+      return;
+    }
+
+    setShowStartWorkDialog(false);
+    setStatus(LeadStatus.STARTED);
+    setSubStatus(null);
+    setToast({ message: "תחילת העבודה נרשמה", type: "success" });
   }
 
   async function handleRejectionConfirm(data: { rejectionReason: string }) {
@@ -476,6 +508,16 @@ export function StatusSelect({
         onCancel={() => setShowEmploymentEndDialog(false)}
         loading={loading}
       />
+
+      {showStartWorkDialog && (
+        <StartWorkDialog
+          leadId={leadId}
+          leadName={leadName}
+          onConfirm={handleStartWorkConfirm}
+          onCancel={() => setShowStartWorkDialog(false)}
+          loading={loading}
+        />
+      )}
 
       {showRejectionDialog && (
         <RejectionReasonDialog

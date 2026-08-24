@@ -129,6 +129,11 @@ export async function changeLeadStatus(input: ChangeStatusInput): Promise<Change
     updateData.human_approval = true;
   }
 
+  // תחילת עבודה בפועל — הרכזת יכולה לתקן את התאריך שנקבע בקבלה
+  if (newStatus === LeadStatus.STARTED && extra?.startDate) {
+    updateData.start_date = extra.startDate;
+  }
+
   if (newStatus === LeadStatus.EMPLOYMENT_ENDED) {
     // ברירת מחדל: היום (לפי לוח ישראל) אם לא נבחר תאריך בדיאלוג
     updateData.employment_end_date =
@@ -216,6 +221,8 @@ export async function changeLeadStatus(input: ChangeStatusInput): Promise<Change
   // 8. Revalidate
   revalidatePath("/leads");
   revalidatePath("/today");
+  revalidatePath("/interviews");
+  revalidatePath("/reports");
 
   return { success: true };
 }
