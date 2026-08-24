@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { LeadNotesDialog } from "../leads/lead-notes-dialog";
+import { InterviewMessageDialog } from "./interview-message-dialog";
 import Link from "next/link";
 import { STATUS_LABELS, LeadStatus, type LeadStatusValue } from "@/lib/stateMachine";
 import { StatusSelect } from "../leads/status-select";
@@ -324,6 +325,14 @@ export function InterviewsContent({ rows }: { rows: InterviewRow[] }) {
                           {r.interview_notes && <div className="mt-1 text-sm text-slate-600 whitespace-pre-wrap">{r.interview_notes}</div>}
                         </div>
                         <div className="shrink-0 flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
+                          <InterviewMessageDialog
+                            name={r.name}
+                            phone={r.phone}
+                            interviewDate={r.interview_date}
+                            jobTitle={r.job_title}
+                            interviewType={r.interview_type}
+                            recruiter={r.recruiter}
+                          />
                           <LeadNotesDialog leadId={r.id} leadName={r.name} size="xs" />
                           <StatusSelect leadId={r.id} currentStatus={r.status} allowedStatuses={INTERVIEW_STATUSES} />
                         </div>
