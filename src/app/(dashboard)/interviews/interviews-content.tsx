@@ -153,13 +153,48 @@ export function InterviewsContent({ rows }: { rows: InterviewRow[] }) {
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <input
-            type="date"
-            value={reportDate}
-            onChange={(e) => setReportDate(e.target.value)}
-            className="text-sm px-2 py-2 rounded-lg border border-slate-300 bg-white text-slate-700"
-            aria-label="תאריך דוח ראיונות"
-          />
+          <div className="flex items-center rounded-lg border border-slate-300 bg-white overflow-hidden">
+            {([
+              ["היום", today],
+              ["אתמול", addDays(today, -1)],
+            ] as const).map(([label, key]) => (
+              <button
+                key={label}
+                type="button"
+                onClick={() => setReportDate(key)}
+                className={`text-sm px-3 py-2 border-l border-slate-200 last:border-l-0 transition-colors ${
+                  reportDate === key ? "bg-amber-100 text-slate-900 font-semibold" : "text-slate-600 hover:bg-slate-50"
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+            <button
+              type="button"
+              onClick={() => setReportDate(addDays(reportDate, -1))}
+              className="text-sm px-2.5 py-2 text-slate-600 hover:bg-slate-50"
+              title="יום אחורה"
+              aria-label="יום אחורה"
+            >
+              ▸
+            </button>
+            <input
+              type="date"
+              value={reportDate}
+              onChange={(e) => e.target.value && setReportDate(e.target.value)}
+              className="text-sm px-2 py-1.5 bg-white text-slate-700 outline-none"
+              aria-label="תאריך דוח ראיונות"
+            />
+            <button
+              type="button"
+              onClick={() => setReportDate(addDays(reportDate, 1))}
+              className="text-sm px-2.5 py-2 text-slate-600 hover:bg-slate-50"
+              title="יום קדימה"
+              aria-label="יום קדימה"
+            >
+              ◂
+            </button>
+          </div>
           <a
             href={`/api/interviews/export?date=${reportDate}${client ? `&client=${encodeURIComponent(client)}` : ""}`}
             className="inline-flex items-center gap-1.5 text-sm px-3 py-2 rounded-lg bg-amber-400 hover:bg-amber-500 text-slate-900 font-semibold"
