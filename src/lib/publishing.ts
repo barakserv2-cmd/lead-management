@@ -50,12 +50,14 @@ export function buildWaLink(
   code: string
 ): string | null {
   if (!phone) return null;
-  // The prefill is JUST the tracking code, kept ASCII on purpose. Any Hebrew in
-  // the prefill percent-encodes into a long %D7%..%D7%.. blob that fills the
-  // post, reads as spam in a group, and gives away that the post is automated.
-  // "BK-XXXX" is URL-safe as-is, so the link stays short and human-looking; the
-  // candidate types their own message around it and the code still arrives.
-  return `https://wa.me/${waNumber(phone)}?text=${code}`;
+  // A short, natural prefilled message, so the candidate lands in WhatsApp (and
+  // on WhatsApp's own "open app" page) with something real to send — not a bare
+  // "BK-XXXX" code, which reads as broken. The code in parentheses looks like a
+  // job reference and is what ties the reply back to this exact group. The link
+  // now lives in the post's first comment (not the body), so the longer encoded
+  // URL no longer triggers the ugly preview card or hurts reach.
+  const text = `היי, אשמח לפרטים על המשרה (${code})`;
+  return `https://wa.me/${waNumber(phone)}?text=${encodeURIComponent(text)}`;
 }
 
 // ── Copy composition ────────────────────────────────────────
