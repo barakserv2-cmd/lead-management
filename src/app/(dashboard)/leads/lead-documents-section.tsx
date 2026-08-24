@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import {
   uploadLeadDocument,
@@ -9,6 +9,7 @@ import {
   signLeadDocument,
 } from "@/lib/actions/leadDocuments";
 import { LEAD_DOC_TYPES, type LeadDocument, type LeadDocType } from "@/lib/leadDocTypes";
+import { DropError, filesFromClipboard, filesFromClipboardApi, filesFromDrop } from "@/lib/dropToFile";
 
 const KNOWN_TYPES: LeadDocType[] = [
   "form_101",
@@ -47,16 +48,50 @@ function DocSlot({
   const inputRef = useRef<HTMLInputElement | null>(null);
   const [over, setOver] = useState(false);
 
-  function handleDrop(e: React.DragEvent) {
+  // "מסמכים נוספים" הוא היחיד שמחזיק כמה קבצים — בשאר כל קובץ דורס את הקודם,
+  // אז נגררים כמה בבת אחת נלקח הראשון בלבד.
+  function accept(files: File[]) {
+    const chosen = type === "other" ? files : files.slice(0, 1);
+    for (const f of chosen) onFile(type, f);
+  }
+
+  async function handleDrop(e: React.DragEvent) {
     e.preventDefault();
     setOver(false);
-    const f = e.dataTransfer.files?.[0];
-    if (f) onFile(type, f);
+    try {
+      accept(await filesFromDrop(e.dataTransfer));
+    } catch (err) {
+      toast.error(err instanceof DropError ? err.message : "לא ניתן לקרוא את מה שנגרר");
+    }
+  }
+
+  function handlePaste(e: React.ClipboardEvent) {
+    const files = filesFromClipboard(e.clipboardData);
+    if (files.length === 0) return;
+    e.preventDefault();
+    accept(files);
+  }
+
+  async function handlePasteButton(e: React.MouseEvent) {
+    e.stopPropagation();
+    try {
+      accept(await filesFromClipboardApi());
+    } catch (err) {
+      toast.error(err instanceof DropError ? err.message : "הדבקה נכשלה");
+    }
   }
 
   if (doc) {
     return (
-      <div className="flex items-center justify-between gap-2 px-3 py-2 rounded-lg border border-green-200 bg-green-50/40 text-xs">
+      <div
+        onDragOver={(e) => { e.preventDefault(); setOver(true); }}
+        onDragLeave={() => setOver(false)}
+        onDrop={handleDrop}
+        onPaste={handlePaste}
+        className={`flex items-center justify-between gap-2 px-3 py-2 rounded-lg border text-xs transition-colors ${
+          over ? "border-cyan-500 bg-cyan-50" : "border-green-200 bg-green-50/40"
+        }`}
+      >
         <div className="flex items-center gap-2 min-w-0 flex-1">
           <span className="text-green-600 text-base leading-none">✓</span>
           <div className="min-w-0">
@@ -115,6 +150,7 @@ function DocSlot({
       onDragOver={(e) => { e.preventDefault(); setOver(true); }}
       onDragLeave={() => setOver(false)}
       onDrop={handleDrop}
+      onPaste={handlePaste}
       disabled={uploading}
       className={`w-full text-right px-3 py-2 rounded-lg border-2 border-dashed transition-all text-xs ${
         over
@@ -129,9 +165,18 @@ function DocSlot({
         <div className="min-w-0 flex-1">
           <div className="font-semibold">{label}</div>
           <div className="text-[10px] opacity-70">
-            {uploading ? "מעלה..." : "גרור קובץ או לחץ"}
+            {uploading ? "מעלה..." : "גרור קובץ, הדבק, או לחץ"}
           </div>
         </div>
+        {!uploading && (
+          <span
+            onClick={handlePasteButton}
+            title="הדבק תמונה או קובץ מהלוח"
+            className="flex-shrink-0 text-[10px] px-1.5 py-1 rounded border border-current/20 bg-white/70 hover:bg-white text-gray-600"
+          >
+            📋 הדבק
+          </span>
+        )}
       </div>
       <input
         ref={inputRef}
@@ -166,7 +211,9 @@ export function LeadDocumentsSection({ leadId }: { leadId: string }) {
     return () => { cancelled = true; };
   }, [leadId]);
 
-  async function uploadFile(type: LeadDocType, file: File) {
+
+
+  const uploadFile = useCallback(async function uploadFile(type: LeadDocType, file: File) {
     if (file.size > 10 * 1024 * 1024) {
       toast.error("הקובץ גדול מ-10MB");
       return;
@@ -195,7 +242,23 @@ export function LeadDocumentsSection({ leadId }: { leadId: string }) {
           : prev.filter((d) => d.doc_type !== type);
       return [res.document!, ...filtered];
     });
-  }
+  }, [leadId]);
+
+  // Ctrl+V בכל מקום בכרטיס — צילום מסך או תמונה שהועתקה מוואטסאפ ווב נכנס
+  // ל"מסמכים נוספים". לא נוגעים בהדבקה לתוך שדות טקסט, ולא בהדבקת טקסט.
+  useEffect(() => {
+    function onPaste(e: ClipboardEvent) {
+      if (e.defaultPrevented) return;
+      const target = e.target as HTMLElement | null;
+      if (target?.closest("input, textarea, [contenteditable='true']")) return;
+      const files = filesFromClipboard(e.clipboardData);
+      if (files.length === 0) return;
+      e.preventDefault();
+      for (const f of files) void uploadFile("other", f);
+    }
+    window.addEventListener("paste", onPaste);
+    return () => window.removeEventListener("paste", onPaste);
+  }, [uploadFile]);
 
   async function handleDelete(doc: LeadDocument) {
     if (!confirm("למחוק את המסמך?")) return;
@@ -242,6 +305,11 @@ export function LeadDocumentsSection({ leadId }: { leadId: string }) {
         </h4>
         {!loaded && <span className="text-[10px] text-gray-400">טוען...</span>}
       </div>
+
+      <p className="text-[10px] text-gray-400 mb-2 leading-relaxed">
+        גרירה מסייר הקבצים או מוואטסאפ דסקטופ · העתקה מוואטסאפ ווב והדבקה ב-Ctrl+V ·
+        גרירת תמונה מדף אינטרנט
+      </p>
 
       <div className="space-y-1.5">
         {KNOWN_TYPES.map((type) => (
