@@ -5,6 +5,8 @@ import { useEffect, useState } from "react";
 interface StartWorkDialogProps {
   leadId: string;
   leadName?: string;
+  /** true when the lead already started and only the date is being fixed. */
+  editOnly?: boolean;
   onConfirm: (data: { startDate: string }) => void;
   onCancel: () => void;
   loading?: boolean;
@@ -21,6 +23,7 @@ function todayIso(): string {
 export function StartWorkDialog({
   leadId,
   leadName,
+  editOnly,
   onConfirm,
   onCancel,
   loading,
@@ -89,7 +92,8 @@ export function StartWorkDialog({
           </div>
           <div>
             <h3 className="text-lg font-bold text-gray-900">
-              התחיל לעבוד{leadName ? ` — ${leadName}` : ""}
+              {editOnly ? "עריכת תאריך תחילת עבודה" : "התחיל לעבוד"}
+              {leadName ? ` — ${leadName}` : ""}
             </h3>
             <p className="text-sm text-gray-500">מתי הוא התחיל בפועל?</p>
           </div>
@@ -110,7 +114,7 @@ export function StartWorkDialog({
           {fetching
             ? "טוען את התאריך הקיים…"
             : existing
-              ? `התאריך שנקבע בקבלה: ${new Date(existing).toLocaleDateString("he-IL")}`
+              ? `התאריך הרשום כרגע: ${new Date(existing).toLocaleDateString("he-IL")}`
               : "לא נקבע תאריך בקבלה — ברירת המחדל היא היום"}
         </p>
 
@@ -121,7 +125,7 @@ export function StartWorkDialog({
             disabled={!canSubmit}
             className="flex-1 px-4 py-2.5 bg-emerald-600 text-white text-sm font-semibold rounded-lg hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
           >
-            {loading ? "שומר..." : "אישור תחילת עבודה"}
+            {loading ? "שומר..." : editOnly ? "שמור תאריך" : "אישור תחילת עבודה"}
           </button>
           <button
             type="button"

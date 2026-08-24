@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect, useLayoutEffect } from "react";
 import { createPortal } from "react-dom";
+import { useRouter } from "next/navigation";
 import { changeLeadStatus } from "@/lib/changeLeadStatusClient";
 import { updateLeadSubStatus } from "./actions";
 import {
@@ -35,6 +36,32 @@ import { EmploymentEndDialog } from "./employment-end-dialog";
 import { SubStatusPickerDialog, type SubStatusPickerConfig } from "./sub-status-picker-dialog";
 import { RejectionReasonDialog } from "./rejection-reason-dialog";
 import { StartWorkDialog } from "./start-work-dialog";
+
+// סטטוסים שנושאים תאריך — לחיצה עליהם כשהם כבר הסטטוס הנוכחי פותחת את
+// הדיאלוג לעריכת התאריך במקום להיות no-op.
+const DATE_EDITABLE_STATUSES = new Set<string>([
+  LeadStatus.STARTED,
+  LeadStatus.EMPLOYMENT_ENDED,
+]);
+
+// עריכת תאריך בלבד, בלי מעבר סטטוס — changeLeadStatus יוצא מוקדם כשהסטטוס
+// לא משתנה, אז הכתיבה עוברת דרך ה-PATCH של כרטיס הליד (כולל audit).
+async function patchLeadDate(leadId: string, field: string, value: string): Promise<string | null> {
+  try {
+    const res = await fetch(`/api/leads/${leadId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ [field]: value }),
+    });
+    if (!res.ok) {
+      const data = (await res.json().catch(() => ({}))) as { error?: string };
+      return data.error ?? res.statusText;
+    }
+    return null;
+  } catch (err) {
+    return err instanceof Error ? err.message : "שגיאת רשת בשמירת התאריך";
+  }
+}
 
 const QUICK_STATUSES = ALL_STATUSES
   .map((value) => ({
@@ -80,6 +107,7 @@ export function StatusSelect({
   const [showStartWorkDialog, setShowStartWorkDialog] = useState(false);
   const [subStatusDialog, setSubStatusDialog] = useState<{ open: boolean; targetStatus: LeadStatusValue | null }>({ open: false, targetStatus: null });
 
+  const router = useRouter();
   const ref = useRef<HTMLDivElement>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -148,6 +176,8 @@ export function StatusSelect({
   async function handleSelect(newStatus: string) {
     if (newStatus === status) {
       setOpen(false);
+      if (newStatus === LeadStatus.STARTED) setShowStartWorkDialog(true);
+      else if (newStatus === LeadStatus.EMPLOYMENT_ENDED) setShowEmploymentEndDialog(true);
       return;
     }
 
@@ -265,6 +295,20 @@ export function StatusSelect({
   async function handleEmploymentEndConfirm(data: { employmentEndDate: string }) {
     setLoading(true);
 
+    // כבר "סיום העסקה" — רק מתקנים את התאריך
+    if (status === LeadStatus.EMPLOYMENT_ENDED) {
+      const error = await patchLeadDate(leadId, "employment_end_date", data.employmentEndDate);
+      setLoading(false);
+      if (error) {
+        setToast({ message: error, type: "error" });
+        return;
+      }
+      setShowEmploymentEndDialog(false);
+      setToast({ message: "תאריך סיום ההעסקה עודכן", type: "success" });
+      router.refresh();
+      return;
+    }
+
     const result = await changeLeadStatus({
       leadId,
       newStatus: LeadStatus.EMPLOYMENT_ENDED,
@@ -287,6 +331,20 @@ export function StatusSelect({
 
   async function handleStartWorkConfirm(data: { startDate: string }) {
     setLoading(true);
+
+    // כבר "התחיל לעבוד" — רק מתקנים את התאריך
+    if (status === LeadStatus.STARTED) {
+      const error = await patchLeadDate(leadId, "start_date", data.startDate);
+      setLoading(false);
+      if (error) {
+        setToast({ message: error, type: "error" });
+        return;
+      }
+      setShowStartWorkDialog(false);
+      setToast({ message: "תאריך תחילת העבודה עודכן", type: "success" });
+      router.refresh();
+      return;
+    }
 
     const result = await changeLeadStatus({
       leadId,
@@ -448,11 +506,14 @@ export function StatusSelect({
                     key={s.value}
                     type="button"
                     onClick={() => handleSelect(s.value)}
-                    disabled={isActive}
+                    disabled={isActive && !DATE_EDITABLE_STATUSES.has(s.value)}
                     className={`w-full flex items-center gap-2 px-3 py-2 text-xs text-right hover:bg-gray-50 transition-colors ${isActive ? "bg-gray-50 font-semibold" : ""} ${!isActive && !isAllowed ? "opacity-40 cursor-not-allowed" : ""}`}
                   >
                     <span className={`w-2 h-2 rounded-full flex-shrink-0 ${s.dot}`} />
                     {s.label}
+                    {isActive && DATE_EDITABLE_STATUSES.has(s.value) && (
+                      <span className="text-[10px] font-normal text-cyan-700">עריכת תאריך</span>
+                    )}
                     {isActive && (
                       <svg className="w-3 h-3 mr-auto text-cyan-600" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
@@ -502,17 +563,22 @@ export function StatusSelect({
         loading={loading}
       />
 
-      <EmploymentEndDialog
-        open={showEmploymentEndDialog}
-        onConfirm={handleEmploymentEndConfirm}
-        onCancel={() => setShowEmploymentEndDialog(false)}
-        loading={loading}
-      />
+      {showEmploymentEndDialog && (
+        <EmploymentEndDialog
+          leadId={leadId}
+          leadName={leadName}
+          editOnly={status === LeadStatus.EMPLOYMENT_ENDED}
+          onConfirm={handleEmploymentEndConfirm}
+          onCancel={() => setShowEmploymentEndDialog(false)}
+          loading={loading}
+        />
+      )}
 
       {showStartWorkDialog && (
         <StartWorkDialog
           leadId={leadId}
           leadName={leadName}
+          editOnly={status === LeadStatus.STARTED}
           onConfirm={handleStartWorkConfirm}
           onCancel={() => setShowStartWorkDialog(false)}
           loading={loading}
