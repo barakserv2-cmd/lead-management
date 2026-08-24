@@ -63,10 +63,11 @@ const INTERVIEW_STATUSES: LeadStatusValue[] = [
   LeadStatus.LOST_CONTACT,
 ];
 
-type Range = "today" | "tomorrow" | "week" | "upcoming" | "past" | "all";
+type Range = "today" | "yesterday" | "tomorrow" | "week" | "upcoming" | "past" | "all";
 
 const RANGE_LABELS: Record<Range, string> = {
   today: "היום",
+  yesterday: "אתמול",
   tomorrow: "מחר",
   week: "7 ימים",
   upcoming: "כל הקרובים",
@@ -96,6 +97,7 @@ export function InterviewsContent({ rows }: { rows: InterviewRow[] }) {
     return rows.filter((r) => {
       const key = ilDateKey(r.interview_date);
       if (range === "today" && key !== today) return false;
+      if (range === "yesterday" && key !== addDays(today, -1)) return false;
       if (range === "tomorrow" && key !== addDays(today, 1)) return false;
       if (range === "week" && (key < today || key > addDays(today, 7))) return false;
       if (range === "upcoming" && key < today) return false;
@@ -131,6 +133,7 @@ export function InterviewsContent({ rows }: { rows: InterviewRow[] }) {
   const exportUrl = (() => {
     const p = new URLSearchParams({ type: "interviews" });
     if (range === "today") { p.set("from", today); p.set("to", today); }
+    else if (range === "yesterday") { p.set("from", addDays(today, -1)); p.set("to", addDays(today, -1)); }
     else if (range === "tomorrow") { p.set("from", addDays(today, 1)); p.set("to", addDays(today, 1)); }
     else if (range === "week") { p.set("from", today); p.set("to", addDays(today, 7)); }
     else if (range === "upcoming") p.set("from", today);
