@@ -8,6 +8,11 @@ import {
 } from "@/lib/whatsappService";
 import { LeadStatus } from "@/lib/stateMachine";
 import { analyzeWhatsappMessage, type WhatsAppNLU } from "@/lib/ai/parseWhatsappMessage";
+import {
+  createLeadFromPublication,
+  matchPublication,
+  recordResponse,
+} from "@/lib/fbInbound";
 
 function getSupabase() {
   return createServerClient(
@@ -73,11 +78,37 @@ export async function POST(req: NextRequest) {
       .in("phone", phoneVariants)
       .order("created_at", { ascending: false })
       .limit(1);
-    const lead = leadRows?.[0] ?? null;
+    let lead = leadRows?.[0] ?? null;
+
+    // Did this message come from a Facebook-group post? The wa.me link we
+    // publish prefills a BK-XXXX code, so its presence both identifies the
+    // exact post and proves the sender is a candidate — which is what lets us
+    // open a lead for a number nobody in the CRM has seen before.
+    const publication = isIncoming ? await matchPublication(messageText) : null;
+
+    if (!lead && publication) {
+      const senderName: string | null = body.senderData?.senderName ?? null;
+      const newLeadId = await createLeadFromPublication(phone, senderName, publication);
+      if (newLeadId) {
+        const { data: created } = await supabase
+          .from("leads")
+          .select("id, status, name, location, job_title")
+          .eq("id", newLeadId)
+          .maybeSingle();
+        lead = created ?? null;
+        console.log(
+          `[WhatsApp Webhook] New lead ${newLeadId} from group post ${publication.tracking_code}`
+        );
+      }
+    }
 
     // No lead found — ignore
     if (!lead) {
       return NextResponse.json({ ok: true });
+    }
+
+    if (publication) {
+      await recordResponse(lead.id, publication);
     }
 
     // Recruiter replied from their phone app → mirror as a recruiter message.
