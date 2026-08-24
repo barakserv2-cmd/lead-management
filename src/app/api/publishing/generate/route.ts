@@ -50,28 +50,29 @@ const SYSTEM_PROMPT = `את/ה קופירייטר/ית של "ברק שירותי
 // free-form JSON in a reply is fragile once the copy itself contains quotes.
 const POST_TOOL = {
   name: "submit_post",
-  description: "מוסר/ת את המודעה שנכתבה ואת הוריאציות שלה.",
+  description: "מוסר/ת את המודעה שנכתבה.",
   input_schema: {
     type: "object" as const,
     properties: {
       title: { type: "string", description: "כותרת פנימית קצרה לזיהוי במערכת (לא חלק מהמודעה)" },
-      body: { type: "string", description: "המודעה הראשית, מוכנה להדבקה" },
-      variants: {
-        type: "array",
-        description: "מודעות חלופיות — כל אחת עם הוק וניסוח שונים לגמרי",
-        items: {
-          type: "object",
-          properties: {
-            label: { type: "string", description: "הזווית בשתיים-שלוש מילים" },
-            body: { type: "string" },
-          },
-          required: ["label", "body"],
-        },
-      },
+      body: { type: "string", description: "המודעה עצמה, מוכנה להדבקה" },
     },
-    required: ["title", "body", "variants"],
+    required: ["title", "body"],
   },
 };
+
+// Angles for the rewrites. Each variant is written against a DIFFERENT one, so
+// the difference between them is structural rather than a synonym swap.
+const ANGLE_POOL = [
+  "כמה מרוויחים ומתי מקבלים",
+  "דיור והגעה לאילת",
+  "מתחילים השבוע",
+  "בלי ניסיון קודם",
+  "איך נראים החיים באילת",
+  "משמרות ויציבות",
+  "הצוות והאווירה במקום",
+  "למי זה מתאים ולמי לא",
+];
 
 interface GenerateBody {
   role_key?: string;
@@ -83,10 +84,38 @@ interface GenerateBody {
   brief?: string;
 }
 
-interface GeneratedPost {
+interface GeneratedAd {
   title: string;
   body: string;
-  variants: { label: string; body: string }[];
+}
+
+/**
+ * One ad, one call.
+ *
+ * Asking for the base post plus every rewrite in a single response measured
+ * 23.4s (928 output tokens generated one after another — Hebrew costs 2-3x the
+ * tokens of English). Splitting it into concurrent one-ad calls puts the whole
+ * batch at the speed of its slowest single ad: 14.5s for the same four ads,
+ * same model. The shared system prompt is cached so the extra calls stay cheap.
+ */
+async function writeAd(
+  anthropic: Anthropic,
+  instruction: string,
+  facts: string
+): Promise<GeneratedAd | null> {
+  const message = await anthropic.messages.create({
+    model: "claude-opus-5",
+    max_tokens: 1500,
+    system: [{ type: "text", text: SYSTEM_PROMPT, cache_control: { type: "ephemeral" } }],
+    tools: [POST_TOOL],
+    tool_choice: { type: "tool", name: POST_TOOL.name },
+    messages: [{ role: "user", content: `${instruction}\n\nנתונים:\n${facts}` }],
+  });
+
+  const block = message.content.find((c) => c.type === "tool_use");
+  if (!block || block.type !== "tool_use") return null;
+  const ad = block.input as GeneratedAd;
+  return ad.body?.trim() ? ad : null;
 }
 
 export async function POST(req: NextRequest) {
@@ -136,42 +165,46 @@ export async function POST(req: NextRequest) {
 
   const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
-  let parsed: GeneratedPost;
-  try {
-    const message = await anthropic.messages.create({
-      model: "claude-opus-5",
-      max_tokens: 4000,
-      system: SYSTEM_PROMPT,
-      tools: [POST_TOOL],
-      tool_choice: { type: "tool", name: POST_TOOL.name },
-      messages: [
-        {
-          role: "user",
-          content: `כתוב/כתבי מודעת דרושים + ${variantCount} וריאציות.\n\nנתונים:\n${facts.join("\n")}`,
-        },
-      ],
-    });
+  const factText = facts.join("\n");
 
-    const block = message.content.find((c) => c.type === "tool_use");
-    if (!block || block.type !== "tool_use") {
-      console.error("[publishing/generate] no tool_use in reply", message.stop_reason);
-      return bad("המודל לא החזיר מודעה. נסה/י שוב.", 502);
-    }
-    parsed = block.input as GeneratedPost;
-  } catch (e) {
-    const detail = e instanceof Error ? e.message : String(e);
+  // Skip the angle the base post already uses, so a rewrite never repeats it.
+  const angles = ANGLE_POOL.filter((a) => a !== b.angle).slice(0, variantCount);
+
+  const [baseResult, ...variantResults] = await Promise.allSettled([
+    writeAd(anthropic, "כתוב/כתבי מודעת דרושים אחת.", factText),
+    ...angles.map((angle) =>
+      writeAd(
+        anthropic,
+        `כתוב/כתבי מודעת דרושים אחת שכולה סביב הזווית: "${angle}". הוק אחר, מבנה אחר וניסוח אחר ממודעה סטנדרטית לתפקיד הזה.`,
+        factText
+      )
+    ),
+  ]);
+
+  if (baseResult.status === "rejected") {
+    const detail =
+      baseResult.reason instanceof Error ? baseResult.reason.message : String(baseResult.reason);
     console.error("[publishing/generate] anthropic error:", detail);
     return bad(`יצירת הפוסט נכשלה: ${detail.slice(0, 200)}`, 502);
   }
+  if (!baseResult.value) return bad("המודל החזיר פוסט ריק. נסה/י שוב.", 502);
 
-  if (!parsed.body?.trim()) return bad("המודל החזיר פוסט ריק. נסה/י שוב.", 502);
+  // A rewrite that failed is dropped, not fatal — the recruiter still gets the
+  // main ad and whatever else came back.
+  const variants = variantResults
+    .map((r, i) =>
+      r.status === "fulfilled" && r.value
+        ? { label: angles[i], body: r.value.body.trim() }
+        : null
+    )
+    .filter((v): v is { label: string; body: string } => v !== null);
+
+  const failed = variantResults.length - variants.length;
+  if (failed > 0) console.warn(`[publishing/generate] ${failed} variant(s) failed`);
 
   return NextResponse.json({
-    title: parsed.title?.trim() || role?.role_label || job?.title || "מודעת דרושים",
-    body: parsed.body.trim(),
-    variants: (parsed.variants ?? [])
-      .filter((v) => v?.body?.trim())
-      .slice(0, variantCount)
-      .map((v) => ({ label: v.label?.trim() || null, body: v.body.trim() })),
+    title: baseResult.value.title?.trim() || role?.role_label || job?.title || "מודעת דרושים",
+    body: baseResult.value.body.trim(),
+    variants,
   });
 }
