@@ -13,7 +13,9 @@ import { admin, bad, currentUser, unauthorized } from "@/lib/publishingAuth";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
-export const maxDuration = 60;
+// Opus writes a base post + N rewrites in one call; measured ~32s for 3
+// variants, so 60s left no headroom at the top of the allowed range.
+export const maxDuration = 120;
 
 const SYSTEM_PROMPT = `את/ה קופירייטר/ית של "ברק שירותים" — סוכנות גיוס והשמה לאירוח ותיירות באילת (מלונות, מסעדות, ברים, קמעונאות).
 המשימה: לכתוב מודעת דרושים אורגנית לקבוצות "דרושים" בפייסבוק.
@@ -40,8 +42,36 @@ const SYSTEM_PROMPT = `את/ה קופירייטר/ית של "ברק שירותי
 כל וריאציה = מודעה עצמאית עם הוק אחר, סדר אחר וניסוח אחר — לא שכתוב מילים נרדפות.
 זווית לדוגמה: כסף / דיור / התחלה מיידית / בלי ניסיון / חיים באילת / שקט תעשייתי מול הים.
 
-החזר/י JSON בלבד, ללא טקסט נלווה, במבנה:
-{"title": "כותרת פנימית קצרה למערכת", "body": "המודעה הראשית", "variants": [{"label": "זווית", "body": "..."}]}`;
+החזר/י את התוצאה דרך הכלי submit_post בלבד.`;
+
+// Structured output via a forced tool call. The obvious alternative — asking
+// for raw JSON and prefilling the assistant turn with "{" — is rejected by
+// claude-opus-5 ("This model does not support assistant message prefill"), and
+// free-form JSON in a reply is fragile once the copy itself contains quotes.
+const POST_TOOL = {
+  name: "submit_post",
+  description: "מוסר/ת את המודעה שנכתבה ואת הוריאציות שלה.",
+  input_schema: {
+    type: "object" as const,
+    properties: {
+      title: { type: "string", description: "כותרת פנימית קצרה לזיהוי במערכת (לא חלק מהמודעה)" },
+      body: { type: "string", description: "המודעה הראשית, מוכנה להדבקה" },
+      variants: {
+        type: "array",
+        description: "מודעות חלופיות — כל אחת עם הוק וניסוח שונים לגמרי",
+        items: {
+          type: "object",
+          properties: {
+            label: { type: "string", description: "הזווית בשתיים-שלוש מילים" },
+            body: { type: "string" },
+          },
+          required: ["label", "body"],
+        },
+      },
+    },
+    required: ["title", "body", "variants"],
+  },
+};
 
 interface GenerateBody {
   role_key?: string;
@@ -106,35 +136,32 @@ export async function POST(req: NextRequest) {
 
   const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
-  let raw: string;
+  let parsed: GeneratedPost;
   try {
     const message = await anthropic.messages.create({
       model: "claude-opus-5",
-      max_tokens: 3000,
+      max_tokens: 4000,
       system: SYSTEM_PROMPT,
+      tools: [POST_TOOL],
+      tool_choice: { type: "tool", name: POST_TOOL.name },
       messages: [
         {
           role: "user",
           content: `כתוב/כתבי מודעת דרושים + ${variantCount} וריאציות.\n\nנתונים:\n${facts.join("\n")}`,
         },
-        // Prefilled assistant turn — forces the reply to start as JSON.
-        { role: "assistant", content: "{" },
       ],
     });
-    const block = message.content.find((c) => c.type === "text");
-    raw = "{" + (block && block.type === "text" ? block.text : "");
-  } catch (e) {
-    console.error("[publishing/generate] anthropic error", e);
-    return bad("יצירת הפוסט נכשלה. נסה/י שוב.", 502);
-  }
 
-  let parsed: GeneratedPost;
-  try {
-    const jsonText = raw.slice(0, raw.lastIndexOf("}") + 1);
-    parsed = JSON.parse(jsonText) as GeneratedPost;
-  } catch {
-    console.error("[publishing/generate] unparsable reply", raw.slice(0, 400));
-    return bad("התשובה מהמודל לא הייתה בפורמט תקין. נסה/י שוב.", 502);
+    const block = message.content.find((c) => c.type === "tool_use");
+    if (!block || block.type !== "tool_use") {
+      console.error("[publishing/generate] no tool_use in reply", message.stop_reason);
+      return bad("המודל לא החזיר מודעה. נסה/י שוב.", 502);
+    }
+    parsed = block.input as GeneratedPost;
+  } catch (e) {
+    const detail = e instanceof Error ? e.message : String(e);
+    console.error("[publishing/generate] anthropic error:", detail);
+    return bad(`יצירת הפוסט נכשלה: ${detail.slice(0, 200)}`, 502);
   }
 
   if (!parsed.body?.trim()) return bad("המודל החזיר פוסט ריק. נסה/י שוב.", 502);
