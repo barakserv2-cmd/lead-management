@@ -83,6 +83,7 @@ export function InterviewsContent({ rows }: { rows: InterviewRow[] }) {
   const [status, setStatus] = useState("");
 
   const today = todayKey();
+  const [reportDate, setReportDate] = useState(today);
 
   const roleOptions = useMemo(() => Array.from(new Set(rows.map((r) => r.job_title).filter((x): x is string => !!x))).sort(), [rows]);
   const clientOptions = useMemo(() => Array.from(new Set(rows.map((r) => r.client).filter((x): x is string => !!x))).sort(), [rows]);
@@ -151,12 +152,28 @@ export function InterviewsContent({ rows }: { rows: InterviewRow[] }) {
             <span className="font-semibold text-slate-700">{upcomingCount}</span> קרובים · לוח משותף לכל המחלקות
           </p>
         </div>
-        <a
-          href={exportUrl}
-          className="inline-flex items-center gap-1.5 text-sm px-3 py-2 rounded-lg border border-slate-300 bg-white hover:bg-slate-50 text-slate-700"
-        >
-          ⬇ ייצוא לאקסל
-        </a>
+        <div className="flex flex-wrap items-center gap-2">
+          <input
+            type="date"
+            value={reportDate}
+            onChange={(e) => setReportDate(e.target.value)}
+            className="text-sm px-2 py-2 rounded-lg border border-slate-300 bg-white text-slate-700"
+            aria-label="תאריך דוח ראיונות"
+          />
+          <a
+            href={`/api/interviews/export?date=${reportDate}${client ? `&client=${encodeURIComponent(client)}` : ""}`}
+            className="inline-flex items-center gap-1.5 text-sm px-3 py-2 rounded-lg bg-amber-400 hover:bg-amber-500 text-slate-900 font-semibold"
+            title="דוח ראיונות יומי בפורמט המשרד (XLSX מעוצב)"
+          >
+            ⬇ דוח ראיונות
+          </a>
+          <a
+            href={exportUrl}
+            className="inline-flex items-center gap-1.5 text-sm px-3 py-2 rounded-lg border border-slate-300 bg-white hover:bg-slate-50 text-slate-700"
+          >
+            ⬇ ייצוא CSV
+          </a>
+        </div>
       </div>
 
       {/* Range chips */}
