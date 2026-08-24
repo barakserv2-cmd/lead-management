@@ -4,6 +4,7 @@ import { LeadStatus, type LeadStatusValue } from "@/lib/stateMachine";
 import { AutoRefresh } from "./auto-refresh";
 import { StatusSelect } from "../leads/status-select";
 import { LeadNotesDialog } from "../leads/lead-notes-dialog";
+import { DayNav } from "./day-nav";
 
 export const dynamic = "force-dynamic";
 
@@ -33,9 +34,17 @@ function ilTime(iso: string): string {
   });
 }
 
-function ilToday(): string {
-  return new Date().toLocaleDateString("he-IL", {
-    timeZone: "Asia/Jerusalem",
+// YYYY-MM-DD לפי לוח ישראל — מפתח היום שהלוח עובד לפיו
+function ilDateKey(d: Date): string {
+  return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Jerusalem" }).format(d);
+}
+function addDays(key: string, n: number): string {
+  const d = new Date(`${key}T12:00:00`);
+  d.setDate(d.getDate() + n);
+  return d.toISOString().slice(0, 10);
+}
+function ilDayLabel(key: string): string {
+  return new Date(`${key}T12:00:00`).toLocaleDateString("he-IL", {
     weekday: "long",
     day: "numeric",
     month: "long",
@@ -67,11 +76,21 @@ const SUMMARY: { label: string; statuses: LeadStatusValue[]; tone: string }[] = 
 export default async function TodayPage({
   searchParams,
 }: {
-  searchParams: Promise<{ recruiter?: string }>;
+  searchParams: Promise<{ recruiter?: string; date?: string }>;
 }) {
-  const { recruiter: recruiterParam } = await searchParams;
+  const { recruiter: recruiterParam, date: dateParam } = await searchParams;
+
+  const todayKey = ilDateKey(new Date());
+  // תאריך עתידי או פורמט לא תקין — נופלים חזרה להיום במקום להציג לוח ריק
+  const requested = /^\d{4}-\d{2}-\d{2}$/.test(dateParam ?? "") ? dateParam! : todayKey;
+  const selectedDate = requested > todayKey ? todayKey : requested;
+  const isToday = selectedDate === todayKey;
+  const isYesterday = selectedDate === addDays(todayKey, -1);
+
   const supabase = getSupabaseAdmin();
-  const { data, error } = await supabase.rpc("get_today_leads_by_recruiter");
+  const { data, error } = await supabase.rpc("get_today_leads_by_recruiter", {
+    p_date: selectedDate,
+  });
   const rows = (data ?? []) as Row[];
 
   // Group into: recruiters (by name) · "handled but unattributed" (real status,
@@ -113,29 +132,41 @@ export default async function TodayPage({
 
   return (
     <div dir="rtl" className="p-6 max-w-6xl mx-auto">
-      {/* refresh the board every 15s so handling/new leads appear near-live */}
-      <AutoRefresh intervalMs={15000} />
+      {/* refresh the board every 15s so handling/new leads appear near-live —
+          pointless on a past day, where nothing new can land */}
+      {isToday && <AutoRefresh intervalMs={15000} />}
 
       {/* ═══ Header ═══ */}
       <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-3 mb-4">
         <div>
-          <h1 className="text-2xl font-bold text-slate-800">לידים של היום</h1>
+          <h1 className="text-2xl font-bold text-slate-800">
+            {isToday ? "לידים של היום" : isYesterday ? "לידים של אתמול" : "לידים לפי תאריך"}
+          </h1>
           <p className="text-sm text-slate-500 mt-1">
-            {ilToday()} · מחולק לפי הרכזת שטיפלה · מתעדכן אוטומטית
+            {ilDayLabel(selectedDate)} · מחולק לפי הרכזת שטיפלה
+            {isToday ? " · מתעדכן אוטומטית" : ""}
           </p>
         </div>
-        <Link
-          href="/leads"
-          className="text-sm text-cyan-700 hover:underline"
-        >
-          לכל הלידים ←
-        </Link>
+        <div className="flex items-center gap-3">
+          <DayNav
+            selected={selectedDate}
+            todayKey={todayKey}
+            yesterdayKey={addDays(todayKey, -1)}
+            recruiter={recruiterParam ?? null}
+          />
+          <Link
+            href="/leads"
+            className="text-sm text-cyan-700 hover:underline whitespace-nowrap"
+          >
+            לכל הלידים ←
+          </Link>
+        </div>
       </div>
 
       {/* ═══ Summary strip ═══ */}
       <div className="grid grid-cols-3 md:grid-cols-6 gap-2 mb-4">
         <div className="bg-white border rounded-xl px-4 py-3">
-          <div className="text-xs text-slate-500">סה״כ היום</div>
+          <div className="text-xs text-slate-500">{isToday ? "סה״כ היום" : "סה״כ ביום זה"}</div>
           <div className="text-2xl font-bold tabular-nums text-slate-900">{visibleRows.length}</div>
         </div>
         {summary.map((s) => (
@@ -150,7 +181,7 @@ export default async function TodayPage({
       {ordered.length > 1 && (
         <div className="flex items-center gap-2 flex-wrap mb-4">
           <Link
-            href="/today"
+            href={isToday ? "/today" : `/today?date=${selectedDate}`}
             className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-colors ${
               !activeRecruiter
                 ? "border-cyan-400 bg-cyan-600 text-white"
@@ -162,7 +193,7 @@ export default async function TodayPage({
           {ordered.map(([key, group]) => (
             <Link
               key={key}
-              href={`/today?recruiter=${encodeURIComponent(key)}`}
+              href={`/today?recruiter=${encodeURIComponent(key)}${isToday ? "" : `&date=${selectedDate}`}`}
               className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-colors ${
                 activeRecruiter === key
                   ? "border-cyan-400 bg-cyan-600 text-white"
@@ -185,7 +216,7 @@ export default async function TodayPage({
 
       {!error && rows.length === 0 && (
         <div className="rounded-lg border border-slate-200 bg-white px-4 py-10 text-center text-slate-400">
-          עדיין לא נכנסו לידים היום.
+          {isToday ? "עדיין לא נכנסו לידים היום." : "לא נכנסו לידים בתאריך הזה."}
         </div>
       )}
 
