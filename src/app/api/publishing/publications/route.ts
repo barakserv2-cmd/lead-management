@@ -117,7 +117,6 @@ export async function POST(req: NextRequest) {
     ...variants.map((v) => ({ body: v.body, variant_id: v.id })),
   ];
 
-  const roleLabel = post.title;
   const rows = [];
   const blocked: { name: string; until: string }[] = [];
 
@@ -134,7 +133,7 @@ export async function POST(req: NextRequest) {
     i++;
 
     const phone = phoneByOwner.get(g.owner_email) ?? settings?.contact_phone ?? null;
-    const link = buildWaLink(phone, roleLabel, code);
+    const link = buildWaLink(phone, code);
     const filled = fillPlaceholders(pick.body, {
       ...(b.vars ?? {}),
       code,
@@ -147,7 +146,7 @@ export async function POST(req: NextRequest) {
       group_id: g.id,
       variant_id: pick.variant_id,
       owner_email: g.owner_email,
-      body_snapshot: withCta(filled, link, code, settings?.signature ?? null),
+      body_snapshot: withCta(filled, link, settings?.signature ?? null),
       tracking_code: code,
       status: "queued" as const,
       scheduled_for: b.scheduled_for ?? null,

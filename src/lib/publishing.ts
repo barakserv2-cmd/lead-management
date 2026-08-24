@@ -47,12 +47,15 @@ export function waNumber(phone: string): string {
  */
 export function buildWaLink(
   phone: string | null | undefined,
-  roleLabel: string,
   code: string
 ): string | null {
   if (!phone) return null;
-  const text = `היי, ראיתי את המודעה של ${roleLabel} באילת ואני מעוניין/ת (${code})`;
-  return `https://wa.me/${waNumber(phone)}?text=${encodeURIComponent(text)}`;
+  // The prefill is JUST the tracking code, kept ASCII on purpose. Any Hebrew in
+  // the prefill percent-encodes into a long %D7%..%D7%.. blob that fills the
+  // post, reads as spam in a group, and gives away that the post is automated.
+  // "BK-XXXX" is URL-safe as-is, so the link stays short and human-looking; the
+  // candidate types their own message around it and the code still arrives.
+  return `https://wa.me/${waNumber(phone)}?text=${code}`;
 }
 
 // ── Copy composition ────────────────────────────────────────
@@ -77,11 +80,16 @@ export function fillPlaceholders(body: string, vars: PostVars): string {
 }
 
 /** Appends the CTA + tracking code exactly once. */
-export function withCta(body: string, link: string | null, code: string, signature?: string | null): string {
+export function withCta(body: string, link: string | null, signature?: string | null): string {
   const parts = [body.trim()];
   if (signature?.trim()) parts.push(signature.trim());
-  if (link && !body.includes(link)) parts.push(`👈 לפרטים ושליחת קורות חיים: ${link}`);
-  if (!body.includes(code)) parts.push(`קוד משרה: ${code}`);
+  // One clean CTA line, appended after the copy's own closing sentence. The
+  // tracking code rides invisibly inside the wa.me prefill, so there is no
+  // robotic "קוד משרה:" line any more — that line, plus the huge encoded URL,
+  // were what made the post look machine-generated.
+  if (link && !body.includes(link)) {
+    parts.push(`👇 שליחת הודעה בוואטסאפ:\n${link}`);
+  }
   return parts.join("\n\n");
 }
 
