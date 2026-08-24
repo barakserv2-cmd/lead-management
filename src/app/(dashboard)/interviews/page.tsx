@@ -19,7 +19,7 @@ export default async function InterviewsPage() {
     supabase
       .from("leads")
       .select(
-        "id, name, phone, job_title, location, status, interview_date, interview_type, interview_notes, hired_client, hired_position, handled_by, source, preferences, notes"
+        "id, name, phone, job_title, location, status, interview_date, interview_type, interview_notes, rejection_reason, hired_client, hired_position, handled_by, source, preferences, notes"
       )
       .not("interview_date", "is", null)
       .gte("interview_date", from.toISOString())
@@ -56,6 +56,7 @@ export default async function InterviewsPage() {
       interview_date: l.interview_date as string,
       interview_type: (l.interview_type as InterviewRow["interview_type"]) ?? null,
       interview_notes: (l.interview_notes as string | null) ?? null,
+      rejection_reason: (l.rejection_reason as string | null) ?? null,
       client: (l.hired_client as string | null) ?? matched,
       recruiter: handledBy ? (nameByEmail.get(handledBy) ?? handledBy) : null,
       source: (l.source as string | null) ?? null,

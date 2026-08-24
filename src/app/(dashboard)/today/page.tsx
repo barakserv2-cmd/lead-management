@@ -58,7 +58,7 @@ const SUMMARY: { label: string; statuses: LeadStatusValue[]; tone: string }[] = 
   },
   { label: "התקבלו", statuses: [LeadStatus.HIRED, LeadStatus.STARTED], tone: "text-emerald-700" },
   {
-    label: "לא מתאים / נדחה",
+    label: "לא מתאים / לא התקבל",
     statuses: [LeadStatus.NOT_SUITABLE, LeadStatus.REJECTED, LeadStatus.LOST_CONTACT],
     tone: "text-slate-500",
   },

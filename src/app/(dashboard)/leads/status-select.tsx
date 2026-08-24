@@ -33,6 +33,7 @@ import { InterviewScheduleDialog } from "./interview-schedule-dialog";
 import { HiredConfirmDialog } from "./hired-confirm-dialog";
 import { EmploymentEndDialog } from "./employment-end-dialog";
 import { SubStatusPickerDialog, type SubStatusPickerConfig } from "./sub-status-picker-dialog";
+import { RejectionReasonDialog } from "./rejection-reason-dialog";
 
 const QUICK_STATUSES = ALL_STATUSES
   .map((value) => ({
@@ -53,11 +54,14 @@ function getStatusStyle(status: string) {
 
 export function StatusSelect({
   leadId,
+  leadName,
   currentStatus,
   currentSubStatus,
   allowedStatuses,
 }: {
   leadId: string;
+  /** Shown in the "לא התקבל" dialog so the recruiter sees who they are closing. */
+  leadName?: string;
   currentStatus: string;
   currentSubStatus?: string | null;
   /** Optional whitelist — further restricts the visible options (e.g. the interviews board). */
@@ -71,6 +75,7 @@ export function StatusSelect({
   const [showInterviewDialog, setShowInterviewDialog] = useState(false);
   const [showHiredDialog, setShowHiredDialog] = useState(false);
   const [showEmploymentEndDialog, setShowEmploymentEndDialog] = useState(false);
+  const [showRejectionDialog, setShowRejectionDialog] = useState(false);
   const [subStatusDialog, setSubStatusDialog] = useState<{ open: boolean; targetStatus: LeadStatusValue | null }>({ open: false, targetStatus: null });
 
   const ref = useRef<HTMLDivElement>(null);
@@ -161,6 +166,12 @@ export function StatusSelect({
     // Intercept EMPLOYMENT_ENDED — ask for the end-of-employment date
     if (newStatus === LeadStatus.EMPLOYMENT_ENDED) {
       setShowEmploymentEndDialog(true);
+      return;
+    }
+
+    // Intercept REJECTED — a written reason is mandatory, no way around it
+    if (newStatus === LeadStatus.REJECTED) {
+      setShowRejectionDialog(true);
       return;
     }
 
@@ -264,6 +275,30 @@ export function StatusSelect({
       setSubStatus(null);
       setToast({ message: "סיום ההעסקה נרשם", type: "success" });
     }
+  }
+
+  async function handleRejectionConfirm(data: { rejectionReason: string }) {
+    setLoading(true);
+
+    const result = await changeLeadStatus({
+      leadId,
+      newStatus: LeadStatus.REJECTED,
+      userId: "user",
+      notes: `לא התקבל: ${data.rejectionReason}`,
+      extra: { rejectionReason: data.rejectionReason },
+    });
+
+    setLoading(false);
+
+    if (!result.success) {
+      setToast({ message: result.error ?? "שגיאה בעדכון", type: "error" });
+      return;
+    }
+
+    setShowRejectionDialog(false);
+    setStatus(LeadStatus.REJECTED);
+    setSubStatus(null);
+    setToast({ message: "נשמר — לא התקבל", type: "success" });
   }
 
   async function handleSubStatusConfirm(chosenSub: string) {
@@ -441,6 +476,16 @@ export function StatusSelect({
         onCancel={() => setShowEmploymentEndDialog(false)}
         loading={loading}
       />
+
+      {showRejectionDialog && (
+        <RejectionReasonDialog
+          open
+          leadName={leadName}
+          onConfirm={handleRejectionConfirm}
+          onCancel={() => setShowRejectionDialog(false)}
+          loading={loading}
+        />
+      )}
 
       <SubStatusPickerDialog
         open={subStatusDialog.open}

@@ -38,7 +38,7 @@ export const STATUS_LABELS: Record<LeadStatusValue, string> = {
   [LeadStatus.HIRED]: "התקבל",
   [LeadStatus.STARTED]: "התחיל לעבוד",
   [LeadStatus.NO_SHOW]: "לא הגיע",
-  [LeadStatus.REJECTED]: "נדחה",
+  [LeadStatus.REJECTED]: "לא התקבל",
   [LeadStatus.LOST_CONTACT]: "אבד קשר",
   [LeadStatus.NOT_SUITABLE]: "לא מתאים",
   [LeadStatus.INVALID_PHONE]: "מספר לא תקין",

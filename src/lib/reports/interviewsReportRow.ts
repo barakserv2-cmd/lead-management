@@ -5,7 +5,7 @@ import type { InterviewReportRow } from "./interviewsXlsx";
 const EXTRA_SOURCE = /אקסטר|excel/i;
 
 export const INTERVIEW_REPORT_SELECT =
-  "name, phone, interview_date, job_title, hired_position, hired_client, interview_notes, start_date, status, source, preferences";
+  "name, phone, interview_date, job_title, hired_position, hired_client, interview_notes, rejection_reason, start_date, status, source, preferences";
 
 export function leadToReportRow(l: Record<string, unknown>): InterviewReportRow {
   const status = l.status as string;
@@ -23,13 +23,22 @@ export function leadToReportRow(l: Record<string, unknown>): InterviewReportRow 
       : status === LeadStatus.REJECTED
         ? "לא התקבל"
         : "";
+  // הסיבה ל"לא התקבל" נדחפת לעמודת ההערות הקיימת — הפורמט של המשרד
+  // נשאר בדיוק אותו דבר, אבל למשרד יש תיעוד למה המועמד נפסל.
+  const interviewNotes = (l.interview_notes as string | null) ?? null;
+  const rejectionReason = (l.rejection_reason as string | null) ?? null;
+  const notes =
+    accepted === "לא התקבל" && rejectionReason
+      ? [interviewNotes, `לא התקבל: ${rejectionReason}`].filter(Boolean).join(" | ")
+      : interviewNotes;
+
   return {
     name: (l.name as string) ?? "ללא שם",
     phone: (l.phone as string | null) ?? null,
     interview_date: l.interview_date as string,
     role: (l.hired_position as string | null) ?? (l.job_title as string | null) ?? null,
     isExtra: EXTRA_SOURCE.test(String(l.source ?? "")),
-    notes: (l.interview_notes as string | null) ?? null,
+    notes,
     commitment_date: (l.start_date as string | null) ?? null,
     arrived,
     accepted,

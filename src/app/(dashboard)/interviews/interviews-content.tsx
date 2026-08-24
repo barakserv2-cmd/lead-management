@@ -17,6 +17,7 @@ export interface InterviewRow {
   interview_date: string; // ISO
   interview_type: "in_person" | "video" | null;
   interview_notes: string | null;
+  rejection_reason: string | null;
   client: string | null;
   recruiter: string | null;
   source: string | null;
@@ -108,7 +109,7 @@ export function InterviewsContent({ rows }: { rows: InterviewRow[] }) {
       if (type && r.interview_type !== type) return false;
       if (status && r.status !== status) return false;
       if (qn) {
-        const hay = `${r.name} ${r.job_title ?? ""} ${r.client ?? ""} ${r.location ?? ""} ${r.interview_notes ?? ""} ${r.recruiter ?? ""}`.toLowerCase();
+        const hay = `${r.name} ${r.job_title ?? ""} ${r.client ?? ""} ${r.location ?? ""} ${r.interview_notes ?? ""} ${r.rejection_reason ?? ""} ${r.recruiter ?? ""}`.toLowerCase();
         const phoneHit = qDigits.length >= 3 && (r.phone ?? "").replace(/\D/g, "").includes(qDigits);
         if (!hay.includes(qn) && !phoneHit) return false;
       }
@@ -326,6 +327,12 @@ export function InterviewsContent({ rows }: { rows: InterviewRow[] }) {
                             {r.source && <span className="text-slate-400">{r.source}</span>}
                           </div>
                           {r.interview_notes && <div className="mt-1 text-sm text-slate-600 whitespace-pre-wrap">{r.interview_notes}</div>}
+                          {r.status === LeadStatus.REJECTED && (
+                            <div className="mt-1.5 text-sm text-gray-700 bg-gray-100 border border-gray-200 rounded-md px-2 py-1 whitespace-pre-wrap">
+                              <span className="font-semibold">לא התקבל:</span>{" "}
+                              {r.rejection_reason ?? <span className="text-red-600">חסר תיעוד סיבה</span>}
+                            </div>
+                          )}
                         </div>
                         <div className="shrink-0 flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
                           <InterviewMessageDialog
@@ -337,7 +344,7 @@ export function InterviewsContent({ rows }: { rows: InterviewRow[] }) {
                             recruiter={r.recruiter}
                           />
                           <LeadNotesDialog leadId={r.id} leadName={r.name} size="xs" />
-                          <StatusSelect leadId={r.id} currentStatus={r.status} allowedStatuses={INTERVIEW_STATUSES} />
+                          <StatusSelect leadId={r.id} leadName={r.name} currentStatus={r.status} allowedStatuses={INTERVIEW_STATUSES} />
                         </div>
                       </li>
                     );

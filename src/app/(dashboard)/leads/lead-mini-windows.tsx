@@ -295,7 +295,7 @@ function LeadMiniWindow({
           {/* Status bar */}
           <div className="flex items-center gap-2 px-3 py-1.5 border-b border-gray-100 bg-gray-50/60 flex-shrink-0">
             <span className="text-[10px] text-gray-500 flex-shrink-0">סטטוס:</span>
-            <StatusSelect leadId={lead.id} currentStatus={lead.status} currentSubStatus={lead.sub_status} />
+            <StatusSelect leadId={lead.id} leadName={lead.name} currentStatus={lead.status} currentSubStatus={lead.sub_status} />
           </div>
 
           {/* רכזת מטפלת + תאריכי יצירה/עדכון */}

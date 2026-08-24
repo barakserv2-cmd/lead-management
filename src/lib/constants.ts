@@ -75,13 +75,27 @@ export const RECRUITMENT_STATUSES = {
 export type RecruitmentStatus =
   (typeof RECRUITMENT_STATUSES)[keyof typeof RECRUITMENT_STATUSES];
 
-// ── Rejection reasons for "נדחה" ──────────────────────────
+// ── Rejection reasons for "לא התקבל" ──────────────────────
 export const REJECTION_REASONS = [
   "אין מענה 3",
   "לא מתאים",
   "דחוי",
   "שכר לא תואם את הדרישה",
   "חסום",
+] as const;
+
+// סיבות מהירות לסטטוס "לא התקבל" בלוח הראיונות — קליק אחד במקום
+// להקליד, אבל התיעוד החופשי עדיין חובה.
+export const INTERVIEW_REJECTION_REASONS = [
+  "לא מתאים לתפקיד",
+  "חוסר ניסיון",
+  "המעסיק לא אישר",
+  "בעיית זמינות / משמרות",
+  "ציפיות שכר",
+  "בעיית שפה / תקשורת",
+  "מראה / הופעה",
+  "המועמד ויתר",
+  "אחר",
 ] as const;
 
 // ── Conversation Mode enums ─────────────────────────────────
