@@ -11,6 +11,7 @@ import {
   CalendarDays,
   CalendarClock,
   BarChart3,
+  Megaphone,
   Settings,
 } from "lucide-react";
 
@@ -22,6 +23,7 @@ const NAV_ITEMS = [
   { href: "/today", label: "לידים של היום", icon: CalendarCheck },
   { href: "/interviews", label: "ראיונות", icon: CalendarClock },
   { href: "/campaigns", label: "אקסטרות", icon: CalendarDays },
+  { href: "/publishing", label: "פרסום בפייסבוק", icon: Megaphone },
   { href: "/reports", label: "דוחות", icon: BarChart3 },
   { href: "/settings", label: "הגדרות", icon: Settings },
 ];
