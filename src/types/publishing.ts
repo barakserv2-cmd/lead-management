@@ -69,6 +69,8 @@ export interface FbPublication {
   variant_id: string | null;
   owner_email: string | null;
   body_snapshot: string;
+  /** the link, pasted as the first comment under the post (null if no phone) */
+  comment_snapshot: string | null;
   tracking_code: string;
   status: PublicationStatus;
   scheduled_for: string | null;

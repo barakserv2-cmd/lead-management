@@ -11,10 +11,11 @@ import { NextRequest, NextResponse } from "next/server";
 import { admin, bad, currentUser, unauthorized } from "@/lib/publishingAuth";
 import {
   buildWaLink,
+  composeBody,
+  composeComment,
   cooldownUntil,
   fillPlaceholders,
   generateTrackingCode,
-  withCta,
 } from "@/lib/publishing";
 import type { FbGroup, FbVariant, PublicationStatus } from "@/types/publishing";
 
@@ -146,7 +147,8 @@ export async function POST(req: NextRequest) {
       group_id: g.id,
       variant_id: pick.variant_id,
       owner_email: g.owner_email,
-      body_snapshot: withCta(filled, link, settings?.signature ?? null),
+      body_snapshot: composeBody(filled, !!link, settings?.signature ?? null),
+      comment_snapshot: link ? composeComment(link) : null,
       tracking_code: code,
       status: "queued" as const,
       scheduled_for: b.scheduled_for ?? null,

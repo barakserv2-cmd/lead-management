@@ -80,17 +80,25 @@ export function fillPlaceholders(body: string, vars: PostVars): string {
 }
 
 /** Appends the CTA + tracking code exactly once. */
-export function withCta(body: string, link: string | null, signature?: string | null): string {
+/**
+ * The post body — copy + signature + a pointer to the first comment.
+ *
+ * The link is deliberately NOT here. A URL in a Facebook group post makes
+ * Facebook render an empty "WA.ME" preview card (ugly, reads as spam) and
+ * downranks the post's reach because it points off-platform. The link goes in
+ * the first comment instead (see composeComment) — the standard recruiter move
+ * that keeps the post clean and seen.
+ */
+export function composeBody(body: string, hasLink: boolean, signature?: string | null): string {
   const parts = [body.trim()];
   if (signature?.trim()) parts.push(signature.trim());
-  // One clean CTA line, appended after the copy's own closing sentence. The
-  // tracking code rides invisibly inside the wa.me prefill, so there is no
-  // robotic "קוד משרה:" line any more — that line, plus the huge encoded URL,
-  // were what made the post look machine-generated.
-  if (link && !body.includes(link)) {
-    parts.push(`👇 שליחת הודעה בוואטסאפ:\n${link}`);
-  }
+  if (hasLink) parts.push("📩 להגשה מהירה — הקישור בתגובה הראשונה 👇");
   return parts.join("\n\n");
+}
+
+/** The first comment to paste under the post — just the link. */
+export function composeComment(link: string): string {
+  return `להגשת מועמדות בוואטסאפ 👇\n${link}`;
 }
 
 // ── Cooldown ────────────────────────────────────────────────

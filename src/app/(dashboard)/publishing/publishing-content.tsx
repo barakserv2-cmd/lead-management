@@ -137,11 +137,21 @@ export function PublishingContent({ userEmail, userName, isAdmin, openJobs }: Pr
   async function copyAndOpen(pub: PublicationWithRefs) {
     try {
       await navigator.clipboard.writeText(pub.body_snapshot);
-      toast.success("הטקסט הועתק — מדביקים בקבוצה");
+      toast.success("הפוסט הועתק — מדביקים בקבוצה. אחר כך מעתיקים את הקישור לתגובה.");
     } catch {
       toast.error("ההעתקה נכשלה. סמן/י את הטקסט והעתק/י ידנית.");
     }
     if (pub.fb_groups?.url) window.open(pub.fb_groups.url, "_blank", "noopener");
+  }
+
+  async function copyComment(pub: PublicationWithRefs) {
+    if (!pub.comment_snapshot) return;
+    try {
+      await navigator.clipboard.writeText(pub.comment_snapshot);
+      toast.success("הקישור הועתק — מדביקים כתגובה ראשונה לפוסט");
+    } catch {
+      toast.error("ההעתקה נכשלה. סמן/י את הקישור והעתק/י ידנית.");
+    }
   }
 
   async function markPosted(pub: PublicationWithRefs) {
@@ -268,6 +278,7 @@ export function PublishingContent({ userEmail, userName, isAdmin, openJobs }: Pr
               queued={queued}
               posted={posted}
               onCopyOpen={copyAndOpen}
+              onCopyComment={copyComment}
               onPosted={markPosted}
               onSkip={skip}
               onRemove={removeQueued}
@@ -328,6 +339,7 @@ function QueueTab({
   queued,
   posted,
   onCopyOpen,
+  onCopyComment,
   onPosted,
   onSkip,
   onRemove,
@@ -337,6 +349,7 @@ function QueueTab({
   queued: PublicationWithRefs[];
   posted: PublicationWithRefs[];
   onCopyOpen: (p: PublicationWithRefs) => void;
+  onCopyComment: (p: PublicationWithRefs) => void;
   onPosted: (p: PublicationWithRefs) => void;
   onSkip: (p: PublicationWithRefs) => void;
   onRemove: (p: PublicationWithRefs) => void;
@@ -387,16 +400,35 @@ function QueueTab({
               </p>
             )}
 
-            <pre className="mt-3 max-h-52 overflow-y-auto whitespace-pre-wrap rounded-md bg-slate-50 p-3 font-sans text-[13px] leading-relaxed text-slate-700">
-              {p.body_snapshot}
-            </pre>
+            {/* Step 1 — the post itself (no link → no ugly preview card) */}
+            <div className="mt-3">
+              <span className="text-[11px] font-medium text-slate-400">הפוסט</span>
+              <pre className="mt-1 max-h-48 overflow-y-auto whitespace-pre-wrap rounded-md bg-slate-50 p-3 font-sans text-[13px] leading-relaxed text-slate-700">
+                {p.body_snapshot}
+              </pre>
+            </div>
+
+            {/* Step 2 — the link, pasted as the first comment */}
+            {p.comment_snapshot && (
+              <div className="mt-2">
+                <span className="text-[11px] font-medium text-slate-400">תגובה ראשונה (הקישור)</span>
+                <pre className="mt-1 whitespace-pre-wrap rounded-md border border-dashed border-slate-200 bg-white p-2.5 font-sans text-[12px] text-slate-600">
+                  {p.comment_snapshot}
+                </pre>
+              </div>
+            )}
 
             <div className="mt-3 flex flex-wrap items-center gap-2">
               <Button size="sm" onClick={() => onCopyOpen(p)} className="gap-1.5">
                 <ClipboardCopy className="h-3.5 w-3.5" />
-                העתקה + פתיחת הקבוצה
+                1. העתקת הפוסט + פתיחת הקבוצה
                 <ExternalLink className="h-3.5 w-3.5" />
               </Button>
+              {p.comment_snapshot && (
+                <Button size="sm" variant="outline" onClick={() => onCopyComment(p)} className="gap-1.5">
+                  <ClipboardCopy className="h-3.5 w-3.5" /> 2. העתקת הקישור לתגובה
+                </Button>
+              )}
               <Button size="sm" variant="outline" onClick={() => onPosted(p)} className="gap-1.5">
                 <Check className="h-3.5 w-3.5" /> פורסם
               </Button>
@@ -404,6 +436,10 @@ function QueueTab({
                 <SkipForward className="h-3.5 w-3.5" /> דילוג
               </Button>
             </div>
+
+            <p className="mt-2 text-[11px] text-slate-400">
+              מפרסמים את הפוסט, ואז מדביקים את הקישור כתגובה ראשונה — ככה הפוסט נקי ומגיע ליותר אנשים.
+            </p>
           </div>
         ))}
       </div>
