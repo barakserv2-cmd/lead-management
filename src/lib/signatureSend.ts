@@ -10,7 +10,11 @@ import { createClient as createServerClient } from "@supabase/supabase-js";
 import { sendWhatsAppMessage, resolveSender } from "@/lib/whatsappService";
 import { getMessageScope } from "@/lib/messageVisibility";
 import { LEAD_DOC_TYPES, type LeadDocType } from "@/lib/leadDocTypes";
-import type { SignatureRequest } from "@/lib/signatureTypes";
+import {
+  DEFAULT_REQUIRED_FIELDS,
+  sanitizeRequiredFields,
+  type SignatureRequest,
+} from "@/lib/signatureTypes";
 
 function getAdmin() {
   return createServerClient(
@@ -32,8 +36,13 @@ export async function sendSignatureRequestForDoc(opts: {
   doc: { id: string; lead_id: string; doc_type: string; file_name: string };
   userEmail: string | null | undefined;
   appBase: string;
+  /** שדות שהמועמד חייב למלא לפני חתימה (ברירת מחדל: שם + ת"ז) */
+  requiredFields?: unknown;
 }): Promise<SendSignatureResult> {
   const { doc, userEmail, appBase } = opts;
+  const requiredFields = opts.requiredFields
+    ? sanitizeRequiredFields(opts.requiredFields)
+    : DEFAULT_REQUIRED_FIELDS;
   const admin = getAdmin();
 
   const { data: lead } = await admin
@@ -71,6 +80,7 @@ export async function sendSignatureRequestForDoc(opts: {
       doc_type: doc.doc_type,
       file_name: doc.file_name,
       sent_by: userEmail?.toLowerCase() ?? null,
+      required_fields: requiredFields,
     })
     .select()
     .single();

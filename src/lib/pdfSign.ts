@@ -16,6 +16,8 @@ interface BuildOpts {
   mime: string;
   /** חותמת החתימה כ-PNG (רקע שקוף, נוצר בדפדפן) */
   stampPng: Uint8Array;
+  /** עמוד "פרטי המועמד" כ-PNG (נוצר בדפדפן) — אופציונלי */
+  detailsPng?: Uint8Array;
   /** שורת audit בלטינית בלבד — Helvetica לא יודע עברית */
   auditLine: string;
 }
@@ -46,6 +48,24 @@ export async function buildSignedPdf(opts: BuildOpts): Promise<Uint8Array> {
     const w = img.width * scale;
     const h = img.height * scale;
     page.drawImage(img, {
+      x: (A4[0] - w) / 2,
+      y: A4[1] - margin - h,
+      width: w,
+      height: h,
+    });
+  }
+
+  // ── עמוד פרטי המועמד (אם נאספו פרטים) ──────────────────────
+  if (opts.detailsPng) {
+    const details = await doc.embedPng(opts.detailsPng);
+    const page = doc.addPage(A4);
+    const margin = 50;
+    const maxW = A4[0] - margin * 2;
+    const maxH = A4[1] - margin * 2;
+    const s = Math.min(maxW / details.width, maxH / details.height);
+    const w = details.width * s;
+    const h = details.height * s;
+    page.drawImage(details, {
       x: (A4[0] - w) / 2,
       y: A4[1] - margin - h,
       width: w,

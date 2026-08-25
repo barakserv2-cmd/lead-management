@@ -9,6 +9,12 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient as createServerClient } from "@supabase/supabase-js";
 import { buildSignedPdf } from "@/lib/pdfSign";
 import { LEAD_DOC_TYPES, type LeadDocType } from "@/lib/leadDocTypes";
+import {
+  CANDIDATE_FIELDS,
+  sanitizeRequiredFields,
+  validateCandidateField,
+  type CandidateFieldKey,
+} from "@/lib/signatureTypes";
 
 const BUCKET = "lead-documents";
 
@@ -27,16 +33,38 @@ interface RequestRow {
   doc_type: string;
   file_name: string;
   expires_at: string;
+  required_fields: unknown;
 }
 
 async function loadRequest(token: string): Promise<RequestRow | null> {
   if (!token || token.length < 20 || token.length > 64) return null;
   const { data } = await getAdmin()
     .from("signature_requests")
-    .select("id, lead_id, document_id, status, doc_type, file_name, expires_at")
+    .select("id, lead_id, document_id, status, doc_type, file_name, expires_at, required_fields")
     .eq("token", token)
     .maybeSingle();
   return (data as RequestRow) ?? null;
+}
+
+/** ערכים ידועים מראש: פרטי הליד ב-CRM + פרטים שנשמרו מחתימות קודמות. */
+async function loadPrefill(leadId: string): Promise<Record<string, string>> {
+  const admin = getAdmin();
+  const [{ data: lead }, { data: saved }] = await Promise.all([
+    admin.from("leads").select("name, phone, email, location").eq("id", leadId).maybeSingle(),
+    admin.from("lead_candidate_details").select("details").eq("lead_id", leadId).maybeSingle(),
+  ]);
+  const prefill: Record<string, string> = {};
+  if (lead?.name) prefill.full_name = lead.name;
+  if (lead?.phone) prefill.phone = lead.phone;
+  if (lead?.email) prefill.email = lead.email;
+  if (lead?.location) prefill.address = lead.location;
+  // פרטים שהמועמד מילא בעצמו גוברים על נתוני הליד
+  if (saved?.details && typeof saved.details === "object") {
+    for (const [k, v] of Object.entries(saved.details as Record<string, unknown>)) {
+      if (k in CANDIDATE_FIELDS && typeof v === "string" && v.trim()) prefill[k] = v;
+    }
+  }
+  return prefill;
 }
 
 function isExpired(r: RequestRow): boolean {
@@ -76,13 +104,9 @@ export async function GET(
     return NextResponse.json({ status: "error" }, { status: 500 });
   }
 
-  // שם פרטי בלבד — הדף ציבורי, לא חושפים יותר מהנדרש
-  const { data: lead } = await admin
-    .from("leads")
-    .select("name")
-    .eq("id", request.lead_id)
-    .maybeSingle();
-  const firstName = (lead?.name ?? "").trim().split(/\s+/)[0] || null;
+  const requiredFields = sanitizeRequiredFields(request.required_fields);
+  const prefill = await loadPrefill(request.lead_id);
+  const firstName = (prefill.full_name ?? "").trim().split(/\s+/)[0] || null;
 
   return NextResponse.json({
     status: "pending",
@@ -92,6 +116,10 @@ export async function GET(
     url: signed.signedUrl,
     firstName,
     expiresAt: request.expires_at,
+    requiredFields: requiredFields.map((key) => ({ key, ...CANDIDATE_FIELDS[key] })),
+    prefill: Object.fromEntries(
+      requiredFields.filter((k) => prefill[k]).map((k) => [k, prefill[k]])
+    ),
   });
 }
 
@@ -109,17 +137,41 @@ export async function POST(
   }
 
   try {
-    const { signerName, stampPng } = await req.json();
+    const { details, stampPng, detailsPng } = await req.json();
 
-    const name = String(signerName ?? "").trim();
-    if (name.length < 2 || name.length > 80) {
+    // ── ולידציה של כל שדות החובה ──
+    const requiredFields = sanitizeRequiredFields(request.required_fields);
+    const values: Partial<Record<CandidateFieldKey, string>> = {};
+    for (const key of requiredFields) {
+      const raw = String((details ?? {})[key] ?? "").trim();
+      const err = validateCandidateField(key, raw);
+      if (err) {
+        return NextResponse.json(
+          { success: false, error: `${CANDIDATE_FIELDS[key].label}: ${err}` },
+          { status: 400 }
+        );
+      }
+      values[key] = raw;
+    }
+    const name = values.full_name ?? "";
+    if (!name) {
       return NextResponse.json({ success: false, error: "נא למלא שם מלא" }, { status: 400 });
     }
-    const match = /^data:image\/png;base64,([A-Za-z0-9+/=]+)$/.exec(String(stampPng ?? ""));
-    if (!match || match[1].length > 3_000_000) {
+
+    function pngFrom(dataUrl: unknown): Buffer | null {
+      const m = /^data:image\/png;base64,([A-Za-z0-9+/=]+)$/.exec(String(dataUrl ?? ""));
+      if (!m || m[1].length > 3_000_000) return null;
+      return Buffer.from(m[1], "base64");
+    }
+    const stampBytes = pngFrom(stampPng);
+    if (!stampBytes) {
       return NextResponse.json({ success: false, error: "חתימה לא תקינה" }, { status: 400 });
     }
-    const stampBytes = Buffer.from(match[1], "base64");
+    // עמוד הפרטים חובה כשיש שדות — כדי שהערכים יתועדו בתוך ה-PDF
+    const detailsBytes = pngFrom(detailsPng);
+    if (!detailsBytes) {
+      return NextResponse.json({ success: false, error: "שגיאה בהרכבת דף הפרטים — נסו שוב" }, { status: 400 });
+    }
 
     const admin = getAdmin();
     const { data: doc } = await admin
@@ -151,6 +203,7 @@ export async function POST(
         source,
         mime: doc.mime_type ?? "application/pdf",
         stampPng: stampBytes,
+        detailsPng: detailsBytes,
         auditLine,
       });
     } catch (e) {
@@ -200,8 +253,28 @@ export async function POST(
         signer_ip: ip,
         signer_user_agent: req.headers.get("user-agent")?.slice(0, 300) ?? null,
         signed_at: signedAt.toISOString(),
+        filled_details: values,
       })
       .eq("id", request.id);
+
+    // הפרטים נשמרים לליד — השליחה הבאה תגיע ממולאת מראש
+    const { data: existingDetails } = await admin
+      .from("lead_candidate_details")
+      .select("details")
+      .eq("lead_id", doc.lead_id)
+      .maybeSingle();
+    await admin.from("lead_candidate_details").upsert({
+      lead_id: doc.lead_id,
+      details: { ...(existingDetails?.details as object ?? {}), ...values },
+      updated_at: signedAt.toISOString(),
+    });
+    // אימייל שמולא משלים חוסר בליד (לא דורס ערך קיים)
+    if (values.email) {
+      const { data: leadRow } = await admin.from("leads").select("email").eq("id", doc.lead_id).maybeSingle();
+      if (leadRow && !leadRow.email) {
+        await admin.from("leads").update({ email: values.email }).eq("id", doc.lead_id);
+      }
+    }
 
     const label = LEAD_DOC_TYPES[request.doc_type as LeadDocType] ?? request.doc_type;
     await admin.from("lead_events").insert({

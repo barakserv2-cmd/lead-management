@@ -1,10 +1,22 @@
 "use client";
 
 // דף חתימה ציבורי למועמד — מובייל-first, RTL.
-// המועמד רואה את המסמך, מצייר חתימה על canvas, והדפדפן מרכיב
-// חותמת PNG (שם + תאריך + חתימה) שנשלחת לשרת להטבעה על ה-PDF.
+// שלב 1: השלמת פרטים אישיים (ממולאים מראש מה-CRM כשידועים,
+// חתימה נעולה עד שהכל תקין). שלב 2: ציור חתימה. הדפדפן מרכיב
+// שני PNG — דף פרטים + חותמת — שהשרת מטביע על ה-PDF.
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  validateCandidateField,
+  type CandidateFieldKey,
+} from "@/lib/signatureTypes";
+
+interface FieldInfo {
+  key: CandidateFieldKey;
+  label: string;
+  type: "text" | "tel" | "email" | "date";
+  numeric?: boolean;
+}
 
 interface DocInfo {
   status: "pending" | "signed" | "expired" | "not_found" | "error";
@@ -13,11 +25,14 @@ interface DocInfo {
   mime?: string;
   url?: string;
   firstName?: string | null;
+  requiredFields?: FieldInfo[];
+  prefill?: Record<string, string>;
 }
 
 export function SignClient({ token }: { token: string }) {
   const [info, setInfo] = useState<DocInfo | null>(null);
-  const [name, setName] = useState("");
+  const [values, setValues] = useState<Record<string, string>>({});
+  const [touched, setTouched] = useState<Set<string>>(new Set());
   const [agreed, setAgreed] = useState(false);
   const [hasDrawn, setHasDrawn] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -30,9 +45,27 @@ export function SignClient({ token }: { token: string }) {
 
   useEffect(() => {
     fetch(`/api/sign/${token}`)
-      .then(async (r) => setInfo((await r.json()) as DocInfo))
+      .then(async (r) => {
+        const body = (await r.json()) as DocInfo;
+        setInfo(body);
+        if (body.prefill) setValues(body.prefill);
+      })
       .catch(() => setInfo({ status: "error" }));
   }, [token]);
+
+  const fields = useMemo(() => info?.requiredFields ?? [], [info]);
+
+  const fieldErrors = useMemo(() => {
+    const errs: Record<string, string> = {};
+    for (const f of fields) {
+      const err = validateCandidateField(f.key, values[f.key] ?? "");
+      if (err) errs[f.key] = err;
+    }
+    return errs;
+  }, [fields, values]);
+
+  const detailsComplete = Object.keys(fieldErrors).length === 0;
+  const canSubmit = detailsComplete && hasDrawn && agreed && !submitting;
 
   // ── ציור על ה-canvas ───────────────────────────────────────
   const setupCanvas = useCallback((canvas: HTMLCanvasElement | null) => {
@@ -81,65 +114,97 @@ export function SignClient({ token }: { token: string }) {
   function clearSignature() {
     const canvas = canvasRef.current;
     if (!canvas) return;
-    const ctx = canvas.getContext("2d")!;
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    canvas.getContext("2d")!.clearRect(0, 0, canvas.width, canvas.height);
     setHasDrawn(false);
   }
 
-  // ── הרכבת חותמת ה-PNG ושליחה ───────────────────────────────
+  // ── הרכבת דף הפרטים + החותמת ושליחה ────────────────────────
   async function submit() {
     const sigCanvas = canvasRef.current;
-    if (!sigCanvas || !hasDrawn || name.trim().length < 2 || !agreed) return;
+    if (!sigCanvas || !canSubmit) return;
     setSubmitting(true);
     setError(null);
 
     try {
+      const family = getComputedStyle(document.body).fontFamily || "Arial, sans-serif";
+      const dateStr = new Date().toLocaleString("he-IL", {
+        dateStyle: "long",
+        timeStyle: "short",
+        timeZone: "Asia/Jerusalem",
+      });
+
+      // דף פרטי המועמד — עברית מרונדרת בדפדפן
+      const details = document.createElement("canvas");
+      details.width = 1000;
+      const rowH = 74;
+      details.height = 260 + fields.length * rowH + 80;
+      const dctx = details.getContext("2d")!;
+      dctx.fillStyle = "#ffffff";
+      dctx.fillRect(0, 0, details.width, details.height);
+      dctx.direction = "rtl";
+      dctx.textAlign = "center";
+      dctx.fillStyle = "#0e7490";
+      dctx.font = `bold 44px ${family}`;
+      dctx.fillText("פרטי המועמד/ת", 500, 90);
+      dctx.fillStyle = "#475569";
+      dctx.font = `400 28px ${family}`;
+      dctx.fillText(`${info?.docLabel ?? ""} · ${dateStr}`, 500, 140);
+      dctx.strokeStyle = "#cbd5e1";
+      dctx.lineWidth = 2;
+      dctx.beginPath();
+      dctx.moveTo(80, 175);
+      dctx.lineTo(920, 175);
+      dctx.stroke();
+      let y = 250;
+      for (const f of fields) {
+        // תאריך מוצג dd/mm/yyyy
+        let v = values[f.key]?.trim() ?? "";
+        if (f.type === "date" && /^\d{4}-\d{2}-\d{2}$/.test(v)) {
+          const [yy, mm, dd] = v.split("-");
+          v = `${dd}/${mm}/${yy}`;
+        }
+        dctx.textAlign = "right";
+        dctx.fillStyle = "#64748b";
+        dctx.font = `600 30px ${family}`;
+        dctx.fillText(f.label + ":", 920, y);
+        dctx.fillStyle = "#0f172a";
+        dctx.font = `400 32px ${family}`;
+        dctx.fillText(v, 660, y);
+        y += rowH;
+      }
+
+      // חותמת חתימה
       const stamp = document.createElement("canvas");
       stamp.width = 800;
       stamp.height = 440;
       const ctx = stamp.getContext("2d")!;
-      const family =
-        getComputedStyle(document.body).fontFamily || "Arial, sans-serif";
-
-      // חתימה מצוירת — ממורכזת בחלק העליון
       const sigMaxW = 640;
       const sigMaxH = 240;
-      const scale = Math.min(
-        sigMaxW / sigCanvas.width,
-        sigMaxH / sigCanvas.height
-      );
+      const scale = Math.min(sigMaxW / sigCanvas.width, sigMaxH / sigCanvas.height);
       const sw = sigCanvas.width * scale;
       const sh = sigCanvas.height * scale;
       ctx.drawImage(sigCanvas, (800 - sw) / 2, 20 + (sigMaxH - sh) / 2, sw, sh);
-
-      // קו הפרדה
       ctx.strokeStyle = "#94a3b8";
       ctx.lineWidth = 2;
       ctx.beginPath();
       ctx.moveTo(120, 280);
       ctx.lineTo(680, 280);
       ctx.stroke();
-
-      // טקסט בעברית — הדפדפן מרנדר RTL נכון, בניגוד ל-pdf-lib
       ctx.fillStyle = "#0f172a";
       ctx.textAlign = "center";
       ctx.font = `600 34px ${family}`;
-      ctx.fillText(`נחתם דיגיטלית ע"י: ${name.trim()}`, 400, 335);
+      ctx.fillText(`נחתם דיגיטלית ע"י: ${values.full_name?.trim() ?? ""}`, 400, 335);
       ctx.fillStyle = "#475569";
       ctx.font = `400 26px ${family}`;
-      const dateStr = new Date().toLocaleString("he-IL", {
-        dateStyle: "long",
-        timeStyle: "short",
-        timeZone: "Asia/Jerusalem",
-      });
       ctx.fillText(dateStr, 400, 385);
 
       const res = await fetch(`/api/sign/${token}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          signerName: name.trim(),
+          details: Object.fromEntries(fields.map((f) => [f.key, values[f.key]?.trim() ?? ""])),
           stampPng: stamp.toDataURL("image/png"),
+          detailsPng: details.toDataURL("image/png"),
         }),
       });
       const body = await res.json();
@@ -202,6 +267,7 @@ export function SignClient({ token }: { token: string }) {
   }
 
   const isImage = info.mime?.startsWith("image/");
+  const missingCount = Object.keys(fieldErrors).length;
 
   return shell(
     <div className="space-y-4">
@@ -237,25 +303,58 @@ export function SignClient({ token }: { token: string }) {
         )}
       </div>
 
-      {/* טופס החתימה */}
-      <div className="bg-white rounded-2xl shadow p-4 space-y-4">
-        <div>
-          <label className="block text-sm font-semibold text-slate-700 mb-1">
-            שם מלא
-          </label>
-          <input
-            type="text"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            placeholder="השם המלא שלך"
-            className="w-full px-3 py-2.5 rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-cyan-500 text-base"
-          />
+      {/* שלב 1 — פרטים אישיים */}
+      <div className="bg-white rounded-2xl shadow p-4 space-y-3">
+        <div className="flex items-center justify-between">
+          <div className="font-bold text-slate-800">הפרטים שלך</div>
+          <span
+            className={`text-[11px] px-2 py-0.5 rounded-full font-semibold ${
+              detailsComplete ? "bg-green-100 text-green-700" : "bg-amber-100 text-amber-700"
+            }`}
+          >
+            {detailsComplete ? "✓ הכל מלא" : `חסרים ${missingCount} שדות`}
+          </span>
         </div>
+        <p className="text-[11px] text-slate-400 -mt-1">
+          הפרטים ייכנסו למסמך החתום. בדקו שהכל נכון והשלימו את החסר.
+        </p>
 
+        {fields.map((f) => {
+          const err = touched.has(f.key) ? fieldErrors[f.key] : undefined;
+          const filled = !fieldErrors[f.key];
+          return (
+            <div key={f.key}>
+              <label className="block text-sm font-semibold text-slate-700 mb-1">
+                {f.label}
+                {filled && <span className="text-green-600 mr-1">✓</span>}
+              </label>
+              <input
+                type={f.type}
+                inputMode={f.numeric ? "numeric" : undefined}
+                value={values[f.key] ?? ""}
+                onChange={(e) => setValues((v) => ({ ...v, [f.key]: e.target.value }))}
+                onBlur={() => setTouched((t) => new Set(t).add(f.key))}
+                placeholder={f.label}
+                className={`w-full px-3 py-2.5 rounded-xl border text-base focus:outline-none focus:ring-2 focus:ring-cyan-500 ${
+                  err ? "border-red-400 bg-red-50/40" : "border-slate-300"
+                }`}
+              />
+              {err && <div className="text-[11px] text-red-600 mt-0.5">{err}</div>}
+            </div>
+          );
+        })}
+      </div>
+
+      {/* שלב 2 — חתימה (נעול עד שהפרטים מלאים) */}
+      <div
+        className={`bg-white rounded-2xl shadow p-4 space-y-4 transition-opacity ${
+          detailsComplete ? "" : "opacity-50 pointer-events-none select-none"
+        }`}
+      >
         <div>
           <div className="flex items-center justify-between mb-1">
             <label className="text-sm font-semibold text-slate-700">
-              חתימה (ציירו עם האצבע)
+              {detailsComplete ? "חתימה (ציירו עם האצבע)" : "🔒 חתימה — קודם משלימים פרטים"}
             </label>
             <button
               type="button"
@@ -283,8 +382,8 @@ export function SignClient({ token }: { token: string }) {
             className="mt-1 w-4 h-4"
           />
           <span>
-            קראתי את המסמך ואני מאשר/ת את תוכנו. חתימתי הדיגיטלית מחייבת
-            כחתימה בכתב יד.
+            קראתי את המסמך, הפרטים שמילאתי נכונים, ואני מאשר/ת את תוכנו.
+            חתימתי הדיגיטלית מחייבת כחתימה בכתב יד.
           </span>
         </label>
 
@@ -297,7 +396,7 @@ export function SignClient({ token }: { token: string }) {
         <button
           type="button"
           onClick={submit}
-          disabled={submitting || !hasDrawn || name.trim().length < 2 || !agreed}
+          disabled={!canSubmit}
           className="w-full py-3.5 rounded-xl bg-cyan-600 text-white text-lg font-bold disabled:opacity-40 active:bg-cyan-700 transition-colors"
         >
           {submitting ? "שולח..." : "✍️ חתימה ושליחה"}
