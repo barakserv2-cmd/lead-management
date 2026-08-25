@@ -1,0 +1,222 @@
+// ============================================================
+// דף החתימה הציבורי — ללא auth, מאובטח בטוקן חד-פעמי ארוך.
+// GET  — פרטי הבקשה + קישור צפייה חתום למסמך
+// POST — הגשת החתימה: הטבעה על ה-PDF, שמירת עותק חתום,
+//        החלפת המקור וסגירת הבקשה.
+// ============================================================
+
+import { NextRequest, NextResponse } from "next/server";
+import { createClient as createServerClient } from "@supabase/supabase-js";
+import { buildSignedPdf } from "@/lib/pdfSign";
+import { LEAD_DOC_TYPES, type LeadDocType } from "@/lib/leadDocTypes";
+
+const BUCKET = "lead-documents";
+
+function getAdmin() {
+  return createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!
+  );
+}
+
+interface RequestRow {
+  id: string;
+  lead_id: string;
+  document_id: string | null;
+  status: string;
+  doc_type: string;
+  file_name: string;
+  expires_at: string;
+}
+
+async function loadRequest(token: string): Promise<RequestRow | null> {
+  if (!token || token.length < 20 || token.length > 64) return null;
+  const { data } = await getAdmin()
+    .from("signature_requests")
+    .select("id, lead_id, document_id, status, doc_type, file_name, expires_at")
+    .eq("token", token)
+    .maybeSingle();
+  return (data as RequestRow) ?? null;
+}
+
+function isExpired(r: RequestRow): boolean {
+  return new Date(r.expires_at).getTime() < Date.now();
+}
+
+export async function GET(
+  _req: NextRequest,
+  { params }: { params: Promise<{ token: string }> }
+) {
+  const { token } = await params;
+  const request = await loadRequest(token);
+  if (!request || request.status === "cancelled") {
+    return NextResponse.json({ status: "not_found" }, { status: 404 });
+  }
+  if (request.status === "signed") {
+    return NextResponse.json({ status: "signed" });
+  }
+  if (isExpired(request)) {
+    return NextResponse.json({ status: "expired" });
+  }
+
+  const admin = getAdmin();
+  const { data: doc } = await admin
+    .from("lead_documents")
+    .select("file_path, mime_type")
+    .eq("id", request.document_id ?? "")
+    .maybeSingle();
+  if (!doc) {
+    return NextResponse.json({ status: "not_found" }, { status: 404 });
+  }
+
+  const { data: signed } = await admin.storage
+    .from(BUCKET)
+    .createSignedUrl(doc.file_path, 60 * 60);
+  if (!signed) {
+    return NextResponse.json({ status: "error" }, { status: 500 });
+  }
+
+  // שם פרטי בלבד — הדף ציבורי, לא חושפים יותר מהנדרש
+  const { data: lead } = await admin
+    .from("leads")
+    .select("name")
+    .eq("id", request.lead_id)
+    .maybeSingle();
+  const firstName = (lead?.name ?? "").trim().split(/\s+/)[0] || null;
+
+  return NextResponse.json({
+    status: "pending",
+    docLabel: LEAD_DOC_TYPES[request.doc_type as LeadDocType] ?? request.doc_type,
+    fileName: request.file_name,
+    mime: doc.mime_type,
+    url: signed.signedUrl,
+    firstName,
+    expiresAt: request.expires_at,
+  });
+}
+
+export async function POST(
+  req: NextRequest,
+  { params }: { params: Promise<{ token: string }> }
+) {
+  const { token } = await params;
+  const request = await loadRequest(token);
+  if (!request || request.status !== "pending" || isExpired(request)) {
+    return NextResponse.json(
+      { success: false, error: "הקישור כבר לא בתוקף" },
+      { status: 410 }
+    );
+  }
+
+  try {
+    const { signerName, stampPng } = await req.json();
+
+    const name = String(signerName ?? "").trim();
+    if (name.length < 2 || name.length > 80) {
+      return NextResponse.json({ success: false, error: "נא למלא שם מלא" }, { status: 400 });
+    }
+    const match = /^data:image\/png;base64,([A-Za-z0-9+/=]+)$/.exec(String(stampPng ?? ""));
+    if (!match || match[1].length > 3_000_000) {
+      return NextResponse.json({ success: false, error: "חתימה לא תקינה" }, { status: 400 });
+    }
+    const stampBytes = Buffer.from(match[1], "base64");
+
+    const admin = getAdmin();
+    const { data: doc } = await admin
+      .from("lead_documents")
+      .select("id, file_path, file_name, mime_type, doc_type, lead_id")
+      .eq("id", request.document_id ?? "")
+      .maybeSingle();
+    if (!doc) {
+      return NextResponse.json({ success: false, error: "המסמך לא נמצא" }, { status: 404 });
+    }
+
+    const { data: blob, error: dlErr } = await admin.storage
+      .from(BUCKET)
+      .download(doc.file_path);
+    if (dlErr || !blob) {
+      return NextResponse.json({ success: false, error: "שגיאה בטעינת המסמך" }, { status: 500 });
+    }
+    const source = new Uint8Array(await blob.arrayBuffer());
+
+    const ip =
+      req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? "unknown";
+    const signedAt = new Date();
+    // Helvetica לא יודע עברית — שורת ה-audit בלטינית; העברית בחותמת ה-PNG
+    const auditLine = `Digitally signed via Barak Services CRM | ${signedAt.toISOString()} | IP ${ip} | Ref ${request.id}`;
+
+    let pdfBytes: Uint8Array;
+    try {
+      pdfBytes = await buildSignedPdf({
+        source,
+        mime: doc.mime_type ?? "application/pdf",
+        stampPng: stampBytes,
+        auditLine,
+      });
+    } catch (e) {
+      console.error("[Sign] PDF build failed:", e);
+      return NextResponse.json(
+        { success: false, error: "לא ניתן לעבד את המסמך — פנו לרכזת" },
+        { status: 500 }
+      );
+    }
+
+    const signedPath = `${doc.lead_id}/signed_${doc.doc_type}_${Date.now()}.pdf`;
+    const { error: upErr } = await admin.storage
+      .from(BUCKET)
+      .upload(signedPath, pdfBytes, { contentType: "application/pdf", upsert: false });
+    if (upErr) {
+      return NextResponse.json({ success: false, error: "שגיאה בשמירת המסמך" }, { status: 500 });
+    }
+
+    const baseName = doc.file_name.replace(/\.[^.]+$/, "");
+    const { data: signedDoc, error: insErr } = await admin
+      .from("lead_documents")
+      .insert({
+        lead_id: doc.lead_id,
+        doc_type: doc.doc_type,
+        file_path: signedPath,
+        file_name: `חתום - ${baseName}.pdf`,
+        mime_type: "application/pdf",
+        file_size: pdfBytes.length,
+      })
+      .select("id")
+      .single();
+    if (insErr || !signedDoc) {
+      await admin.storage.from(BUCKET).remove([signedPath]);
+      return NextResponse.json({ success: false, error: "שגיאה בשמירת המסמך" }, { status: 500 });
+    }
+
+    // העותק החתום מחליף את המקור (המקור כלול בתוך ה-PDF החתום)
+    await admin.storage.from(BUCKET).remove([doc.file_path]);
+    await admin.from("lead_documents").delete().eq("id", doc.id);
+
+    await admin
+      .from("signature_requests")
+      .update({
+        status: "signed",
+        signed_document_id: signedDoc.id,
+        signer_name: name,
+        signer_ip: ip,
+        signer_user_agent: req.headers.get("user-agent")?.slice(0, 300) ?? null,
+        signed_at: signedAt.toISOString(),
+      })
+      .eq("id", request.id);
+
+    const label = LEAD_DOC_TYPES[request.doc_type as LeadDocType] ?? request.doc_type;
+    await admin.from("lead_events").insert({
+      lead_id: doc.lead_id,
+      event_type: "מסמכים",
+      event_text: `נחתם דיגיטלית: ${label} — ע"י ${name}`,
+      created_by: "חתימה דיגיטלית",
+    });
+
+    return NextResponse.json({ success: true });
+  } catch (err) {
+    console.error("[Sign Submit] Error:", err);
+    return NextResponse.json(
+      { success: false, error: "שגיאה לא צפויה" },
+      { status: 500 }
+    );
+  }
+}

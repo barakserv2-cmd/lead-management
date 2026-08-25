@@ -10,6 +10,7 @@ import {
 } from "@/lib/actions/leadDocuments";
 import { LEAD_DOC_TYPES, type LeadDocument, type LeadDocType } from "@/lib/leadDocTypes";
 import { DropError, filesFromClipboard, filesFromClipboardApi, filesFromDrop } from "@/lib/dropToFile";
+import { isSignableMime, type SignatureRequest } from "@/lib/signatureTypes";
 
 const KNOWN_TYPES: LeadDocType[] = [
   "form_101",
@@ -26,6 +27,77 @@ function formatSize(bytes: number | null | undefined): string {
   return (bytes / (1024 * 1024)).toFixed(1) + " MB";
 }
 
+// ── חתימה דיגיטלית: סטטוס + פעולות על מסמך ──────────────────
+
+interface SignState {
+  /** בקשה pending שממתינה על המסמך הזה */
+  pending: SignatureRequest | null;
+  /** המסמך הזה הוא עותק חתום */
+  signed: boolean;
+}
+
+function SignControls({
+  doc,
+  sign,
+  onSend,
+  onCancel,
+  onCopyLink,
+  sending,
+}: {
+  doc: LeadDocument;
+  sign: SignState;
+  onSend: (doc: LeadDocument) => void;
+  onCancel: (req: SignatureRequest) => void;
+  onCopyLink: (req: SignatureRequest) => void;
+  sending: boolean;
+}) {
+  if (sign.signed) {
+    return (
+      <span className="text-[10px] px-1.5 py-0.5 rounded bg-green-100 text-green-700 font-semibold whitespace-nowrap">
+        ✍️ נחתם דיגיטלית
+      </span>
+    );
+  }
+  if (sign.pending) {
+    const req = sign.pending;
+    return (
+      <span className="flex items-center gap-1 whitespace-nowrap">
+        <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 font-semibold">
+          ⏳ ממתין לחתימה
+        </span>
+        <button
+          type="button"
+          onClick={() => onCopyLink(req)}
+          className="text-[10px] px-1 py-0.5 rounded text-cyan-700 hover:bg-cyan-100"
+          title="העתק קישור חתימה"
+        >
+          🔗
+        </button>
+        <button
+          type="button"
+          onClick={() => onCancel(req)}
+          className="text-[10px] px-1 py-0.5 rounded text-red-600 hover:bg-red-100"
+          title="בטל בקשת חתימה"
+        >
+          בטל
+        </button>
+      </span>
+    );
+  }
+  if (!isSignableMime(doc.mime_type)) return null;
+  return (
+    <button
+      type="button"
+      onClick={() => onSend(doc)}
+      disabled={sending}
+      className="text-[10px] px-1.5 py-0.5 rounded text-violet-700 hover:bg-violet-100 transition-colors whitespace-nowrap disabled:opacity-50"
+      title="שליחת קישור חתימה דיגיטלית בוואטסאפ"
+    >
+      {sending ? "..." : "✍️ לחתימה"}
+    </button>
+  );
+}
+
 // ── Single document slot ─────────────────────────────────────
 
 function DocSlot({
@@ -36,6 +108,11 @@ function DocSlot({
   onFile,
   onDelete,
   onOpen,
+  sign,
+  onSendSign,
+  onCancelSign,
+  onCopySignLink,
+  signSending,
 }: {
   type: LeadDocType;
   label: string;
@@ -44,6 +121,11 @@ function DocSlot({
   onFile: (type: LeadDocType, file: File) => void;
   onDelete: (doc: LeadDocument) => void;
   onOpen: (doc: LeadDocument) => void;
+  sign?: SignState;
+  onSendSign?: (doc: LeadDocument) => void;
+  onCancelSign?: (req: SignatureRequest) => void;
+  onCopySignLink?: (req: SignatureRequest) => void;
+  signSending?: boolean;
 }) {
   const inputRef = useRef<HTMLInputElement | null>(null);
   const [over, setOver] = useState(false);
@@ -95,7 +177,19 @@ function DocSlot({
         <div className="flex items-center gap-2 min-w-0 flex-1">
           <span className="text-green-600 text-base leading-none">✓</span>
           <div className="min-w-0">
-            <div className="font-semibold text-gray-800">{label}</div>
+            <div className="font-semibold text-gray-800 flex items-center gap-1.5">
+              {label}
+              {sign && onSendSign && onCancelSign && onCopySignLink && (
+                <SignControls
+                  doc={doc}
+                  sign={sign}
+                  onSend={onSendSign}
+                  onCancel={onCancelSign}
+                  onCopyLink={onCopySignLink}
+                  sending={!!signSending}
+                />
+              )}
+            </div>
             <div className="text-gray-500 text-[10px] truncate">
               {doc.file_name} · {formatSize(doc.file_size)}
             </div>
@@ -199,6 +293,8 @@ export function LeadDocumentsSection({ leadId }: { leadId: string }) {
   const [docs, setDocs] = useState<LeadDocument[]>([]);
   const [loaded, setLoaded] = useState(false);
   const [uploading, setUploading] = useState<Set<LeadDocType>>(new Set());
+  const [sigRequests, setSigRequests] = useState<SignatureRequest[]>([]);
+  const [signSending, setSignSending] = useState<string | null>(null); // doc id
 
   // Initial fetch — does NOT block the UI from rendering the slots.
   useEffect(() => {
@@ -208,8 +304,90 @@ export function LeadDocumentsSection({ leadId }: { leadId: string }) {
       setDocs(result);
       setLoaded(true);
     });
+    fetch(`/api/sign/requests?leadId=${leadId}`)
+      .then((r) => r.json())
+      .then((body) => {
+        if (!cancelled && Array.isArray(body.requests)) setSigRequests(body.requests);
+      })
+      .catch(() => {});
     return () => { cancelled = true; };
   }, [leadId]);
+
+  // ── חתימה דיגיטלית ─────────────────────────────────────────
+
+  function signStateFor(doc: LeadDocument): SignState {
+    return {
+      pending: sigRequests.find(
+        (r) => r.status === "pending" && r.document_id === doc.id &&
+          new Date(r.expires_at).getTime() > Date.now()
+      ) ?? null,
+      signed: sigRequests.some(
+        (r) => r.status === "signed" && r.signed_document_id === doc.id
+      ),
+    };
+  }
+
+  async function handleSendSign(doc: LeadDocument) {
+    if (!confirm(`לשלוח למועמד קישור חתימה דיגיטלית בוואטסאפ על "${doc.file_name}"?`)) return;
+    setSignSending(doc.id);
+    try {
+      const res = await fetch("/api/sign/send", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ documentId: doc.id }),
+      });
+      const body = await res.json();
+      if (body.request) {
+        setSigRequests((prev) => [
+          body.request,
+          ...prev.map((r) =>
+            r.document_id === doc.id && r.status === "pending"
+              ? { ...r, status: "cancelled" as const }
+              : r
+          ),
+        ]);
+      }
+      if (body.success) {
+        toast.success("קישור החתימה נשלח בוואטסאפ ✍️");
+      } else if (body.link) {
+        await navigator.clipboard.writeText(body.link).catch(() => {});
+        toast.error(body.error ?? "השליחה נכשלה", { description: "הקישור הועתק ללוח — אפשר לשלוח ידנית" });
+      } else {
+        toast.error(body.error ?? "השליחה נכשלה");
+      }
+    } catch {
+      toast.error("השליחה נכשלה");
+    } finally {
+      setSignSending(null);
+    }
+  }
+
+  async function handleCancelSign(req: SignatureRequest) {
+    if (!confirm("לבטל את בקשת החתימה? הקישור שנשלח יפסיק לעבוד.")) return;
+    const res = await fetch("/api/sign/cancel", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ requestId: req.id }),
+    }).then((r) => r.json()).catch(() => ({ success: false }));
+    if (!res.success) {
+      toast.error(res.error ?? "הביטול נכשל");
+      return;
+    }
+    setSigRequests((prev) =>
+      prev.map((r) => (r.id === req.id ? { ...r, status: "cancelled" as const } : r))
+    );
+    toast.success("בקשת החתימה בוטלה");
+  }
+
+  async function handleCopySignLink(req: SignatureRequest) {
+    const link = `${window.location.origin}/sign/${req.token}`;
+    try {
+      await navigator.clipboard.writeText(link);
+      toast.success("קישור החתימה הועתק");
+    } catch {
+      toast.error("ההעתקה נכשלה");
+    }
+  }
 
 
 
@@ -312,18 +490,26 @@ export function LeadDocumentsSection({ leadId }: { leadId: string }) {
       </p>
 
       <div className="space-y-1.5">
-        {KNOWN_TYPES.map((type) => (
-          <DocSlot
-            key={type}
-            type={type}
-            label={LEAD_DOC_TYPES[type]}
-            doc={docsByType.get(type) ?? null}
-            uploading={uploading.has(type)}
-            onFile={uploadFile}
-            onDelete={handleDelete}
-            onOpen={handleOpen}
-          />
-        ))}
+        {KNOWN_TYPES.map((type) => {
+          const doc = docsByType.get(type) ?? null;
+          return (
+            <DocSlot
+              key={type}
+              type={type}
+              label={LEAD_DOC_TYPES[type]}
+              doc={doc}
+              uploading={uploading.has(type)}
+              onFile={uploadFile}
+              onDelete={handleDelete}
+              onOpen={handleOpen}
+              sign={doc ? signStateFor(doc) : undefined}
+              onSendSign={handleSendSign}
+              onCancelSign={handleCancelSign}
+              onCopySignLink={handleCopySignLink}
+              signSending={!!doc && signSending === doc.id}
+            />
+          );
+        })}
 
         {/* "Other" — supports multiple */}
         <DocSlot
@@ -350,6 +536,14 @@ export function LeadDocumentsSection({ leadId }: { leadId: string }) {
                 >
                   📄 {d.file_name} · {formatSize(d.file_size)}
                 </button>
+                <SignControls
+                  doc={d}
+                  sign={signStateFor(d)}
+                  onSend={handleSendSign}
+                  onCancel={handleCancelSign}
+                  onCopyLink={handleCopySignLink}
+                  sending={signSending === d.id}
+                />
                 <button
                   type="button"
                   onClick={() => handleDelete(d)}
