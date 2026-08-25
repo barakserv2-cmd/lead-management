@@ -21,6 +21,15 @@ function employerOf(lead: Lead): string | null {
   );
 }
 
+// לפי איזה תאריך מסננים: מתי המועמד התקבל, או מתי הוא התחיל לעבוד בפועל.
+// שני התאריכים שונים זה מזה — מקבלים היום ומתחילים בעוד שבועיים.
+type DateBasis = "hired" | "start";
+
+const DATE_BASIS_LABELS: Record<DateBasis, string> = {
+  hired: "תאריך קבלה",
+  start: "תחילת עבודה",
+};
+
 export function HiredContent({
   leads,
   hiredAt = {},
@@ -30,6 +39,7 @@ export function HiredContent({
   hiredAt?: Record<string, string>;
 }) {
   const [clientFilter, setClientFilter] = useState("");
+  const [dateBasis, setDateBasis] = useState<DateBasis>("hired");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
 
@@ -43,25 +53,39 @@ export function HiredContent({
     return Array.from(set).sort();
   }, [leads]);
 
-  const filtered = useMemo(() => {
+  const { filtered, undated } = useMemo(() => {
     let result = leads;
 
     if (clientFilter) {
       result = result.filter((l) => employerOf(l) === clientFilter);
     }
 
-    // סינון תאריכים לפי מועד הקבלה (fallback: יצירת הליד)
-    const hiredDate = (l: Lead) => (hiredAt[l.id] ?? l.created_at).slice(0, 10);
-    if (dateFrom) {
-      result = result.filter((l) => hiredDate(l) >= dateFrom);
-    }
+    if (!dateFrom && !dateTo) return { filtered: result, undated: 0 };
 
-    if (dateTo) {
-      result = result.filter((l) => hiredDate(l) <= dateTo);
-    }
+    // תאריך קבלה = המעבר ל"התקבל" (fallback: יצירת הליד) · תחילת עבודה =
+    // start_date, שיכול להיות ריק אם עוד לא נקבע.
+    const dateOf = (l: Lead): string | null => {
+      if (dateBasis === "start") {
+        return l.start_date ? String(l.start_date).slice(0, 10) : null;
+      }
+      return (hiredAt[l.id] ?? l.created_at).slice(0, 10);
+    };
 
-    return result;
-  }, [leads, hiredAt, clientFilter, dateFrom, dateTo]);
+    let missing = 0;
+    const inRange = result.filter((l) => {
+      const d = dateOf(l);
+      // בלי תאריך אין מה להשוות — יורד מהתוצאה, ונספר כדי שלא ייעלם בשקט
+      if (!d) {
+        missing++;
+        return false;
+      }
+      if (dateFrom && d < dateFrom) return false;
+      if (dateTo && d > dateTo) return false;
+      return true;
+    });
+
+    return { filtered: inRange, undated: missing };
+  }, [leads, hiredAt, clientFilter, dateBasis, dateFrom, dateTo]);
 
   return (
     <div dir="rtl">
@@ -73,7 +97,10 @@ export function HiredContent({
         <span className="text-3xl font-bold text-cyan-700">
           {filtered.length}
         </span>
-        <span className="text-cyan-700 font-medium">סה&quot;כ התקבלו</span>
+        <span className="text-cyan-700 font-medium">
+          סה&quot;כ התקבלו
+          {(dateFrom || dateTo) && ` · לפי ${DATE_BASIS_LABELS[dateBasis]}`}
+        </span>
         {filtered.some((l) => l.status === "EMPLOYMENT_ENDED") && (
           <span className="text-sm text-cyan-700/80 border-r border-cyan-200 pr-3 mr-1">
             מועסקים כעת {filtered.filter((l) => l.status !== "EMPLOYMENT_ENDED").length}
@@ -104,6 +131,19 @@ export function HiredContent({
         </div>
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">
+            סנן לפי
+          </label>
+          <select
+            value={dateBasis}
+            onChange={(e) => setDateBasis(e.target.value as DateBasis)}
+            className="border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white min-w-[150px]"
+          >
+            <option value="hired">{DATE_BASIS_LABELS.hired}</option>
+            <option value="start">{DATE_BASIS_LABELS.start}</option>
+          </select>
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">
             מתאריך
           </label>
           <input
@@ -124,7 +164,22 @@ export function HiredContent({
             className="border border-gray-300 rounded-lg px-3 py-2 text-sm"
           />
         </div>
+        {(dateFrom || dateTo) && (
+          <button
+            type="button"
+            onClick={() => { setDateFrom(""); setDateTo(""); }}
+            className="text-sm text-gray-500 hover:text-gray-800 pb-2"
+          >
+            נקה תאריכים
+          </button>
+        )}
       </div>
+
+      {undated > 0 && (
+        <p className="-mt-3 mb-6 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 w-fit">
+          {undated} מועסקים לא מוצגים — אין להם {DATE_BASIS_LABELS[dateBasis]}.
+        </p>
+      )}
 
       {/* Table */}
       {filtered.length === 0 ? (
