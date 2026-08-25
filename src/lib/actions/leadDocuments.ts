@@ -14,6 +14,7 @@ function getAdmin() {
 }
 
 import { LEAD_DOC_TYPES, type LeadDocType, type LeadDocument } from "@/lib/leadDocTypes";
+import { cancelPendingForDocs } from "@/lib/signatureSend";
 
 /**
  * Upload a single document for a lead. Replaces any existing doc of the same
@@ -49,6 +50,8 @@ export async function uploadLeadDocument(formData: FormData): Promise<{
       .eq("lead_id", leadId)
       .eq("doc_type", docType);
     if (existing && existing.length > 0) {
+      // בקשות חתימה שממתינות על הקובץ הישן מתות איתו
+      await cancelPendingForDocs(existing.map((d) => d.id));
       const paths = existing.map((d) => d.file_path);
       await admin.storage.from(BUCKET).remove(paths);
       await admin
@@ -146,6 +149,7 @@ export async function deleteLeadDocument(docId: string): Promise<{ success: bool
     .single();
   if (!doc) return { success: false, error: "מסמך לא נמצא" };
 
+  await cancelPendingForDocs([docId]);
   await admin.storage.from(BUCKET).remove([doc.file_path]);
   const { error } = await admin.from("lead_documents").delete().eq("id", docId);
   if (error) return { success: false, error: error.message };

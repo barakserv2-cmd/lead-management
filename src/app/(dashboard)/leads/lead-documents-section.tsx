@@ -287,6 +287,15 @@ function DocSlot({
   );
 }
 
+// ── ספריית תבניות לשליחה בקליק ──────────────────────────────
+
+interface SignTemplate {
+  id: string;
+  name: string;
+  doc_type: string;
+  file_name: string;
+}
+
 // ── Main section ─────────────────────────────────────────────
 
 export function LeadDocumentsSection({ leadId }: { leadId: string }) {
@@ -295,6 +304,8 @@ export function LeadDocumentsSection({ leadId }: { leadId: string }) {
   const [uploading, setUploading] = useState<Set<LeadDocType>>(new Set());
   const [sigRequests, setSigRequests] = useState<SignatureRequest[]>([]);
   const [signSending, setSignSending] = useState<string | null>(null); // doc id
+  const [templates, setTemplates] = useState<SignTemplate[]>([]);
+  const [templateSending, setTemplateSending] = useState<string | null>(null); // template id
 
   // Initial fetch — does NOT block the UI from rendering the slots.
   useEffect(() => {
@@ -308,6 +319,12 @@ export function LeadDocumentsSection({ leadId }: { leadId: string }) {
       .then((r) => r.json())
       .then((body) => {
         if (!cancelled && Array.isArray(body.requests)) setSigRequests(body.requests);
+      })
+      .catch(() => {});
+    fetch("/api/sign/templates")
+      .then((r) => r.json())
+      .then((body) => {
+        if (!cancelled && Array.isArray(body.templates)) setTemplates(body.templates);
       })
       .catch(() => {});
     return () => { cancelled = true; };
@@ -377,6 +394,44 @@ export function LeadDocumentsSection({ leadId }: { leadId: string }) {
       prev.map((r) => (r.id === req.id ? { ...r, status: "cancelled" as const } : r))
     );
     toast.success("בקשת החתימה בוטלה");
+  }
+
+  async function handleSendTemplate(t: SignTemplate) {
+    if (!confirm(`לשלוח למועמד את "${t.name}" לחתימה דיגיטלית בוואטסאפ?`)) return;
+    setTemplateSending(t.id);
+    try {
+      const res = await fetch("/api/sign/send-template", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ leadId, templateId: t.id }),
+      });
+      const body = await res.json();
+      if (body.document) {
+        // המסמך החדש נכנס לסלוט — מחליף קודם מאותו סוג (חוץ מ'אחר')
+        setDocs((prev) => {
+          const filtered =
+            body.document.doc_type === "other"
+              ? prev
+              : prev.filter((d) => d.doc_type !== body.document.doc_type);
+          return [body.document, ...filtered];
+        });
+      }
+      if (body.request) {
+        setSigRequests((prev) => [body.request, ...prev]);
+      }
+      if (body.success) {
+        toast.success(`"${t.name}" נשלח לחתימה בוואטסאפ ✍️`);
+      } else if (body.link) {
+        await navigator.clipboard.writeText(body.link).catch(() => {});
+        toast.error(body.error ?? "השליחה נכשלה", { description: "הקישור הועתק ללוח — אפשר לשלוח ידנית" });
+      } else {
+        toast.error(body.error ?? "השליחה נכשלה");
+      }
+    } catch {
+      toast.error("השליחה נכשלה");
+    } finally {
+      setTemplateSending(null);
+    }
   }
 
   async function handleCopySignLink(req: SignatureRequest) {
@@ -553,6 +608,36 @@ export function LeadDocumentsSection({ leadId }: { leadId: string }) {
                 </button>
               </div>
             ))}
+          </div>
+        )}
+
+        {/* ── שליחת מסמכים קבועים לחתימה דיגיטלית ── */}
+        {templates.length > 0 && (
+          <div className="mt-3 rounded-lg border border-violet-200 bg-violet-50/40 p-2.5">
+            <div className="text-[11px] font-semibold text-violet-800 mb-1.5 flex items-center gap-1">
+              ✍️ שליחת מסמך לחתימה דיגיטלית
+            </div>
+            <div className="space-y-1">
+              {templates.map((t) => (
+                <div
+                  key={t.id}
+                  className="flex items-center justify-between gap-2 px-2 py-1 rounded bg-white border border-violet-100 text-[11px]"
+                >
+                  <span className="truncate text-gray-700">📄 {t.name}</span>
+                  <button
+                    type="button"
+                    onClick={() => handleSendTemplate(t)}
+                    disabled={templateSending !== null}
+                    className="flex-shrink-0 px-2 py-0.5 rounded bg-violet-600 text-white font-semibold hover:bg-violet-700 transition-colors disabled:opacity-50"
+                  >
+                    {templateSending === t.id ? "שולח..." : "שלח ✍️"}
+                  </button>
+                </div>
+              ))}
+            </div>
+            <div className="text-[10px] text-violet-700/60 mt-1.5">
+              המועמד מקבל קישור בוואטסאפ, חותם מהנייד, והמסמך החתום נשמר כאן
+            </div>
           </div>
         )}
       </div>
