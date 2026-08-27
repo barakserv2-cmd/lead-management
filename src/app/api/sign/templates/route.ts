@@ -16,7 +16,7 @@ export async function GET() {
   );
   const { data, error } = await admin
     .from("signature_templates")
-    .select("id, name, doc_type, file_name, file_size, sort_order, recruiter_fields")
+    .select("id, name, doc_type, file_name, file_size, sort_order, recruiter_fields, custom_fields")
     .eq("is_active", true)
     .order("sort_order", { ascending: true });
   if (error) {

@@ -295,6 +295,17 @@ interface SignTemplate {
   doc_type: string;
   file_name: string;
   recruiter_fields?: string[];
+  custom_fields?: { key: string; label: string; filler: "candidate" | "recruiter" }[];
+}
+
+/** השדות שהרכזת ממלאת בדיאלוג השליחה: סטנדרטיים + מותאמים. */
+function recruiterInputsFor(t: SignTemplate): { key: string; label: string }[] {
+  return [
+    ...(t.recruiter_fields ?? []).map((k) => ({ key: k, label: RECRUITER_FIELD_LABELS[k] ?? k })),
+    ...(t.custom_fields ?? [])
+      .filter((c) => c.filler === "recruiter")
+      .map((c) => ({ key: c.key, label: c.label })),
+  ];
 }
 
 const RECRUITER_FIELD_LABELS: Record<string, string> = {
@@ -407,7 +418,7 @@ export function LeadDocumentsSection({ leadId }: { leadId: string }) {
   }
 
   function handleSendTemplate(t: SignTemplate) {
-    if ((t.recruiter_fields?.length ?? 0) > 0) {
+    if (recruiterInputsFor(t).length > 0) {
       // קודם ממלאים את תנאי ההעסקה — השליחה מהדיאלוג
       setRecruiterVals({});
       setRecruiterDialog(t);
@@ -673,10 +684,10 @@ export function LeadDocumentsSection({ leadId }: { leadId: string }) {
               הערכים יוטבעו בטופס ויוצגו למועמד לפני החתימה. שדה שיישאר ריק — המשבצת שלו תישאר ריקה.
             </p>
             <div className="space-y-3">
-              {(recruiterDialog.recruiter_fields ?? []).map((key) => (
+              {recruiterInputsFor(recruiterDialog).map(({ key, label }) => (
                 <div key={key}>
                   <label className="block text-xs font-semibold text-gray-700 mb-1">
-                    {RECRUITER_FIELD_LABELS[key] ?? key}
+                    {label}
                   </label>
                   <input
                     type="text"
@@ -685,7 +696,7 @@ export function LeadDocumentsSection({ leadId }: { leadId: string }) {
                     onChange={(e) =>
                       setRecruiterVals((v) => ({ ...v, [key]: e.target.value }))
                     }
-                    placeholder={RECRUITER_FIELD_LABELS[key] ?? key}
+                    placeholder={label}
                     className="w-full px-3 py-2 rounded-lg border border-gray-300 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500"
                   />
                 </div>

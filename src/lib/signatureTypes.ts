@@ -68,8 +68,8 @@ export function isValidIsraeliId(value: string): boolean {
   return sum % 10 === 0;
 }
 
-/** ולידציה של ערך שדה יחיד; מחזיר הודעת שגיאה או null. */
-export function validateCandidateField(key: CandidateFieldKey, value: string): string | null {
+/** ולידציה של ערך שדה יחיד (כולל שדות מותאמים); מחזיר הודעת שגיאה או null. */
+export function validateCandidateField(key: string, value: string): string | null {
   const v = value.trim();
   if (!v) return "שדה חובה";
   switch (key) {
@@ -110,13 +110,19 @@ export function sanitizeRecruiterFields(raw: unknown): RecruiterFieldKey[] {
   );
 }
 
-/** ערכי רכזת מהקלט — רק מפתחות מוכרים, טקסט קצוץ, בלי ריקים. */
-export function sanitizeRecruiterValues(raw: unknown): Partial<Record<RecruiterFieldKey, string>> {
-  const out: Partial<Record<RecruiterFieldKey, string>> = {};
+/**
+ * ערכי רכזת מהקלט — מפתחות מוכרים (+ מפתחות מותאמים מורשים),
+ * טקסט קצוץ, בלי ריקים.
+ */
+export function sanitizeRecruiterValues(
+  raw: unknown,
+  extraKeys: string[] = []
+): Record<string, string> {
+  const out: Record<string, string> = {};
   if (!raw || typeof raw !== "object") return out;
   for (const [k, v] of Object.entries(raw as Record<string, unknown>)) {
-    if (k in RECRUITER_FIELDS && typeof v === "string" && v.trim()) {
-      out[k as RecruiterFieldKey] = v.trim().slice(0, 120);
+    if ((k in RECRUITER_FIELDS || extraKeys.includes(k)) && typeof v === "string" && v.trim()) {
+      out[k] = v.trim().slice(0, 120);
     }
   }
   return out;
@@ -125,7 +131,41 @@ export function sanitizeRecruiterValues(raw: unknown): Partial<Record<RecruiterF
 // ── מיקומי שדות על גבי המסמך (ממופים בכלי הסימון) ────────────
 
 /** מפתחות שאפשר למקם על המסמך: שדות מועמד + שדות רכזת + חתימה + תאריך. */
-export type PlacementKey = CandidateFieldKey | RecruiterFieldKey | "signature" | "date";
+// ── שדות מותאמים אישית ───────────────────────────────────────
+// מוגדרים בכלי המיפוי (לא בקוד). filler קובע מי ממלא את הערך.
+
+export interface CustomFieldDef {
+  /** custom_<slug> — נוצר ע"י כלי המיפוי */
+  key: string;
+  label: string;
+  filler: "candidate" | "recruiter";
+}
+
+export const CUSTOM_KEY_RE = /^custom_[a-z0-9_]{1,40}$/;
+
+export function sanitizeCustomFields(raw: unknown): CustomFieldDef[] {
+  if (!Array.isArray(raw)) return [];
+  const out: CustomFieldDef[] = [];
+  const seen = new Set<string>();
+  for (const c of raw) {
+    if (!c || typeof c !== "object") continue;
+    const { key, label, filler } = c as Record<string, unknown>;
+    if (typeof key !== "string" || !CUSTOM_KEY_RE.test(key) || seen.has(key)) continue;
+    if (typeof label !== "string" || !label.trim() || label.length > 60) continue;
+    if (filler !== "candidate" && filler !== "recruiter") continue;
+    seen.add(key);
+    out.push({ key, label: label.trim(), filler });
+    if (out.length >= 30) break;
+  }
+  return out;
+}
+
+export type PlacementKey =
+  | CandidateFieldKey
+  | RecruiterFieldKey
+  | "signature"
+  | "date"
+  | `custom_${string}`;
 
 export interface FieldPlacement {
   key: PlacementKey;
@@ -139,7 +179,14 @@ export interface FieldPlacement {
 }
 
 export function isPlacementKey(k: unknown): k is PlacementKey {
-  return typeof k === "string" && (k in CANDIDATE_FIELDS || k === "signature" || k === "date");
+  return (
+    typeof k === "string" &&
+    (k in CANDIDATE_FIELDS ||
+      k in RECRUITER_FIELDS ||
+      k === "signature" ||
+      k === "date" ||
+      CUSTOM_KEY_RE.test(k))
+  );
 }
 
 /** מסנן מערך מיקומים מה-DB/קלט למבנה תקין בלבד. */

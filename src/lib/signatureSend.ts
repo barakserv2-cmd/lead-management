@@ -12,6 +12,7 @@ import { getMessageScope } from "@/lib/messageVisibility";
 import { LEAD_DOC_TYPES, type LeadDocType } from "@/lib/leadDocTypes";
 import {
   DEFAULT_REQUIRED_FIELDS,
+  sanitizeCustomFields,
   sanitizeFieldPositions,
   sanitizeRecruiterValues,
   sanitizeRequiredFields,
@@ -42,11 +43,17 @@ export async function sendSignatureRequestForDoc(opts: {
   requiredFields?: unknown;
   /** משבצות ממופות על גבי המסמך (מהתבנית) */
   fieldPositions?: unknown;
-  /** ערכים שהרכזת מילאה בשליחה (תפקיד, מקום עבודה, שכר) */
+  /** ערכים שהרכזת מילאה בשליחה (תפקיד, מקום עבודה, שכר, מותאמים) */
   recruiterValues?: unknown;
+  /** הגדרות שדות מותאמים מהתבנית */
+  customFields?: unknown;
 }): Promise<SendSignatureResult> {
   const { doc, userEmail, appBase } = opts;
-  const recruiterValues = sanitizeRecruiterValues(opts.recruiterValues);
+  const customFields = sanitizeCustomFields(opts.customFields);
+  const recruiterValues = sanitizeRecruiterValues(
+    opts.recruiterValues,
+    customFields.filter((c) => c.filler === "recruiter").map((c) => c.key)
+  );
   const requiredFields = opts.requiredFields
     ? sanitizeRequiredFields(opts.requiredFields)
     : DEFAULT_REQUIRED_FIELDS;
@@ -91,6 +98,7 @@ export async function sendSignatureRequestForDoc(opts: {
       required_fields: requiredFields,
       field_positions: fieldPositions.length > 0 ? fieldPositions : null,
       recruiter_values: Object.keys(recruiterValues).length > 0 ? recruiterValues : null,
+      custom_fields: customFields.length > 0 ? customFields : null,
     })
     .select()
     .single();

@@ -12,6 +12,7 @@ import { LEAD_DOC_TYPES, type LeadDocType } from "@/lib/leadDocTypes";
 import {
   CANDIDATE_FIELDS,
   RECRUITER_FIELDS,
+  sanitizeCustomFields,
   sanitizeFieldPositions,
   sanitizeRecruiterValues,
   sanitizeRequiredFields,
@@ -40,13 +41,14 @@ interface RequestRow {
   required_fields: unknown;
   field_positions: unknown;
   recruiter_values: unknown;
+  custom_fields: unknown;
 }
 
 async function loadRequest(token: string): Promise<RequestRow | null> {
   if (!token || token.length < 20 || token.length > 64) return null;
   const { data } = await getAdmin()
     .from("signature_requests")
-    .select("id, lead_id, document_id, status, doc_type, file_name, expires_at, required_fields, field_positions, recruiter_values")
+    .select("id, lead_id, document_id, status, doc_type, file_name, expires_at, required_fields, field_positions, recruiter_values, custom_fields")
     .eq("token", token)
     .maybeSingle();
   return (data as RequestRow) ?? null;
@@ -111,6 +113,11 @@ export async function GET(
   }
 
   const requiredFields = sanitizeRequiredFields(request.required_fields);
+  const customs = sanitizeCustomFields(request.custom_fields);
+  const recruiterVals = sanitizeRecruiterValues(
+    request.recruiter_values,
+    customs.filter((c) => c.filler === "recruiter").map((c) => c.key)
+  );
   const prefill = await loadPrefill(request.lead_id);
   const firstName = (prefill.full_name ?? "").trim().split(/\s+/)[0] || null;
 
@@ -122,14 +129,25 @@ export async function GET(
     url: signed.signedUrl,
     firstName,
     expiresAt: request.expires_at,
-    requiredFields: requiredFields.map((key) => ({ key, ...CANDIDATE_FIELDS[key] })),
+    requiredFields: [
+      ...requiredFields.map((key) => ({ key, ...CANDIDATE_FIELDS[key] })),
+      // שדות מותאמים שהמועמד ממלא — טקסט חופשי חובה
+      ...customs
+        .filter((c) => c.filler === "candidate")
+        .map((c) => ({ key: c.key, label: c.label, type: "text" as const })),
+    ],
     prefill: Object.fromEntries(
       requiredFields.filter((k) => prefill[k]).map((k) => [k, prefill[k]])
     ),
     fieldPositions: sanitizeFieldPositions(request.field_positions),
-    recruiterInfo: Object.entries(sanitizeRecruiterValues(request.recruiter_values)).map(
-      ([key, value]) => ({ key, label: RECRUITER_FIELDS[key as RecruiterFieldKey].label, value })
-    ),
+    recruiterInfo: Object.entries(recruiterVals).map(([key, value]) => ({
+      key,
+      label:
+        key in RECRUITER_FIELDS
+          ? RECRUITER_FIELDS[key as RecruiterFieldKey].label
+          : customs.find((c) => c.key === key)?.label ?? key,
+      value,
+    })),
   });
 }
 
@@ -149,15 +167,22 @@ export async function POST(
   try {
     const { details, stampPng, detailsPng, fieldPngs } = await req.json();
 
-    // ── ולידציה של כל שדות החובה ──
-    const requiredFields = sanitizeRequiredFields(request.required_fields);
-    const values: Partial<Record<CandidateFieldKey, string>> = {};
-    for (const key of requiredFields) {
+    // ── ולידציה של כל שדות החובה (סטנדרטיים + מותאמים של מועמד) ──
+    const customs = sanitizeCustomFields(request.custom_fields);
+    const candidateFieldList: { key: string; label: string }[] = [
+      ...sanitizeRequiredFields(request.required_fields).map((key) => ({
+        key: key as string,
+        label: CANDIDATE_FIELDS[key].label,
+      })),
+      ...customs.filter((c) => c.filler === "candidate").map((c) => ({ key: c.key, label: c.label })),
+    ];
+    const values: Record<string, string> = {};
+    for (const { key, label } of candidateFieldList) {
       const raw = String((details ?? {})[key] ?? "").trim();
       const err = validateCandidateField(key, raw);
       if (err) {
         return NextResponse.json(
-          { success: false, error: `${CANDIDATE_FIELDS[key].label}: ${err}` },
+          { success: false, error: `${label}: ${err}` },
           { status: 400 }
         );
       }
@@ -179,10 +204,17 @@ export async function POST(
     }
 
     // ── מיפוי משבצות: הערכים מוטבעים בתוך הטופס עצמו ──
-    const recruiterVals = sanitizeRecruiterValues(request.recruiter_values);
-    // משבצת של שדה רכזת בלי ערך — מדלגים (נשארת ריקה בטופס)
+    const recruiterVals = sanitizeRecruiterValues(
+      request.recruiter_values,
+      customs.filter((c) => c.filler === "recruiter").map((c) => c.key)
+    );
+    // משבצת של שדה בבעלות הרכזת שנשאר ריק — מדלגים (נשארת ריקה בטופס)
+    const recruiterOwnedKeys = new Set<string>([
+      ...Object.keys(RECRUITER_FIELDS),
+      ...customs.filter((c) => c.filler === "recruiter").map((c) => c.key),
+    ]);
     const placements = sanitizeFieldPositions(request.field_positions).filter(
-      (p) => !(p.key in RECRUITER_FIELDS) || recruiterVals[p.key as RecruiterFieldKey]
+      (p) => !recruiterOwnedKeys.has(p.key) || recruiterVals[p.key]
     );
     const overlayImages: Record<string, Uint8Array> = {};
     if (placements.length > 0) {
@@ -293,7 +325,11 @@ export async function POST(
       })
       .eq("id", request.id);
 
-    // הפרטים נשמרים לליד — השליחה הבאה תגיע ממולאת מראש
+    // הפרטים נשמרים לליד — השליחה הבאה תגיע ממולאת מראש.
+    // רק שדות סטנדרטיים; מותאמים הם פר-תבנית ולא נגררים הלאה.
+    const stdValues = Object.fromEntries(
+      Object.entries(values).filter(([k]) => k in CANDIDATE_FIELDS)
+    );
     const { data: existingDetails } = await admin
       .from("lead_candidate_details")
       .select("details")
@@ -301,7 +337,7 @@ export async function POST(
       .maybeSingle();
     await admin.from("lead_candidate_details").upsert({
       lead_id: doc.lead_id,
-      details: { ...(existingDetails?.details as object ?? {}), ...values },
+      details: { ...(existingDetails?.details as object ?? {}), ...stdValues },
       updated_at: signedAt.toISOString(),
     });
     // אימייל שמולא משלים חוסר בליד (לא דורס ערך קיים)

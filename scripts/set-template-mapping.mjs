@@ -30,7 +30,10 @@ const admin = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.SUP
 const filePath = `templates/${mapping.template}.pdf`;
 const { data, error } = await admin
   .from("signature_templates")
-  .update({ field_positions: mapping.fields })
+  .update({
+    field_positions: mapping.fields,
+    custom_fields: Array.isArray(mapping.customFields) ? mapping.customFields : [],
+  })
   .eq("file_path", filePath)
   .select("name")
   .maybeSingle();

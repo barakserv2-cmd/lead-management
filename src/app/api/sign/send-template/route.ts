@@ -39,7 +39,7 @@ export async function POST(req: NextRequest) {
 
     const { data: template } = await admin
       .from("signature_templates")
-      .select("id, name, doc_type, file_path, file_name, mime_type, file_size, required_fields, field_positions")
+      .select("id, name, doc_type, file_path, file_name, mime_type, file_size, required_fields, field_positions, custom_fields")
       .eq("id", templateId)
       .eq("is_active", true)
       .maybeSingle();
@@ -101,6 +101,7 @@ export async function POST(req: NextRequest) {
       requiredFields: template.required_fields,
       fieldPositions: template.field_positions,
       recruiterValues,
+      customFields: template.custom_fields,
     });
     const { httpStatus, ...body } = result;
     return NextResponse.json(
