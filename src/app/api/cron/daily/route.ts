@@ -2,8 +2,12 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient as createServerClient } from "@supabase/supabase-js";
 import { sendWhatsAppMessage } from "@/lib/whatsappService";
 
-// Vercel cron pings this URL once a day (see vercel.json).
+// Vercel cron pings this URL every hour (see vercel.json).
 // Guarded by CRON_SECRET so it can't be hit anonymously from outside.
+//
+// היה פעם ביום ב-09:00 UTC, וכל ראיון שנקבע אחרי שהקרון רץ לא נתפס לעולם —
+// ב-27/08 רק 3 מתוך 11 מועמדי היום קיבלו תזכורת. הבדיקה עברה לכל שעה;
+// occurrence_key שומר על שליחה אחת בלבד לכל מועמד לכל תאריך ראיון.
 
 function getAdmin() {
   return createServerClient(
@@ -22,6 +26,22 @@ interface RunSummary {
 
 const LOCK_TTL_MS = 24 * 60 * 60 * 1000;
 
+// שעות שקטות — עכשיו שהבדיקה רצה כל שעה, בלי הגבלה מועמד שנקבע לו ראיון
+// ב-23:50 היה מקבל וואטסאפ בחצות. מחוץ לחלון הזה פשוט לא שולחים; הריצה
+// הבאה בתוך החלון תתפוס את מי שעדיין לא קיבל.
+const QUIET_START_HOUR = 7;   // לא שולחים לפני
+const QUIET_END_HOUR = 22;    // ולא אחרי
+
+function israelHour(at: Date): number {
+  return Number(
+    new Intl.DateTimeFormat("en-GB", {
+      timeZone: "Asia/Jerusalem",
+      hour: "2-digit",
+      hour12: false,
+    }).format(at)
+  ) % 24;
+}
+
 // ── Rule 1: Interview-tomorrow reminder ─────────────────────
 // Send a WhatsApp to every lead whose interview is tomorrow.
 // Idempotent per (lead_id, date) via cron_reminders.occurrence_key.
@@ -38,6 +58,12 @@ async function runInterviewReminders(admin: ReturnType<typeof getAdmin>): Promis
   // Israel wall-clock time with a +00:00 label (naive), so we build the
   // day bounds in that same naive frame instead of a rolling hour window —
   // otherwise a 00:00 (date-only) interview two days out gets "מחר".
+  const hour = israelHour(new Date());
+  if (hour < QUIET_START_HOUR || hour >= QUIET_END_HOUR) {
+    summary.details.push(`שעה שקטה (${hour}:00) — לא נשלחות תזכורות`);
+    return summary;
+  }
+
   const todayIl = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Jerusalem" }).format(new Date());
   const tomorrow = new Date(`${todayIl}T00:00:00Z`);
   tomorrow.setUTCDate(tomorrow.getUTCDate() + 1);

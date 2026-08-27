@@ -9,7 +9,7 @@
     },
     {
       "path": "/api/cron/daily",
-      "schedule": "0 9 * * *"
+      "schedule": "0 * * * *"
     },
     {
       "path": "/api/cron/retention",
