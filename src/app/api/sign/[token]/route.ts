@@ -139,6 +139,7 @@ export async function GET(
           label: c.label,
           type: c.type === "choice" ? ("choice" as const) : ("text" as const),
           options: c.options,
+          required: c.required !== false,
         })),
     ],
     prefill: Object.fromEntries(
@@ -190,6 +191,8 @@ export async function POST(
     for (const { key, label } of candidateFieldList) {
       const raw = String((details ?? {})[key] ?? "").trim();
       const def = customs.find((c) => c.key === key);
+      // שדה רשות שנשאר ריק — מדלגים (המשבצת תישאר ריקה בטופס)
+      if (def?.required === false && !raw) continue;
       // שאלת סימון: הערך חייב להיות אחת מהאפשרויות
       const err =
         def?.type === "choice"
@@ -225,11 +228,6 @@ export async function POST(
       request.recruiter_values,
       customs.filter((c) => c.filler === "recruiter").map((c) => c.key)
     );
-    // משבצת של שדה בבעלות הרכזת שנשאר ריק — מדלגים (נשארת ריקה בטופס)
-    const recruiterOwnedKeys = new Set<string>([
-      ...Object.keys(RECRUITER_FIELDS),
-      ...customs.filter((c) => c.filler === "recruiter").map((c) => c.key),
-    ]);
     // משבצות סימון: נשארת רק המשבצת של האפשרות שנבחרה
     const chosenIndex = (baseKey: string): number => {
       const def = customs.find((c) => c.key === baseKey && c.type === "choice");
@@ -238,11 +236,13 @@ export async function POST(
       return selected ? def.options!.indexOf(selected) : -1;
     };
     const placements = sanitizeFieldPositions(request.field_positions).filter((p) => {
+      if (p.key === "signature" || p.key === "date") return true;
       const choiceMatch = /^(custom_[a-z0-9_]{1,40})__(\d{1,2})$/.exec(p.key);
       if (choiceMatch) {
         return chosenIndex(choiceMatch[1]) === Number(choiceMatch[2]);
       }
-      return !recruiterOwnedKeys.has(p.key) || recruiterVals[p.key];
+      // משבצת של שדה ערך (מועמד/רכזת) — רק אם יש ערך בפועל
+      return !!(values[p.key] || recruiterVals[p.key]);
     });
     const overlayImages: Record<string, Uint8Array> = {};
     if (placements.length > 0) {

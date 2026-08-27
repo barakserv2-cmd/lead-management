@@ -18,6 +18,8 @@ interface FieldInfo {
   type: "text" | "tel" | "email" | "date" | "choice";
   numeric?: boolean;
   options?: string[];
+  /** false = רשות — אפשר להשאיר ריק */
+  required?: boolean;
 }
 
 interface DocInfo {
@@ -64,6 +66,7 @@ export function SignClient({ token }: { token: string }) {
     const errs: Record<string, string> = {};
     for (const f of fields) {
       const v = values[f.key] ?? "";
+      if (f.required === false && !v) continue; // רשות — מותר ריק
       const err =
         f.type === "choice"
           ? f.options?.includes(v)
@@ -169,6 +172,7 @@ export function SignClient({ token }: { token: string }) {
       dctx.stroke();
       let y = 250;
       for (const f of fields) {
+        if (!(values[f.key]?.trim())) continue; // שדה רשות ריק — לא מופיע בדף הפרטים
         // תאריך מוצג dd/mm/yyyy
         let v = values[f.key]?.trim() ?? "";
         if (f.type === "date" && /^\d{4}-\d{2}-\d{2}$/.test(v)) {
@@ -308,6 +312,7 @@ export function SignClient({ token }: { token: string }) {
           continue;
         }
         const text = displayValue(key);
+        if (!text) continue; // שדה רשות ריק — אין מה להטביע
         const c = document.createElement("canvas");
         const tctx = c.getContext("2d")!;
         const fontSpec = `500 56px ${family}`;
@@ -465,7 +470,12 @@ export function SignClient({ token }: { token: string }) {
             <div key={f.key}>
               <label className="block text-sm font-semibold text-slate-700 mb-1">
                 {f.label}
-                {filled && <span className="text-green-600 mr-1">✓</span>}
+                {f.required === false && (
+                  <span className="text-slate-400 font-normal text-xs mr-1">(רשות)</span>
+                )}
+                {filled && (values[f.key] ?? "") !== "" && (
+                  <span className="text-green-600 mr-1">✓</span>
+                )}
               </label>
               {f.type === "choice" ? (
                 <div className="flex flex-wrap gap-2">

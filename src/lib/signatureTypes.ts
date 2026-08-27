@@ -142,6 +142,8 @@ export interface CustomFieldDef {
   /** "choice" = שאלת סימון: בוחרים אפשרות וה-✓ מוטבע במשבצת שלה */
   type?: "text" | "choice";
   options?: string[];
+  /** false = רשות — אפשר לחתום בלי למלא; המשבצת נשארת ריקה */
+  required?: boolean;
 }
 
 export const CUSTOM_KEY_RE = /^custom_[a-z0-9_]{1,40}$/;
@@ -154,11 +156,12 @@ export function sanitizeCustomFields(raw: unknown): CustomFieldDef[] {
   const seen = new Set<string>();
   for (const c of raw) {
     if (!c || typeof c !== "object") continue;
-    const { key, label, filler, type, options } = c as Record<string, unknown>;
+    const { key, label, filler, type, options, required } = c as Record<string, unknown>;
     if (typeof key !== "string" || !CUSTOM_KEY_RE.test(key) || seen.has(key)) continue;
     if (typeof label !== "string" || !label.trim() || label.length > 60) continue;
     if (filler !== "candidate" && filler !== "recruiter") continue;
     const def: CustomFieldDef = { key, label: label.trim(), filler };
+    if (required === false) def.required = false;
     if (type === "choice") {
       if (!Array.isArray(options)) continue;
       const opts = options
@@ -219,7 +222,7 @@ export function sanitizeFieldPositions(raw: unknown): FieldPlacement[] {
     if (!nums.every((n) => typeof n === "number" && n >= 0 && n <= 1)) continue;
     if ((w as number) <= 0 || (h as number) <= 0) continue;
     out.push({ key, page, x: x as number, y: y as number, w: w as number, h: h as number });
-    if (out.length >= 60) break;
+    if (out.length >= 200) break;
   }
   return out;
 }
