@@ -477,6 +477,46 @@ export function SignClient({ token }: { token: string }) {
         {visibleFields.map((f) => {
           const err = touched.has(f.key) ? fieldErrors[f.key] : undefined;
           const filled = !fieldErrors[f.key];
+          const pick = (opt: string) => {
+            setValues((v) => ({ ...v, [f.key]: opt }));
+            setTouched((t) => new Set(t).add(f.key));
+          };
+          // שאלת כן/לא — שורה קומפקטית: השאלה מימין, שני כפתורים שווים משמאל
+          const isYesNo =
+            f.type === "choice" &&
+            (f.options?.length ?? 0) === 2 &&
+            f.options!.every((o) => o.length <= 4);
+          if (isYesNo) {
+            return (
+              <div key={f.key} className="py-1 border-b border-slate-100 last:border-0">
+                <div className="flex items-center justify-between gap-3">
+                  <span className="text-sm text-slate-700 leading-snug flex-1">
+                    {f.label}
+                    {f.required === false && (
+                      <span className="text-slate-400 text-xs"> (רשות)</span>
+                    )}
+                  </span>
+                  <div className="flex gap-1.5 flex-shrink-0">
+                    {f.options!.map((opt) => (
+                      <button
+                        key={opt}
+                        type="button"
+                        onClick={() => pick(opt)}
+                        className={`w-14 py-1.5 rounded-lg border text-sm font-medium transition-colors ${
+                          values[f.key] === opt
+                            ? "bg-cyan-600 border-cyan-600 text-white"
+                            : "bg-white border-slate-300 text-slate-600"
+                        }`}
+                      >
+                        {opt}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                {err && <div className="text-[11px] text-red-600 mt-0.5">{err}</div>}
+              </div>
+            );
+          }
           return (
             <div key={f.key}>
               <label className="block text-sm font-semibold text-slate-700 mb-1">
@@ -489,16 +529,13 @@ export function SignClient({ token }: { token: string }) {
                 )}
               </label>
               {f.type === "choice" ? (
-                <div className="flex flex-wrap gap-2">
+                <div className="grid grid-cols-2 gap-2">
                   {(f.options ?? []).map((opt) => (
                     <button
                       key={opt}
                       type="button"
-                      onClick={() => {
-                        setValues((v) => ({ ...v, [f.key]: opt }));
-                        setTouched((t) => new Set(t).add(f.key));
-                      }}
-                      className={`px-3 py-2 rounded-xl border text-sm font-medium transition-colors ${
+                      onClick={() => pick(opt)}
+                      className={`w-full px-2 py-2 rounded-xl border text-sm font-medium text-center leading-snug transition-colors ${
                         values[f.key] === opt
                           ? "bg-cyan-600 border-cyan-600 text-white"
                           : "bg-white border-slate-300 text-slate-700"

@@ -96,12 +96,16 @@ export async function buildSignedPdf(opts: BuildOpts): Promise<Uint8Array> {
       const H = page.getHeight();
       const boxW = p.w * W;
       const boxH = p.h * H;
-      const s = Math.min(boxW / img.width, boxH / img.height);
+      // טקסט מקבל גובה אחיד (עד ~12pt) כדי שכל הערכים בטופס ייראו
+      // באותו גודל; חתימה ו-✓ ממלאים את המשבצת שלהם.
+      const isValueText = p.key !== "signature" && !/__\d+$/.test(p.key);
+      const maxH = isValueText ? Math.min(boxH, 12) : boxH;
+      const s = Math.min(boxW / img.width, maxH / img.height);
       const w = img.width * s;
       const h = img.height * s;
       page.drawImage(img, {
-        // טפסים בעברית — הערך צמוד לימין המשבצת, ממורכז אנכית
-        x: p.x * W + boxW - w,
+        // ממורכז במשבצת — נראה סימטרי על קווי הטופס
+        x: p.x * W + (boxW - w) / 2,
         y: H - p.y * H - boxH + (boxH - h) / 2,
         width: w,
         height: h,
