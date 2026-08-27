@@ -13,6 +13,7 @@ import { LEAD_DOC_TYPES, type LeadDocType } from "@/lib/leadDocTypes";
 import {
   DEFAULT_REQUIRED_FIELDS,
   sanitizeFieldPositions,
+  sanitizeRecruiterValues,
   sanitizeRequiredFields,
   type SignatureRequest,
 } from "@/lib/signatureTypes";
@@ -41,8 +42,11 @@ export async function sendSignatureRequestForDoc(opts: {
   requiredFields?: unknown;
   /** משבצות ממופות על גבי המסמך (מהתבנית) */
   fieldPositions?: unknown;
+  /** ערכים שהרכזת מילאה בשליחה (תפקיד, מקום עבודה, שכר) */
+  recruiterValues?: unknown;
 }): Promise<SendSignatureResult> {
   const { doc, userEmail, appBase } = opts;
+  const recruiterValues = sanitizeRecruiterValues(opts.recruiterValues);
   const requiredFields = opts.requiredFields
     ? sanitizeRequiredFields(opts.requiredFields)
     : DEFAULT_REQUIRED_FIELDS;
@@ -86,6 +90,7 @@ export async function sendSignatureRequestForDoc(opts: {
       sent_by: userEmail?.toLowerCase() ?? null,
       required_fields: requiredFields,
       field_positions: fieldPositions.length > 0 ? fieldPositions : null,
+      recruiter_values: Object.keys(recruiterValues).length > 0 ? recruiterValues : null,
     })
     .select()
     .single();

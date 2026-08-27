@@ -91,10 +91,41 @@ export function validateCandidateField(key: CandidateFieldKey, value: string): s
   }
 }
 
+// ── שדות רכזת ────────────────────────────────────────────────
+// ערכים שהרכזת ממלאת בזמן השליחה (תנאי ההעסקה שסוכמו) — המועמד
+// רואה אותם לקריאה בלבד והם מוטבעים בטופס כמו שאר השדות.
+
+export const RECRUITER_FIELDS = {
+  job_title:   { label: "תפקיד" },
+  workplace:   { label: "מקום עבודה" },
+  hourly_wage: { label: "שכר שעתי (₪)" },
+} as const;
+
+export type RecruiterFieldKey = keyof typeof RECRUITER_FIELDS;
+
+export function sanitizeRecruiterFields(raw: unknown): RecruiterFieldKey[] {
+  if (!Array.isArray(raw)) return [];
+  return raw.filter(
+    (k): k is RecruiterFieldKey => typeof k === "string" && k in RECRUITER_FIELDS
+  );
+}
+
+/** ערכי רכזת מהקלט — רק מפתחות מוכרים, טקסט קצוץ, בלי ריקים. */
+export function sanitizeRecruiterValues(raw: unknown): Partial<Record<RecruiterFieldKey, string>> {
+  const out: Partial<Record<RecruiterFieldKey, string>> = {};
+  if (!raw || typeof raw !== "object") return out;
+  for (const [k, v] of Object.entries(raw as Record<string, unknown>)) {
+    if (k in RECRUITER_FIELDS && typeof v === "string" && v.trim()) {
+      out[k as RecruiterFieldKey] = v.trim().slice(0, 120);
+    }
+  }
+  return out;
+}
+
 // ── מיקומי שדות על גבי המסמך (ממופים בכלי הסימון) ────────────
 
-/** מפתחות שאפשר למקם על המסמך: שדות מועמד + חתימה + תאריך. */
-export type PlacementKey = CandidateFieldKey | "signature" | "date";
+/** מפתחות שאפשר למקם על המסמך: שדות מועמד + שדות רכזת + חתימה + תאריך. */
+export type PlacementKey = CandidateFieldKey | RecruiterFieldKey | "signature" | "date";
 
 export interface FieldPlacement {
   key: PlacementKey;

@@ -294,7 +294,14 @@ interface SignTemplate {
   name: string;
   doc_type: string;
   file_name: string;
+  recruiter_fields?: string[];
 }
+
+const RECRUITER_FIELD_LABELS: Record<string, string> = {
+  job_title: "תפקיד",
+  workplace: "מקום עבודה",
+  hourly_wage: "שכר שעתי (₪)",
+};
 
 // ── Main section ─────────────────────────────────────────────
 
@@ -306,6 +313,9 @@ export function LeadDocumentsSection({ leadId }: { leadId: string }) {
   const [signSending, setSignSending] = useState<string | null>(null); // doc id
   const [templates, setTemplates] = useState<SignTemplate[]>([]);
   const [templateSending, setTemplateSending] = useState<string | null>(null); // template id
+  // דיאלוג שדות רכזת (תפקיד/מקום/שכר) לפני שליחת תבנית שדורשת אותם
+  const [recruiterDialog, setRecruiterDialog] = useState<SignTemplate | null>(null);
+  const [recruiterVals, setRecruiterVals] = useState<Record<string, string>>({});
 
   // Initial fetch — does NOT block the UI from rendering the slots.
   useEffect(() => {
@@ -396,14 +406,24 @@ export function LeadDocumentsSection({ leadId }: { leadId: string }) {
     toast.success("בקשת החתימה בוטלה");
   }
 
-  async function handleSendTemplate(t: SignTemplate) {
+  function handleSendTemplate(t: SignTemplate) {
+    if ((t.recruiter_fields?.length ?? 0) > 0) {
+      // קודם ממלאים את תנאי ההעסקה — השליחה מהדיאלוג
+      setRecruiterVals({});
+      setRecruiterDialog(t);
+      return;
+    }
     if (!confirm(`לשלוח למועמד את "${t.name}" לחתימה דיגיטלית בוואטסאפ?`)) return;
+    void doSendTemplate(t, undefined);
+  }
+
+  async function doSendTemplate(t: SignTemplate, recruiterValues?: Record<string, string>) {
     setTemplateSending(t.id);
     try {
       const res = await fetch("/api/sign/send-template", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ leadId, templateId: t.id }),
+        body: JSON.stringify({ leadId, templateId: t.id, recruiterValues }),
       });
       const body = await res.json();
       if (body.document) {
@@ -641,6 +661,59 @@ export function LeadDocumentsSection({ leadId }: { leadId: string }) {
           </div>
         )}
       </div>
+
+      {/* דיאלוג שדות רכזת לפני שליחה */}
+      {recruiterDialog && (
+        <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-5">
+            <div className="font-bold text-gray-800 mb-1">
+              {recruiterDialog.name} — פרטי ההעסקה
+            </div>
+            <p className="text-[11px] text-gray-400 mb-3">
+              הערכים יוטבעו בטופס ויוצגו למועמד לפני החתימה. שדה שיישאר ריק — המשבצת שלו תישאר ריקה.
+            </p>
+            <div className="space-y-3">
+              {(recruiterDialog.recruiter_fields ?? []).map((key) => (
+                <div key={key}>
+                  <label className="block text-xs font-semibold text-gray-700 mb-1">
+                    {RECRUITER_FIELD_LABELS[key] ?? key}
+                  </label>
+                  <input
+                    type="text"
+                    inputMode={key === "hourly_wage" ? "decimal" : undefined}
+                    value={recruiterVals[key] ?? ""}
+                    onChange={(e) =>
+                      setRecruiterVals((v) => ({ ...v, [key]: e.target.value }))
+                    }
+                    placeholder={RECRUITER_FIELD_LABELS[key] ?? key}
+                    className="w-full px-3 py-2 rounded-lg border border-gray-300 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500"
+                  />
+                </div>
+              ))}
+            </div>
+            <div className="flex gap-2 mt-4">
+              <button
+                type="button"
+                onClick={() => {
+                  const t = recruiterDialog;
+                  setRecruiterDialog(null);
+                  void doSendTemplate(t, recruiterVals);
+                }}
+                className="flex-1 py-2 rounded-lg bg-violet-600 text-white font-semibold hover:bg-violet-700"
+              >
+                שלח לחתימה ✍️
+              </button>
+              <button
+                type="button"
+                onClick={() => setRecruiterDialog(null)}
+                className="px-4 py-2 rounded-lg border border-gray-300 text-gray-600 hover:bg-gray-50"
+              >
+                ביטול
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

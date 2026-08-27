@@ -29,6 +29,8 @@ interface DocInfo {
   requiredFields?: FieldInfo[];
   prefill?: Record<string, string>;
   fieldPositions?: FieldPlacement[];
+  /** תנאים שהרכזת מילאה (תפקיד/מקום/שכר) — לקריאה בלבד */
+  recruiterInfo?: { key: string; label: string; value: string }[];
 }
 
 export function SignClient({ token }: { token: string }) {
@@ -136,10 +138,11 @@ export function SignClient({ token }: { token: string }) {
       });
 
       // דף פרטי המועמד — עברית מרונדרת בדפדפן
+      const recruiterRows = info?.recruiterInfo ?? [];
       const details = document.createElement("canvas");
       details.width = 1000;
       const rowH = 74;
-      details.height = 260 + fields.length * rowH + 80;
+      details.height = 260 + (fields.length + recruiterRows.length) * rowH + 80;
       const dctx = details.getContext("2d")!;
       dctx.fillStyle = "#ffffff";
       dctx.fillRect(0, 0, details.width, details.height);
@@ -172,6 +175,16 @@ export function SignClient({ token }: { token: string }) {
         dctx.fillStyle = "#0f172a";
         dctx.font = `400 32px ${family}`;
         dctx.fillText(v, 660, y);
+        y += rowH;
+      }
+      for (const r of recruiterRows) {
+        dctx.textAlign = "right";
+        dctx.fillStyle = "#64748b";
+        dctx.font = `600 30px ${family}`;
+        dctx.fillText(r.label + ":", 920, y);
+        dctx.fillStyle = "#0f172a";
+        dctx.font = `400 32px ${family}`;
+        dctx.fillText(r.value, 660, y);
         y += rowH;
       }
 
@@ -209,6 +222,8 @@ export function SignClient({ token }: { token: string }) {
         if (key === "date") {
           return new Date().toLocaleDateString("he-IL", { timeZone: "Asia/Jerusalem" });
         }
+        const recruiterVal = info?.recruiterInfo?.find((r) => r.key === key)?.value;
+        if (recruiterVal) return recruiterVal;
         let v = values[key]?.trim() ?? "";
         if (/^\d{4}-\d{2}-\d{2}$/.test(v)) {
           const [yy, mm, dd] = v.split("-");
@@ -387,6 +402,17 @@ export function SignClient({ token }: { token: string }) {
         <p className="text-[11px] text-slate-400 -mt-1">
           הפרטים ייכנסו למסמך החתום. בדקו שהכל נכון והשלימו את החסר.
         </p>
+
+        {(info.recruiterInfo?.length ?? 0) > 0 && (
+          <div className="rounded-xl bg-slate-50 border border-slate-200 px-3 py-2 space-y-1">
+            {info.recruiterInfo!.map((r) => (
+              <div key={r.key} className="flex justify-between text-sm">
+                <span className="text-slate-500">{r.label}</span>
+                <span className="font-semibold text-slate-800">{r.value}</span>
+              </div>
+            ))}
+          </div>
+        )}
 
         {fields.map((f) => {
           const err = touched.has(f.key) ? fieldErrors[f.key] : undefined;

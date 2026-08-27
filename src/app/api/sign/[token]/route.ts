@@ -11,10 +11,13 @@ import { buildSignedPdf } from "@/lib/pdfSign";
 import { LEAD_DOC_TYPES, type LeadDocType } from "@/lib/leadDocTypes";
 import {
   CANDIDATE_FIELDS,
+  RECRUITER_FIELDS,
   sanitizeFieldPositions,
+  sanitizeRecruiterValues,
   sanitizeRequiredFields,
   validateCandidateField,
   type CandidateFieldKey,
+  type RecruiterFieldKey,
 } from "@/lib/signatureTypes";
 
 const BUCKET = "lead-documents";
@@ -36,13 +39,14 @@ interface RequestRow {
   expires_at: string;
   required_fields: unknown;
   field_positions: unknown;
+  recruiter_values: unknown;
 }
 
 async function loadRequest(token: string): Promise<RequestRow | null> {
   if (!token || token.length < 20 || token.length > 64) return null;
   const { data } = await getAdmin()
     .from("signature_requests")
-    .select("id, lead_id, document_id, status, doc_type, file_name, expires_at, required_fields, field_positions")
+    .select("id, lead_id, document_id, status, doc_type, file_name, expires_at, required_fields, field_positions, recruiter_values")
     .eq("token", token)
     .maybeSingle();
   return (data as RequestRow) ?? null;
@@ -123,6 +127,9 @@ export async function GET(
       requiredFields.filter((k) => prefill[k]).map((k) => [k, prefill[k]])
     ),
     fieldPositions: sanitizeFieldPositions(request.field_positions),
+    recruiterInfo: Object.entries(sanitizeRecruiterValues(request.recruiter_values)).map(
+      ([key, value]) => ({ key, label: RECRUITER_FIELDS[key as RecruiterFieldKey].label, value })
+    ),
   });
 }
 
@@ -172,7 +179,11 @@ export async function POST(
     }
 
     // ── מיפוי משבצות: הערכים מוטבעים בתוך הטופס עצמו ──
-    const placements = sanitizeFieldPositions(request.field_positions);
+    const recruiterVals = sanitizeRecruiterValues(request.recruiter_values);
+    // משבצת של שדה רכזת בלי ערך — מדלגים (נשארת ריקה בטופס)
+    const placements = sanitizeFieldPositions(request.field_positions).filter(
+      (p) => !(p.key in RECRUITER_FIELDS) || recruiterVals[p.key as RecruiterFieldKey]
+    );
     const overlayImages: Record<string, Uint8Array> = {};
     if (placements.length > 0) {
       const provided = (fieldPngs ?? {}) as Record<string, unknown>;
@@ -278,7 +289,7 @@ export async function POST(
         signer_ip: ip,
         signer_user_agent: req.headers.get("user-agent")?.slice(0, 300) ?? null,
         signed_at: signedAt.toISOString(),
-        filled_details: values,
+        filled_details: { ...recruiterVals, ...values },
       })
       .eq("id", request.id);
 

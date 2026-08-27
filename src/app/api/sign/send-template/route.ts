@@ -30,7 +30,7 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const { leadId, templateId } = await req.json();
+    const { leadId, templateId, recruiterValues } = await req.json();
     if (!leadId || !templateId) {
       return NextResponse.json({ success: false, error: "חסרים פרמטרים" }, { status: 400 });
     }
@@ -100,6 +100,7 @@ export async function POST(req: NextRequest) {
       appBase: appBase(req),
       requiredFields: template.required_fields,
       fieldPositions: template.field_positions,
+      recruiterValues,
     });
     const { httpStatus, ...body } = result;
     return NextResponse.json(
