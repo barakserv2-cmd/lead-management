@@ -12,6 +12,7 @@ import { LEAD_DOC_TYPES, type LeadDocType } from "@/lib/leadDocTypes";
 import {
   CANDIDATE_FIELDS,
   RECRUITER_FIELDS,
+  filterCandidateKeys,
   sanitizeCustomFields,
   sanitizeFieldPositions,
   sanitizeRecruiterValues,
@@ -42,13 +43,14 @@ interface RequestRow {
   field_positions: unknown;
   recruiter_values: unknown;
   custom_fields: unknown;
+  optional_fields: unknown;
 }
 
 async function loadRequest(token: string): Promise<RequestRow | null> {
   if (!token || token.length < 20 || token.length > 64) return null;
   const { data } = await getAdmin()
     .from("signature_requests")
-    .select("id, lead_id, document_id, status, doc_type, file_name, expires_at, required_fields, field_positions, recruiter_values, custom_fields")
+    .select("id, lead_id, document_id, status, doc_type, file_name, expires_at, required_fields, field_positions, recruiter_values, custom_fields, optional_fields")
     .eq("token", token)
     .maybeSingle();
   return (data as RequestRow) ?? null;
@@ -113,6 +115,7 @@ export async function GET(
   }
 
   const requiredFields = sanitizeRequiredFields(request.required_fields);
+  const optionalStd = filterCandidateKeys(request.optional_fields);
   const customs = sanitizeCustomFields(request.custom_fields);
   const recruiterVals = sanitizeRecruiterValues(
     request.recruiter_values,
@@ -130,7 +133,11 @@ export async function GET(
     firstName,
     expiresAt: request.expires_at,
     requiredFields: [
-      ...requiredFields.map((key) => ({ key, ...CANDIDATE_FIELDS[key] })),
+      ...requiredFields.map((key) => ({
+        key,
+        ...CANDIDATE_FIELDS[key],
+        required: !optionalStd.includes(key),
+      })),
       // שדות מותאמים שהמועמד ממלא — טקסט חופשי או שאלת סימון
       ...customs
         .filter((c) => c.filler === "candidate")
@@ -180,19 +187,21 @@ export async function POST(
 
     // ── ולידציה של כל שדות החובה (סטנדרטיים + מותאמים של מועמד) ──
     const customs = sanitizeCustomFields(request.custom_fields);
-    const candidateFieldList: { key: string; label: string }[] = [
+    const optionalStd = filterCandidateKeys(request.optional_fields);
+    const candidateFieldList: { key: string; label: string; optional?: boolean }[] = [
       ...sanitizeRequiredFields(request.required_fields).map((key) => ({
         key: key as string,
         label: CANDIDATE_FIELDS[key].label,
+        optional: optionalStd.includes(key),
       })),
       ...customs.filter((c) => c.filler === "candidate").map((c) => ({ key: c.key, label: c.label })),
     ];
     const values: Record<string, string> = {};
-    for (const { key, label } of candidateFieldList) {
+    for (const { key, label, optional } of candidateFieldList) {
       const raw = String((details ?? {})[key] ?? "").trim();
       const def = customs.find((c) => c.key === key);
       // שדה רשות שנשאר ריק — מדלגים (המשבצת תישאר ריקה בטופס)
-      if (def?.required === false && !raw) continue;
+      if ((optional || def?.required === false) && !raw) continue;
       // שאלת סימון: הערך חייב להיות אחת מהאפשרויות
       const err =
         def?.type === "choice"

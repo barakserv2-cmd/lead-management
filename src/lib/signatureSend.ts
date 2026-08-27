@@ -16,6 +16,7 @@ import { getMessageScope } from "@/lib/messageVisibility";
 import { LEAD_DOC_TYPES, type LeadDocType } from "@/lib/leadDocTypes";
 import {
   DEFAULT_REQUIRED_FIELDS,
+  filterCandidateKeys,
   sanitizeCustomFields,
   sanitizeFieldPositions,
   sanitizeRecruiterValues,
@@ -51,6 +52,8 @@ export async function sendSignatureRequestForDoc(opts: {
   recruiterValues?: unknown;
   /** הגדרות שדות מותאמים מהתבנית */
   customFields?: unknown;
+  /** שדות סטנדרטיים שהם רשות (מתוך required_fields) */
+  optionalFields?: unknown;
 }): Promise<SendSignatureResult> {
   const { doc, userEmail, appBase } = opts;
   const customFields = sanitizeCustomFields(opts.customFields);
@@ -111,6 +114,7 @@ export async function sendSignatureRequestForDoc(opts: {
       field_positions: fieldPositions.length > 0 ? fieldPositions : null,
       recruiter_values: Object.keys(recruiterValues).length > 0 ? recruiterValues : null,
       custom_fields: customFields.length > 0 ? customFields : null,
+      optional_fields: filterCandidateKeys(opts.optionalFields),
     })
     .select()
     .single();

@@ -227,6 +227,14 @@ export function sanitizeFieldPositions(raw: unknown): FieldPlacement[] {
   return out;
 }
 
+/** מסנן רשימת מפתחות מועמד — מחזיר גם רשימה ריקה (בשונה מ-sanitizeRequiredFields). */
+export function filterCandidateKeys(raw: unknown): CandidateFieldKey[] {
+  if (!Array.isArray(raw)) return [];
+  return raw.filter(
+    (k): k is CandidateFieldKey => typeof k === "string" && k in CANDIDATE_FIELDS
+  );
+}
+
 /** מסנן רשימת שדות מה-DB לשדות מוכרים בלבד. */
 export function sanitizeRequiredFields(raw: unknown): CandidateFieldKey[] {
   if (!Array.isArray(raw)) return DEFAULT_REQUIRED_FIELDS;
