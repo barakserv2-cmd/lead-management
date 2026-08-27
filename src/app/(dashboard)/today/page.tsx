@@ -5,6 +5,7 @@ import { AutoRefresh } from "./auto-refresh";
 import { StatusSelect } from "../leads/status-select";
 import { LeadNotesDialog } from "../leads/lead-notes-dialog";
 import { DayNav } from "./day-nav";
+import { MyReminders } from "./my-reminders";
 
 export const dynamic = "force-dynamic";
 
@@ -162,6 +163,9 @@ export default async function TodayPage({
           </Link>
         </div>
       </div>
+
+      {/* ═══ My call-back reminders ═══ */}
+      {isToday && <MyReminders />}
 
       {/* ═══ Summary strip ═══ */}
       <div className="grid grid-cols-3 md:grid-cols-6 gap-2 mb-4">

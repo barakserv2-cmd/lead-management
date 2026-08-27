@@ -13,7 +13,7 @@ import {
   getAllowedTransitions,
   type LeadStatusValue,
 } from "@/lib/stateMachine";
-import { SUB_STATUSES, NO_ANSWER_3 } from "@/lib/constants";
+import { SUB_STATUSES, NO_ANSWER_3, NOT_AVAILABLE_NOW } from "@/lib/constants";
 
 const SUB_STATUS_DIALOG_CONFIG: Partial<Record<LeadStatusValue, SubStatusPickerConfig>> = {
   [LeadStatus.CONTACTED]: {
@@ -36,6 +36,7 @@ import { EmploymentEndDialog } from "./employment-end-dialog";
 import { SubStatusPickerDialog, type SubStatusPickerConfig } from "./sub-status-picker-dialog";
 import { RejectionReasonDialog } from "./rejection-reason-dialog";
 import { StartWorkDialog } from "./start-work-dialog";
+import { CallbackReminderDialog } from "./callback-reminder-dialog";
 
 // סטטוסים שנושאים תאריך — לחיצה עליהם כשהם כבר הסטטוס הנוכחי פותחת את
 // הדיאלוג לעריכת התאריך במקום להיות no-op.
@@ -105,6 +106,7 @@ export function StatusSelect({
   const [showEmploymentEndDialog, setShowEmploymentEndDialog] = useState(false);
   const [showRejectionDialog, setShowRejectionDialog] = useState(false);
   const [showStartWorkDialog, setShowStartWorkDialog] = useState(false);
+  const [callbackFor, setCallbackFor] = useState<string | null>(null);
   const [subStatusDialog, setSubStatusDialog] = useState<{ open: boolean; targetStatus: LeadStatusValue | null }>({ open: false, targetStatus: null });
 
   const router = useRouter();
@@ -436,6 +438,33 @@ export function StatusSelect({
     setLoading(false);
     setSubStatusDialog({ open: false, targetStatus: null });
     setToast({ message: `${STATUS_LABELS[target]} — ${chosenSub}`, type: "success" });
+
+    // "לא זמין במיידי" — המועמד רלוונטי, רק לא עכשיו. שואלים מיד מתי לחזור
+    // אליו, אחרת הוא נסגר ונשכח.
+    if (chosenSub === NOT_AVAILABLE_NOW) setCallbackFor(chosenSub);
+  }
+
+  async function handleCallbackConfirm(data: { dueAt: string; title: string; priority: "high" | "normal" }) {
+    setLoading(true);
+    try {
+      const res = await fetch("/api/reminders", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ leadId, ...data }),
+      });
+      if (!res.ok) {
+        const d = (await res.json().catch(() => ({}))) as { error?: string };
+        setToast({ message: d.error ?? "לא ניתן לשמור תזכורת", type: "error" });
+        return;
+      }
+      setCallbackFor(null);
+      setToast({
+        message: `תזכורת נקבעה ל-${new Date(data.dueAt).toLocaleDateString("he-IL", { day: "numeric", month: "short" })}`,
+        type: "success",
+      });
+    } finally {
+      setLoading(false);
+    }
   }
 
   async function handleSubStatusChange(value: string) {
@@ -570,6 +599,16 @@ export function StatusSelect({
           editOnly={status === LeadStatus.EMPLOYMENT_ENDED}
           onConfirm={handleEmploymentEndConfirm}
           onCancel={() => setShowEmploymentEndDialog(false)}
+          loading={loading}
+        />
+      )}
+
+      {callbackFor && (
+        <CallbackReminderDialog
+          leadName={leadName}
+          reason={callbackFor}
+          onConfirm={handleCallbackConfirm}
+          onSkip={() => setCallbackFor(null)}
           loading={loading}
         />
       )}

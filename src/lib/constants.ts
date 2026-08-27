@@ -33,6 +33,9 @@ export type LeadSource = (typeof LEAD_SOURCES)[number];
 // (handled in status-select.tsx).
 export const NO_ANSWER_3 = "אין מענה 3";
 
+// מועמד שרוצה לעבוד אבל לא עכשיו — מעביר אותו לתזכורת חזרה במקום לסגור אותו
+export const NOT_AVAILABLE_NOW = "לא זמין במיידי";
+
 export const SUB_STATUSES: Record<string, string[]> = {
   CONTACTED: ["אין מענה 1", "אין מענה 2", NO_ANSWER_3, "מעקב"],
   NOT_SUITABLE: [
@@ -40,7 +43,7 @@ export const SUB_STATUSES: Record<string, string[]> = {
     "לא תואם דרישות",
     "לא תואם גאוגרפית",
     "לא תואם שכר",
-    "לא זמין במיידי",
+    NOT_AVAILABLE_NOW,
   ],
 };
 
