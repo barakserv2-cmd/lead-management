@@ -30,6 +30,15 @@ const DATE_BASIS_LABELS: Record<DateBasis, string> = {
   start: "תחילת עבודה",
 };
 
+// "התקבל" ו"התחיל לעבוד" הם שני שלבים שונים — מי שהתקבל וטרם התחיל הוא מי
+// שצריך מעקב עד ליום הראשון, ולכן צריך אפשרות להסתכל על כל שלב בנפרד.
+const STAGE_OPTIONS: { value: string; label: string }[] = [
+  { value: "", label: "כל השלבים" },
+  { value: LeadStatus.HIRED, label: "התקבל — טרם התחיל" },
+  { value: LeadStatus.STARTED, label: "התחיל לעבוד" },
+  { value: LeadStatus.EMPLOYMENT_ENDED, label: "סיים העסקה" },
+];
+
 export function HiredContent({
   leads,
   hiredAt = {},
@@ -39,6 +48,7 @@ export function HiredContent({
   hiredAt?: Record<string, string>;
 }) {
   const [clientFilter, setClientFilter] = useState("");
+  const [stageFilter, setStageFilter] = useState("");
   const [dateBasis, setDateBasis] = useState<DateBasis>("hired");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
@@ -58,6 +68,10 @@ export function HiredContent({
 
     if (clientFilter) {
       result = result.filter((l) => employerOf(l) === clientFilter);
+    }
+
+    if (stageFilter) {
+      result = result.filter((l) => l.status === stageFilter);
     }
 
     if (!dateFrom && !dateTo) return { filtered: result, undated: 0 };
@@ -85,7 +99,7 @@ export function HiredContent({
     });
 
     return { filtered: inRange, undated: missing };
-  }, [leads, hiredAt, clientFilter, dateBasis, dateFrom, dateTo]);
+  }, [leads, hiredAt, clientFilter, stageFilter, dateBasis, dateFrom, dateTo]);
 
   return (
     <div dir="rtl">
@@ -98,10 +112,12 @@ export function HiredContent({
           {filtered.length}
         </span>
         <span className="text-cyan-700 font-medium">
-          סה&quot;כ התקבלו
+          {stageFilter
+            ? STAGE_OPTIONS.find((o) => o.value === stageFilter)?.label
+            : "סה״כ התקבלו"}
           {(dateFrom || dateTo) && ` · לפי ${DATE_BASIS_LABELS[dateBasis]}`}
         </span>
-        {filtered.some((l) => l.status === "EMPLOYMENT_ENDED") && (
+        {!stageFilter && filtered.some((l) => l.status === "EMPLOYMENT_ENDED") && (
           <span className="text-sm text-cyan-700/80 border-r border-cyan-200 pr-3 mr-1">
             מועסקים כעת {filtered.filter((l) => l.status !== "EMPLOYMENT_ENDED").length}
             {" · "}
@@ -126,6 +142,20 @@ export function HiredContent({
               <option key={c} value={c}>
                 {c}
               </option>
+            ))}
+          </select>
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">
+            שלב
+          </label>
+          <select
+            value={stageFilter}
+            onChange={(e) => setStageFilter(e.target.value)}
+            className="border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white min-w-[170px]"
+          >
+            {STAGE_OPTIONS.map((o) => (
+              <option key={o.value} value={o.value}>{o.label}</option>
             ))}
           </select>
         </div>
