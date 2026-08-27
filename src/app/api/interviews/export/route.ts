@@ -30,8 +30,9 @@ export async function GET(req: NextRequest) {
   const { data, error } = await db
     .from("leads")
     .select(INTERVIEW_REPORT_SELECT)
-    .gte("interview_date", `${date}T00:00:00+03:00`)
-    .lte("interview_date", `${date}T23:59:59+03:00`)
+    // interview_date הוא שעון קיר ישראלי עם תווית UTC — גבולות היום באותה מסגרת
+    .gte("interview_date", `${date}T00:00:00Z`)
+    .lte("interview_date", `${date}T23:59:59Z`)
     .order("interview_date", { ascending: true })
     .limit(1000);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });

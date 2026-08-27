@@ -106,16 +106,17 @@ export async function PATCH(
       }
       updateData[key] = s || null;
     } else if (key === "interview_date") {
+      // מגיע כשעון קיר ישראלי ("YYYY-MM-DDTHH:mm") ונשמר כמו שהוא עם תווית UTC —
+      // אותה קונבנציה כמו דיאלוג קביעת הראיון (changeLeadStatus). אין להמיר ל-ISO.
       const s = String(value ?? "").trim();
-      if (s && Number.isNaN(new Date(s).getTime())) {
-        return NextResponse.json({ error: "תאריך ראיון לא תקין" }, { status: 400 });
-      }
       if (s) {
-        const il = new Intl.DateTimeFormat("en-GB", { timeZone: "Asia/Jerusalem", hour: "2-digit", minute: "2-digit", hour12: false }).format(new Date(s));
-        const err = validateInterviewLocal(`T${il}`);
+        if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(s) || Number.isNaN(new Date(s).getTime())) {
+          return NextResponse.json({ error: "תאריך ראיון לא תקין" }, { status: 400 });
+        }
+        const err = validateInterviewLocal(s);
         if (err) return NextResponse.json({ error: err }, { status: 400 });
       }
-      updateData.interview_date = s ? new Date(s).toISOString() : null;
+      updateData.interview_date = s || null;
     } else if (key === "hired_client") {
       const s = String(value ?? "").trim();
       updateData.hired_client = s ? (await normalizeEmployerName(s)).normalized : null;

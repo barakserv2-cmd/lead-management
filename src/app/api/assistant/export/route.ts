@@ -38,6 +38,14 @@ function fmtDate(iso: string | null | undefined) {
   return d.toLocaleString("he-IL", { timeZone: "Asia/Jerusalem", hour12: false });
 }
 
+// interview_date הוא שעון קיר ישראלי עם תווית UTC — פורמט בלי המרת אזור זמן
+function fmtWallDate(iso: string | null | undefined) {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return String(iso);
+  return d.toLocaleString("he-IL", { timeZone: "UTC", hour12: false });
+}
+
 export async function GET(req: NextRequest) {
   const supabase = await createSessionClient();
   const {
@@ -116,8 +124,9 @@ export async function GET(req: NextRequest) {
     q = q.not("interview_date", "is", null).order("interview_date", { ascending: true });
     const job = sp.get("job");
     if (job) q = q.ilike("job_title", `%${job}%`);
-    if (from) q = q.gte("interview_date", `${from}T00:00:00+03:00`);
-    if (to) q = q.lte("interview_date", `${to}T23:59:59+03:00`);
+    // interview_date הוא שעון קיר ישראלי עם תווית UTC — גבולות באותה מסגרת
+    if (from) q = q.gte("interview_date", `${from}T00:00:00Z`);
+    if (to) q = q.lte("interview_date", `${to}T23:59:59Z`);
   } else if (type === "hired") {
     q = q.in("status", [LeadStatus.HIRED, LeadStatus.STARTED]);
   } else {
@@ -160,8 +169,8 @@ export async function GET(req: NextRequest) {
         const matched = (l.preferences as Record<string, unknown> | null)?.matched_client;
         const d = new Date(l.interview_date as string);
         return [
-          d.toLocaleDateString("he-IL", { timeZone: "Asia/Jerusalem" }),
-          d.toLocaleTimeString("he-IL", { timeZone: "Asia/Jerusalem", hour: "2-digit", minute: "2-digit" }),
+          d.toLocaleDateString("he-IL", { timeZone: "UTC" }),
+          d.toLocaleTimeString("he-IL", { timeZone: "UTC", hour: "2-digit", minute: "2-digit" }),
           l.name,
           l.phone,
           l.hired_position ?? l.job_title,
@@ -208,7 +217,7 @@ export async function GET(req: NextRequest) {
         l.source,
         STATUS_LABELS[l.status as LeadStatusValue] ?? l.status,
         l.sub_status,
-        fmtDate(l.interview_date),
+        fmtWallDate(l.interview_date),
         l.hired_client,
         l.rejection_reason,
         l.tags,

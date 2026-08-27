@@ -26,6 +26,18 @@ export interface InterviewRow {
 
 const TZ = "Asia/Jerusalem";
 
+// interview_date נשמר כשעון קיר ישראלי עם תווית UTC (ראו cron/daily) —
+// קוראים את שדות ה-UTC כמו שהם. המרה ל-Asia/Jerusalem מוסיפה את ההיסט פעמיים.
+const pad2 = (n: number) => String(n).padStart(2, "0");
+function wallDateKey(iso: string): string {
+  const d = new Date(iso);
+  return `${d.getUTCFullYear()}-${pad2(d.getUTCMonth() + 1)}-${pad2(d.getUTCDate())}`;
+}
+function wallTime(iso: string): string {
+  const d = new Date(iso);
+  return `${pad2(d.getUTCHours())}:${pad2(d.getUTCMinutes())}`;
+}
+
 function ilDateKey(iso: string): string {
   // YYYY-MM-DD in Israel time
   const d = new Date(iso);
@@ -106,7 +118,7 @@ export function InterviewsContent({ rows }: { rows: InterviewRow[] }) {
     const qn = q.trim().toLowerCase();
     const qDigits = q.replace(/\D/g, "");
     return rows.filter((r) => {
-      const key = ilDateKey(r.interview_date);
+      const key = wallDateKey(r.interview_date);
       if (range === "today" && key !== today) return false;
       if (range === "yesterday" && key !== addDays(today, -1)) return false;
       if (range === "tomorrow" && key !== addDays(today, 1)) return false;
@@ -130,7 +142,7 @@ export function InterviewsContent({ rows }: { rows: InterviewRow[] }) {
   const groups = useMemo(() => {
     const map = new Map<string, InterviewRow[]>();
     for (const r of filtered) {
-      const k = ilDateKey(r.interview_date);
+      const k = wallDateKey(r.interview_date);
       (map.get(k) ?? map.set(k, []).get(k)!).push(r);
     }
     const keys = Array.from(map.keys()).sort();
@@ -138,8 +150,8 @@ export function InterviewsContent({ rows }: { rows: InterviewRow[] }) {
     return keys.map((k) => ({ key: k, rows: map.get(k)!.sort((a, b) => a.interview_date.localeCompare(b.interview_date)) }));
   }, [filtered, range]);
 
-  const todayCount = rows.filter((r) => ilDateKey(r.interview_date) === today).length;
-  const upcomingCount = rows.filter((r) => ilDateKey(r.interview_date) >= today).length;
+  const todayCount = rows.filter((r) => wallDateKey(r.interview_date) === today).length;
+  const upcomingCount = rows.filter((r) => wallDateKey(r.interview_date) >= today).length;
 
   const exportUrl = (() => {
     const p = new URLSearchParams({ type: "interviews" });
@@ -303,7 +315,7 @@ export function InterviewsContent({ rows }: { rows: InterviewRow[] }) {
                   {g.rows.map((r) => {
                     return (
                       <li key={r.id} className="flex items-start gap-3 px-5 py-3 hover:bg-slate-50 transition-colors">
-                        <span className="text-base font-bold text-slate-900 w-14 shrink-0 tabular-nums pt-0.5">{ilTime(r.interview_date)}</span>
+                        <span className="text-base font-bold text-slate-900 w-14 shrink-0 tabular-nums pt-0.5">{wallTime(r.interview_date)}</span>
                         <div className="min-w-0 flex-1">
                           <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
                             <Link href={`/leads/${r.id}`} className="font-semibold text-slate-900 hover:text-blue-700 hover:underline">

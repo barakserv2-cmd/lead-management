@@ -34,12 +34,13 @@ type Values = Pick<
 
 const pad = (n: number) => String(n).padStart(2, "0");
 
-// ISO → ערך ל-datetime-local בשעון המקומי של הדפדפן (ישראל)
+// interview_date נשמר כשעון קיר ישראלי עם תווית UTC (ראו cron/daily) —
+// קוראים את שדות ה-UTC כמו שהם, בלי תלות באזור הזמן של הדפדפן.
 function toLocalInput(iso: string | null): string {
   if (!iso) return "";
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return "";
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  return `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())}T${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}`;
 }
 
 function formatDate(d: string | null): string | null {
@@ -47,10 +48,11 @@ function formatDate(d: string | null): string | null {
   return new Date(d).toLocaleDateString("he-IL", { day: "numeric", month: "short", year: "numeric" });
 }
 
+// לתצוגת interview_date — שעון קיר עם תווית UTC, לכן מפרמטים ב-UTC
 function formatDateTime(d: string | null): string | null {
   if (!d) return null;
   return new Date(d).toLocaleString("he-IL", {
-    timeZone: "Asia/Jerusalem",
+    timeZone: "UTC",
     day: "numeric",
     month: "short",
     year: "numeric",
@@ -132,8 +134,8 @@ export function RecruitmentInfoSection({ lead }: { lead: Lead }) {
     try {
       const payload = {
         screening_score: form.screening_score.trim(),
-        // datetime-local → ISO לפי שעון הדפדפן, כדי שהשרת (UTC) לא יזיז את השעה
-        interview_date: form.interview_date ? new Date(form.interview_date).toISOString() : "",
+        // נשלח כשעון קיר ("YYYY-MM-DDTHH:mm") — נשמר עם תווית UTC, כמו בדיאלוג קביעת ראיון
+        interview_date: form.interview_date,
         interview_notes: form.interview_notes,
         hired_client: form.hired_client,
         hired_position: form.hired_position,

@@ -10,7 +10,9 @@
 //      never embedded mid-sentence. Quantities are spelled out in Hebrew words
 //      so no digit run ends up next to a Hebrew prefix ("ל-2-3").
 
-const TZ = "Asia/Jerusalem";
+// interview_date נשמר כשעון קיר ישראלי עם תווית UTC (ראו cron/daily) —
+// לכן קוראים את שדות ה-UTC כמו שהם, בלי המרת אזור זמן.
+const TZ = "UTC";
 
 export const OFFICE_ADDRESS = "שדרות התמרים 39, בניין פירסט קלאב, אילת";
 export const OFFICE_PHONE = "08-6488788";

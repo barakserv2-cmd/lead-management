@@ -33,6 +33,15 @@ function daysAgoIso(days: number) {
   return d.toISOString();
 }
 
+// interview_date נשמר כשעון קיר ישראלי עם תווית UTC (ראו cron/daily) —
+// השוואות מולו חייבות "עכשיו" באותה מסגרת, לא toISOString() אמיתי.
+function ilWallIso(atMs: number = Date.now()): string {
+  const d = new Date(atMs);
+  const day = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Jerusalem" }).format(d);
+  const time = new Intl.DateTimeFormat("en-GB", { timeZone: "Asia/Jerusalem", hour12: false, hour: "2-digit", minute: "2-digit", second: "2-digit" }).format(d);
+  return `${day}T${time}Z`;
+}
+
 function label(status: string) {
   return STATUS_LABELS[status as LeadStatusValue] ?? status;
 }
@@ -112,8 +121,8 @@ export const assistantTools = [
           .from("leads")
           .select("id, name, interview_date, hired_client, job_title")
           .eq("status", LeadStatus.INTERVIEW_BOOKED)
-          .gte("interview_date", new Date().toISOString())
-          .lte("interview_date", new Date(Date.now() + 3 * 86400000).toISOString())
+          .gte("interview_date", ilWallIso())
+          .lte("interview_date", ilWallIso(Date.now() + 3 * 86400000))
           .order("interview_date", { ascending: true })
           .limit(30),
       ]);
@@ -230,8 +239,9 @@ export const assistantTools = [
         .from("leads")
         .select("id, name, phone, job_title, hired_position, hired_client, location, status, interview_date, interview_type, interview_notes, handled_by, preferences")
         .not("interview_date", "is", null)
-        .gte("interview_date", `${from}T00:00:00+03:00`)
-        .lte("interview_date", `${to}T23:59:59+03:00`)
+        // שעון קיר ישראלי עם תווית UTC — הגבולות באותה מסגרת
+        .gte("interview_date", `${from}T00:00:00Z`)
+        .lte("interview_date", `${to}T23:59:59Z`)
         .order("interview_date", { ascending: true })
         .limit(200);
       const statuses: LeadStatusValue[] = args.include_past_outcomes
@@ -252,8 +262,8 @@ export const assistantTools = [
           id: l.id,
           name: l.name,
           phone: l.phone,
-          date: d.toLocaleDateString("he-IL", { timeZone: tz, weekday: "long", day: "numeric", month: "numeric" }),
-          time: d.toLocaleTimeString("he-IL", { timeZone: tz, hour: "2-digit", minute: "2-digit" }),
+          date: d.toLocaleDateString("he-IL", { timeZone: "UTC", weekday: "long", day: "numeric", month: "numeric" }),
+          time: d.toLocaleTimeString("he-IL", { timeZone: "UTC", hour: "2-digit", minute: "2-digit" }),
           iso: l.interview_date,
           job_title: l.hired_position ?? l.job_title,
           client: l.hired_client ?? (typeof matched === "string" ? matched : null),

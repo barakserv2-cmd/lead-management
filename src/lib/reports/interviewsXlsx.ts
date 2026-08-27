@@ -23,7 +23,6 @@ export interface InterviewReportRow {
 const YELLOW = "FFFFD965";
 const PEACH = "FFFBE4D5";
 const FONT = "Arial";
-const TZ = "Asia/Jerusalem";
 
 const thin: Partial<ExcelJS.Borders> = {
   top: { style: "thin" },
@@ -50,19 +49,12 @@ export function fmtReportDate(dateStr: string): string {
   return `${d}.${m}.${y.slice(2)}`;
 }
 
+// interview_date נשמר כשעון קיר ישראלי עם תווית UTC — קוראים את שדות ה-UTC ישירות.
 function ilTimeOfDay(iso: string): Date | null {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return null;
-  const parts = new Intl.DateTimeFormat("en-GB", {
-    timeZone: TZ,
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false,
-  }).formatToParts(d);
-  const h = Number(parts.find((p) => p.type === "hour")?.value ?? 0) % 24;
-  const mi = Number(parts.find((p) => p.type === "minute")?.value ?? 0);
   // Excel time-of-day: a Date on the 1899-12-30 epoch day
-  return new Date(Date.UTC(1899, 11, 30, h, mi));
+  return new Date(Date.UTC(1899, 11, 30, d.getUTCHours(), d.getUTCMinutes()));
 }
 
 function isoDateOnly(s: string | null): Date | string {
