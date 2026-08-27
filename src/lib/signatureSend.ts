@@ -7,7 +7,11 @@
 
 import { randomBytes } from "crypto";
 import { createClient as createServerClient } from "@supabase/supabase-js";
-import { sendWhatsAppMessage, resolveSender } from "@/lib/whatsappService";
+import {
+  sendWhatsAppMessage,
+  resolveSender,
+  getDocDelegateAccount,
+} from "@/lib/whatsappService";
 import { getMessageScope } from "@/lib/messageVisibility";
 import { LEAD_DOC_TYPES, type LeadDocType } from "@/lib/leadDocTypes";
 import {
@@ -68,15 +72,23 @@ export async function sendSignatureRequestForDoc(opts: {
   if (!lead) return { success: false, error: "ליד לא נמצא", httpStatus: 404 };
   if (!lead.phone) return { success: false, error: "לליד אין מספר טלפון", httpStatus: 400 };
 
+  // מי שולח: מספר אישי/עסקי (canSend), או האצלת מסמכים —
+  // רכזת בלי וואטסאפ משלה ששולחת דרך מספר של רכזת אחרת
+  // (doc_delegates) לצורך מסמכים בלבד.
+  let sender;
   const scope = await getMessageScope(userEmail);
-  if (!scope.canSend) {
-    return {
-      success: false,
-      error: "אין לך מספר וואטסאפ מחובר — חבר מספר בהגדרות > הוואטסאפ שלי.",
-      httpStatus: 403,
-    };
+  if (scope.canSend) {
+    sender = await resolveSender(userEmail);
+  } else {
+    sender = await getDocDelegateAccount(userEmail);
+    if (!sender) {
+      return {
+        success: false,
+        error: "אין לך מספר וואטסאפ מחובר — חבר מספר בהגדרות > הוואטסאפ שלי.",
+        httpStatus: 403,
+      };
+    }
   }
-  const sender = await resolveSender(userEmail);
 
   // בקשה חדשה מבטלת בקשות pending קודמות על אותו מסמך
   await admin

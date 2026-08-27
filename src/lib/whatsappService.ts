@@ -95,6 +95,25 @@ export async function resolveSender(
 }
 
 /**
+ * חשבון שהאציל לרכזת הזו שליחת מסמכים לחתימה (doc_delegates).
+ * האצלה ממוקדת: שליחת מסמכים בלבד — בלי צפייה בשיחות של החשבון
+ * ובלי שליחת הודעות ידניות ממנו.
+ */
+export async function getDocDelegateAccount(
+  email: string | null | undefined
+): Promise<WhatsAppAccount | null> {
+  if (!email) return null;
+  const { data } = await adminClient()
+    .from("whatsapp_accounts")
+    .select("user_email, instance_id, api_token, phone, label, is_active")
+    .contains("doc_delegates", JSON.stringify([email.toLowerCase()]))
+    .eq("is_active", true)
+    .limit(1)
+    .maybeSingle();
+  return data ? rowToAccount(data as AccountRow) : null;
+}
+
+/**
  * Convert a phone string to Green API chatId format.
  * Strips non-digits, converts Israeli 05x → 9725x, appends @c.us.
  */
