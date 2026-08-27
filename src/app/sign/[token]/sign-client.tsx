@@ -13,10 +13,11 @@ import {
 } from "@/lib/signatureTypes";
 
 interface FieldInfo {
-  key: CandidateFieldKey;
+  key: CandidateFieldKey | string;
   label: string;
-  type: "text" | "tel" | "email" | "date";
+  type: "text" | "tel" | "email" | "date" | "choice";
   numeric?: boolean;
+  options?: string[];
 }
 
 interface DocInfo {
@@ -30,7 +31,7 @@ interface DocInfo {
   prefill?: Record<string, string>;
   fieldPositions?: FieldPlacement[];
   /** תנאים שהרכזת מילאה (תפקיד/מקום/שכר) — לקריאה בלבד */
-  recruiterInfo?: { key: string; label: string; value: string }[];
+  recruiterInfo?: { key: string; label: string; value: string; options?: string[] }[];
 }
 
 export function SignClient({ token }: { token: string }) {
@@ -62,7 +63,13 @@ export function SignClient({ token }: { token: string }) {
   const fieldErrors = useMemo(() => {
     const errs: Record<string, string> = {};
     for (const f of fields) {
-      const err = validateCandidateField(f.key, values[f.key] ?? "");
+      const v = values[f.key] ?? "";
+      const err =
+        f.type === "choice"
+          ? f.options?.includes(v)
+            ? null
+            : "נא לבחור אפשרות"
+          : validateCandidateField(f.key, v);
       if (err) errs[f.key] = err;
     }
     return errs;
@@ -258,9 +265,46 @@ export function SignClient({ token }: { token: string }) {
         return c.toDataURL("image/png");
       };
 
+      // ✓ למשבצת סימון שנבחרה
+      const checkmarkPng = (() => {
+        let cached: string | null = null;
+        return () => {
+          if (cached) return cached;
+          const c = document.createElement("canvas");
+          c.width = 90;
+          c.height = 90;
+          const x = c.getContext("2d")!;
+          x.strokeStyle = "#111827";
+          x.lineWidth = 12;
+          x.lineCap = "round";
+          x.lineJoin = "round";
+          x.beginPath();
+          x.moveTo(18, 48);
+          x.lineTo(38, 70);
+          x.lineTo(74, 20);
+          x.stroke();
+          cached = c.toDataURL("image/png");
+          return cached;
+        };
+      })();
+
       for (const key of positionedKeys) {
         if (key === "signature") {
           fieldPngs[key] = cropSignature();
+          continue;
+        }
+        // משבצת אפשרות בשאלת סימון — ✓ רק אם זו האפשרות שנבחרה
+        const choiceMatch = /^(custom_[a-z0-9_]{1,40})__(\d{1,2})$/.exec(key);
+        if (choiceMatch) {
+          const base = choiceMatch[1];
+          const idx = Number(choiceMatch[2]);
+          const fieldDef = fields.find((f) => f.key === base);
+          const recruiterDef = info?.recruiterInfo?.find((r) => r.key === base);
+          const selected = fieldDef ? values[base] : recruiterDef?.value;
+          const options = fieldDef?.options ?? recruiterDef?.options ?? [];
+          if (selected && options[idx] === selected) {
+            fieldPngs[key] = checkmarkPng();
+          }
           continue;
         }
         const text = displayValue(key);
@@ -423,17 +467,39 @@ export function SignClient({ token }: { token: string }) {
                 {f.label}
                 {filled && <span className="text-green-600 mr-1">✓</span>}
               </label>
-              <input
-                type={f.type}
-                inputMode={f.numeric ? "numeric" : undefined}
-                value={values[f.key] ?? ""}
-                onChange={(e) => setValues((v) => ({ ...v, [f.key]: e.target.value }))}
-                onBlur={() => setTouched((t) => new Set(t).add(f.key))}
-                placeholder={f.label}
-                className={`w-full px-3 py-2.5 rounded-xl border text-base focus:outline-none focus:ring-2 focus:ring-cyan-500 ${
-                  err ? "border-red-400 bg-red-50/40" : "border-slate-300"
-                }`}
-              />
+              {f.type === "choice" ? (
+                <div className="flex flex-wrap gap-2">
+                  {(f.options ?? []).map((opt) => (
+                    <button
+                      key={opt}
+                      type="button"
+                      onClick={() => {
+                        setValues((v) => ({ ...v, [f.key]: opt }));
+                        setTouched((t) => new Set(t).add(f.key));
+                      }}
+                      className={`px-3 py-2 rounded-xl border text-sm font-medium transition-colors ${
+                        values[f.key] === opt
+                          ? "bg-cyan-600 border-cyan-600 text-white"
+                          : "bg-white border-slate-300 text-slate-700"
+                      }`}
+                    >
+                      {opt}
+                    </button>
+                  ))}
+                </div>
+              ) : (
+                <input
+                  type={f.type}
+                  inputMode={f.numeric ? "numeric" : undefined}
+                  value={values[f.key] ?? ""}
+                  onChange={(e) => setValues((v) => ({ ...v, [f.key]: e.target.value }))}
+                  onBlur={() => setTouched((t) => new Set(t).add(f.key))}
+                  placeholder={f.label}
+                  className={`w-full px-3 py-2.5 rounded-xl border text-base focus:outline-none focus:ring-2 focus:ring-cyan-500 ${
+                    err ? "border-red-400 bg-red-50/40" : "border-slate-300"
+                  }`}
+                />
+              )}
               {err && <div className="text-[11px] text-red-600 mt-0.5">{err}</div>}
             </div>
           );

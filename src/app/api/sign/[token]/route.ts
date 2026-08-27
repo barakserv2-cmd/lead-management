@@ -131,23 +131,33 @@ export async function GET(
     expiresAt: request.expires_at,
     requiredFields: [
       ...requiredFields.map((key) => ({ key, ...CANDIDATE_FIELDS[key] })),
-      // שדות מותאמים שהמועמד ממלא — טקסט חופשי חובה
+      // שדות מותאמים שהמועמד ממלא — טקסט חופשי או שאלת סימון
       ...customs
         .filter((c) => c.filler === "candidate")
-        .map((c) => ({ key: c.key, label: c.label, type: "text" as const })),
+        .map((c) => ({
+          key: c.key,
+          label: c.label,
+          type: c.type === "choice" ? ("choice" as const) : ("text" as const),
+          options: c.options,
+        })),
     ],
     prefill: Object.fromEntries(
       requiredFields.filter((k) => prefill[k]).map((k) => [k, prefill[k]])
     ),
     fieldPositions: sanitizeFieldPositions(request.field_positions),
-    recruiterInfo: Object.entries(recruiterVals).map(([key, value]) => ({
-      key,
-      label:
-        key in RECRUITER_FIELDS
-          ? RECRUITER_FIELDS[key as RecruiterFieldKey].label
-          : customs.find((c) => c.key === key)?.label ?? key,
-      value,
-    })),
+    recruiterInfo: Object.entries(recruiterVals).map(([key, value]) => {
+      const def = customs.find((c) => c.key === key);
+      return {
+        key,
+        label:
+          key in RECRUITER_FIELDS
+            ? RECRUITER_FIELDS[key as RecruiterFieldKey].label
+            : def?.label ?? key,
+        value,
+        // אפשרויות לשאלת סימון — כדי שהלקוח ידע לאיזו משבצת שייך ה-✓
+        options: def?.type === "choice" ? def.options : undefined,
+      };
+    }),
   });
 }
 
@@ -179,7 +189,14 @@ export async function POST(
     const values: Record<string, string> = {};
     for (const { key, label } of candidateFieldList) {
       const raw = String((details ?? {})[key] ?? "").trim();
-      const err = validateCandidateField(key, raw);
+      const def = customs.find((c) => c.key === key);
+      // שאלת סימון: הערך חייב להיות אחת מהאפשרויות
+      const err =
+        def?.type === "choice"
+          ? def.options!.includes(raw)
+            ? null
+            : "נא לבחור אפשרות"
+          : validateCandidateField(key, raw);
       if (err) {
         return NextResponse.json(
           { success: false, error: `${label}: ${err}` },
@@ -213,9 +230,20 @@ export async function POST(
       ...Object.keys(RECRUITER_FIELDS),
       ...customs.filter((c) => c.filler === "recruiter").map((c) => c.key),
     ]);
-    const placements = sanitizeFieldPositions(request.field_positions).filter(
-      (p) => !recruiterOwnedKeys.has(p.key) || recruiterVals[p.key]
-    );
+    // משבצות סימון: נשארת רק המשבצת של האפשרות שנבחרה
+    const chosenIndex = (baseKey: string): number => {
+      const def = customs.find((c) => c.key === baseKey && c.type === "choice");
+      if (!def) return -1;
+      const selected = def.filler === "candidate" ? values[baseKey] : recruiterVals[baseKey];
+      return selected ? def.options!.indexOf(selected) : -1;
+    };
+    const placements = sanitizeFieldPositions(request.field_positions).filter((p) => {
+      const choiceMatch = /^(custom_[a-z0-9_]{1,40})__(\d{1,2})$/.exec(p.key);
+      if (choiceMatch) {
+        return chosenIndex(choiceMatch[1]) === Number(choiceMatch[2]);
+      }
+      return !recruiterOwnedKeys.has(p.key) || recruiterVals[p.key];
+    });
     const overlayImages: Record<string, Uint8Array> = {};
     if (placements.length > 0) {
       const provided = (fieldPngs ?? {}) as Record<string, unknown>;

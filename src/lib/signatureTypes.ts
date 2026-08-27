@@ -139,9 +139,14 @@ export interface CustomFieldDef {
   key: string;
   label: string;
   filler: "candidate" | "recruiter";
+  /** "choice" = שאלת סימון: בוחרים אפשרות וה-✓ מוטבע במשבצת שלה */
+  type?: "text" | "choice";
+  options?: string[];
 }
 
 export const CUSTOM_KEY_RE = /^custom_[a-z0-9_]{1,40}$/;
+/** משבצת של אפשרות בשאלת סימון: <key>__<אינדקס אפשרות> */
+export const CHOICE_PLACEMENT_RE = /^custom_[a-z0-9_]{1,40}__\d{1,2}$/;
 
 export function sanitizeCustomFields(raw: unknown): CustomFieldDef[] {
   if (!Array.isArray(raw)) return [];
@@ -149,13 +154,24 @@ export function sanitizeCustomFields(raw: unknown): CustomFieldDef[] {
   const seen = new Set<string>();
   for (const c of raw) {
     if (!c || typeof c !== "object") continue;
-    const { key, label, filler } = c as Record<string, unknown>;
+    const { key, label, filler, type, options } = c as Record<string, unknown>;
     if (typeof key !== "string" || !CUSTOM_KEY_RE.test(key) || seen.has(key)) continue;
     if (typeof label !== "string" || !label.trim() || label.length > 60) continue;
     if (filler !== "candidate" && filler !== "recruiter") continue;
+    const def: CustomFieldDef = { key, label: label.trim(), filler };
+    if (type === "choice") {
+      if (!Array.isArray(options)) continue;
+      const opts = options
+        .filter((o): o is string => typeof o === "string" && !!o.trim() && o.length <= 40)
+        .map((o) => o.trim())
+        .slice(0, 12);
+      if (opts.length < 2) continue;
+      def.type = "choice";
+      def.options = opts;
+    }
     seen.add(key);
-    out.push({ key, label: label.trim(), filler });
-    if (out.length >= 30) break;
+    out.push(def);
+    if (out.length >= 40) break;
   }
   return out;
 }
@@ -185,7 +201,8 @@ export function isPlacementKey(k: unknown): k is PlacementKey {
       k in RECRUITER_FIELDS ||
       k === "signature" ||
       k === "date" ||
-      CUSTOM_KEY_RE.test(k))
+      CUSTOM_KEY_RE.test(k) ||
+      CHOICE_PLACEMENT_RE.test(k))
   );
 }
 

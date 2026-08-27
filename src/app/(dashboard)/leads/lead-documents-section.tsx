@@ -295,16 +295,24 @@ interface SignTemplate {
   doc_type: string;
   file_name: string;
   recruiter_fields?: string[];
-  custom_fields?: { key: string; label: string; filler: "candidate" | "recruiter" }[];
+  custom_fields?: {
+    key: string;
+    label: string;
+    filler: "candidate" | "recruiter";
+    type?: "text" | "choice";
+    options?: string[];
+  }[];
 }
 
 /** השדות שהרכזת ממלאת בדיאלוג השליחה: סטנדרטיים + מותאמים. */
-function recruiterInputsFor(t: SignTemplate): { key: string; label: string }[] {
+function recruiterInputsFor(
+  t: SignTemplate
+): { key: string; label: string; options?: string[] }[] {
   return [
     ...(t.recruiter_fields ?? []).map((k) => ({ key: k, label: RECRUITER_FIELD_LABELS[k] ?? k })),
     ...(t.custom_fields ?? [])
       .filter((c) => c.filler === "recruiter")
-      .map((c) => ({ key: c.key, label: c.label })),
+      .map((c) => ({ key: c.key, label: c.label, options: c.type === "choice" ? c.options : undefined })),
   ];
 }
 
@@ -684,21 +692,36 @@ export function LeadDocumentsSection({ leadId }: { leadId: string }) {
               הערכים יוטבעו בטופס ויוצגו למועמד לפני החתימה. שדה שיישאר ריק — המשבצת שלו תישאר ריקה.
             </p>
             <div className="space-y-3">
-              {recruiterInputsFor(recruiterDialog).map(({ key, label }) => (
+              {recruiterInputsFor(recruiterDialog).map(({ key, label, options }) => (
                 <div key={key}>
                   <label className="block text-xs font-semibold text-gray-700 mb-1">
                     {label}
                   </label>
-                  <input
-                    type="text"
-                    inputMode={key === "hourly_wage" ? "decimal" : undefined}
-                    value={recruiterVals[key] ?? ""}
-                    onChange={(e) =>
-                      setRecruiterVals((v) => ({ ...v, [key]: e.target.value }))
-                    }
-                    placeholder={label}
-                    className="w-full px-3 py-2 rounded-lg border border-gray-300 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500"
-                  />
+                  {options ? (
+                    <select
+                      value={recruiterVals[key] ?? ""}
+                      onChange={(e) =>
+                        setRecruiterVals((v) => ({ ...v, [key]: e.target.value }))
+                      }
+                      className="w-full px-3 py-2 rounded-lg border border-gray-300 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500 bg-white"
+                    >
+                      <option value="">— בחר —</option>
+                      {options.map((o) => (
+                        <option key={o} value={o}>{o}</option>
+                      ))}
+                    </select>
+                  ) : (
+                    <input
+                      type="text"
+                      inputMode={key === "hourly_wage" ? "decimal" : undefined}
+                      value={recruiterVals[key] ?? ""}
+                      onChange={(e) =>
+                        setRecruiterVals((v) => ({ ...v, [key]: e.target.value }))
+                      }
+                      placeholder={label}
+                      className="w-full px-3 py-2 rounded-lg border border-gray-300 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500"
+                    />
+                  )}
                 </div>
               ))}
             </div>
