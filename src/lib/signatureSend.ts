@@ -12,6 +12,7 @@ import { getMessageScope } from "@/lib/messageVisibility";
 import { LEAD_DOC_TYPES, type LeadDocType } from "@/lib/leadDocTypes";
 import {
   DEFAULT_REQUIRED_FIELDS,
+  sanitizeFieldPositions,
   sanitizeRequiredFields,
   type SignatureRequest,
 } from "@/lib/signatureTypes";
@@ -38,11 +39,14 @@ export async function sendSignatureRequestForDoc(opts: {
   appBase: string;
   /** שדות שהמועמד חייב למלא לפני חתימה (ברירת מחדל: שם + ת"ז) */
   requiredFields?: unknown;
+  /** משבצות ממופות על גבי המסמך (מהתבנית) */
+  fieldPositions?: unknown;
 }): Promise<SendSignatureResult> {
   const { doc, userEmail, appBase } = opts;
   const requiredFields = opts.requiredFields
     ? sanitizeRequiredFields(opts.requiredFields)
     : DEFAULT_REQUIRED_FIELDS;
+  const fieldPositions = sanitizeFieldPositions(opts.fieldPositions);
   const admin = getAdmin();
 
   const { data: lead } = await admin
@@ -81,6 +85,7 @@ export async function sendSignatureRequestForDoc(opts: {
       file_name: doc.file_name,
       sent_by: userEmail?.toLowerCase() ?? null,
       required_fields: requiredFields,
+      field_positions: fieldPositions.length > 0 ? fieldPositions : null,
     })
     .select()
     .single();

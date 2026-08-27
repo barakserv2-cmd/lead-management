@@ -11,6 +11,7 @@ import { buildSignedPdf } from "@/lib/pdfSign";
 import { LEAD_DOC_TYPES, type LeadDocType } from "@/lib/leadDocTypes";
 import {
   CANDIDATE_FIELDS,
+  sanitizeFieldPositions,
   sanitizeRequiredFields,
   validateCandidateField,
   type CandidateFieldKey,
@@ -34,13 +35,14 @@ interface RequestRow {
   file_name: string;
   expires_at: string;
   required_fields: unknown;
+  field_positions: unknown;
 }
 
 async function loadRequest(token: string): Promise<RequestRow | null> {
   if (!token || token.length < 20 || token.length > 64) return null;
   const { data } = await getAdmin()
     .from("signature_requests")
-    .select("id, lead_id, document_id, status, doc_type, file_name, expires_at, required_fields")
+    .select("id, lead_id, document_id, status, doc_type, file_name, expires_at, required_fields, field_positions")
     .eq("token", token)
     .maybeSingle();
   return (data as RequestRow) ?? null;
@@ -120,6 +122,7 @@ export async function GET(
     prefill: Object.fromEntries(
       requiredFields.filter((k) => prefill[k]).map((k) => [k, prefill[k]])
     ),
+    fieldPositions: sanitizeFieldPositions(request.field_positions),
   });
 }
 
@@ -137,7 +140,7 @@ export async function POST(
   }
 
   try {
-    const { details, stampPng, detailsPng } = await req.json();
+    const { details, stampPng, detailsPng, fieldPngs } = await req.json();
 
     // ── ולידציה של כל שדות החובה ──
     const requiredFields = sanitizeRequiredFields(request.required_fields);
@@ -167,9 +170,27 @@ export async function POST(
     if (!stampBytes) {
       return NextResponse.json({ success: false, error: "חתימה לא תקינה" }, { status: 400 });
     }
-    // עמוד הפרטים חובה כשיש שדות — כדי שהערכים יתועדו בתוך ה-PDF
+
+    // ── מיפוי משבצות: הערכים מוטבעים בתוך הטופס עצמו ──
+    const placements = sanitizeFieldPositions(request.field_positions);
+    const overlayImages: Record<string, Uint8Array> = {};
+    if (placements.length > 0) {
+      const provided = (fieldPngs ?? {}) as Record<string, unknown>;
+      for (const key of new Set(placements.map((p) => p.key))) {
+        const bytes = pngFrom(provided[key]);
+        if (!bytes) {
+          return NextResponse.json(
+            { success: false, error: "שגיאה בהרכבת המסמך — נסו שוב" },
+            { status: 400 }
+          );
+        }
+        overlayImages[key] = bytes;
+      }
+    }
+
+    // עמוד פרטים נדרש רק כשאין מיפוי (אז הערכים מתועדים בעמוד נספח)
     const detailsBytes = pngFrom(detailsPng);
-    if (!detailsBytes) {
+    if (placements.length === 0 && !detailsBytes) {
       return NextResponse.json({ success: false, error: "שגיאה בהרכבת דף הפרטים — נסו שוב" }, { status: 400 });
     }
 
@@ -203,7 +224,11 @@ export async function POST(
         source,
         mime: doc.mime_type ?? "application/pdf",
         stampPng: stampBytes,
-        detailsPng: detailsBytes,
+        detailsPng: detailsBytes ?? undefined,
+        overlays:
+          placements.length > 0
+            ? { placements, images: overlayImages }
+            : undefined,
         auditLine,
       });
     } catch (e) {

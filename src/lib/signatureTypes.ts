@@ -91,6 +91,44 @@ export function validateCandidateField(key: CandidateFieldKey, value: string): s
   }
 }
 
+// ── מיקומי שדות על גבי המסמך (ממופים בכלי הסימון) ────────────
+
+/** מפתחות שאפשר למקם על המסמך: שדות מועמד + חתימה + תאריך. */
+export type PlacementKey = CandidateFieldKey | "signature" | "date";
+
+export interface FieldPlacement {
+  key: PlacementKey;
+  /** עמוד 1-based */
+  page: number;
+  /** קואורדינטות מנורמלות 0-1; y נמדד מלמעלה */
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+
+export function isPlacementKey(k: unknown): k is PlacementKey {
+  return typeof k === "string" && (k in CANDIDATE_FIELDS || k === "signature" || k === "date");
+}
+
+/** מסנן מערך מיקומים מה-DB/קלט למבנה תקין בלבד. */
+export function sanitizeFieldPositions(raw: unknown): FieldPlacement[] {
+  if (!Array.isArray(raw)) return [];
+  const out: FieldPlacement[] = [];
+  for (const p of raw) {
+    if (!p || typeof p !== "object") continue;
+    const { key, page, x, y, w, h } = p as Record<string, unknown>;
+    if (!isPlacementKey(key)) continue;
+    if (typeof page !== "number" || !Number.isInteger(page) || page < 1 || page > 50) continue;
+    const nums = [x, y, w, h];
+    if (!nums.every((n) => typeof n === "number" && n >= 0 && n <= 1)) continue;
+    if ((w as number) <= 0 || (h as number) <= 0) continue;
+    out.push({ key, page, x: x as number, y: y as number, w: w as number, h: h as number });
+    if (out.length >= 60) break;
+  }
+  return out;
+}
+
 /** מסנן רשימת שדות מה-DB לשדות מוכרים בלבד. */
 export function sanitizeRequiredFields(raw: unknown): CandidateFieldKey[] {
   if (!Array.isArray(raw)) return DEFAULT_REQUIRED_FIELDS;

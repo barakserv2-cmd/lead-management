@@ -9,6 +9,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   validateCandidateField,
   type CandidateFieldKey,
+  type FieldPlacement,
 } from "@/lib/signatureTypes";
 
 interface FieldInfo {
@@ -27,6 +28,7 @@ interface DocInfo {
   firstName?: string | null;
   requiredFields?: FieldInfo[];
   prefill?: Record<string, string>;
+  fieldPositions?: FieldPlacement[];
 }
 
 export function SignClient({ token }: { token: string }) {
@@ -198,6 +200,72 @@ export function SignClient({ token }: { token: string }) {
       ctx.font = `400 26px ${family}`;
       ctx.fillText(dateStr, 400, 385);
 
+      // ── ערכים ממופים לתוך הטופס: PNG שקוף לכל מפתח ──
+      const fieldPngs: Record<string, string> = {};
+      const positionedKeys = new Set(
+        (info?.fieldPositions ?? []).map((p) => p.key)
+      );
+      const displayValue = (key: string): string => {
+        if (key === "date") {
+          return new Date().toLocaleDateString("he-IL", { timeZone: "Asia/Jerusalem" });
+        }
+        let v = values[key]?.trim() ?? "";
+        if (/^\d{4}-\d{2}-\d{2}$/.test(v)) {
+          const [yy, mm, dd] = v.split("-");
+          v = `${dd}/${mm}/${yy}`;
+        }
+        return v;
+      };
+      // חיתוך החתימה לגבולות הדיו — אחרת היא מוטבעת מוקטנת עם שוליים ריקים
+      const cropSignature = (): string => {
+        const ctx2 = sigCanvas.getContext("2d")!;
+        const { width: cw, height: ch } = sigCanvas;
+        const data = ctx2.getImageData(0, 0, cw, ch).data;
+        let minX = cw, minY = ch, maxX = 0, maxY = 0;
+        for (let py = 0; py < ch; py++) {
+          for (let px = 0; px < cw; px++) {
+            if (data[(py * cw + px) * 4 + 3] > 0) {
+              if (px < minX) minX = px;
+              if (px > maxX) maxX = px;
+              if (py < minY) minY = py;
+              if (py > maxY) maxY = py;
+            }
+          }
+        }
+        if (maxX <= minX || maxY <= minY) return sigCanvas.toDataURL("image/png");
+        const pad = 6;
+        minX = Math.max(0, minX - pad); minY = Math.max(0, minY - pad);
+        maxX = Math.min(cw - 1, maxX + pad); maxY = Math.min(ch - 1, maxY + pad);
+        const c = document.createElement("canvas");
+        c.width = maxX - minX + 1;
+        c.height = maxY - minY + 1;
+        c.getContext("2d")!.drawImage(sigCanvas, minX, minY, c.width, c.height, 0, 0, c.width, c.height);
+        return c.toDataURL("image/png");
+      };
+
+      for (const key of positionedKeys) {
+        if (key === "signature") {
+          fieldPngs[key] = cropSignature();
+          continue;
+        }
+        const text = displayValue(key);
+        const c = document.createElement("canvas");
+        const tctx = c.getContext("2d")!;
+        const fontSpec = `500 56px ${family}`;
+        tctx.font = fontSpec;
+        const tw = Math.ceil(tctx.measureText(text).width);
+        c.width = Math.max(tw + 16, 24);
+        c.height = 80;
+        const cctx = c.getContext("2d")!;
+        cctx.direction = "rtl";
+        cctx.font = fontSpec;
+        cctx.fillStyle = "#111827";
+        cctx.textAlign = "right";
+        cctx.textBaseline = "middle";
+        cctx.fillText(text, c.width - 8, 42);
+        fieldPngs[key] = c.toDataURL("image/png");
+      }
+
       const res = await fetch(`/api/sign/${token}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -205,6 +273,7 @@ export function SignClient({ token }: { token: string }) {
           details: Object.fromEntries(fields.map((f) => [f.key, values[f.key]?.trim() ?? ""])),
           stampPng: stamp.toDataURL("image/png"),
           detailsPng: details.toDataURL("image/png"),
+          fieldPngs: positionedKeys.size > 0 ? fieldPngs : undefined,
         }),
       });
       const body = await res.json();

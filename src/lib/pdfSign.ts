@@ -7,6 +7,7 @@
 // ============================================================
 
 import { PDFDocument, PDFImage, StandardFonts, rgb } from "pdf-lib";
+import type { FieldPlacement } from "@/lib/signatureTypes";
 
 const A4: [number, number] = [595.28, 841.89];
 
@@ -18,6 +19,15 @@ interface BuildOpts {
   stampPng: Uint8Array;
   /** עמוד "פרטי המועמד" כ-PNG (נוצר בדפדפן) — אופציונלי */
   detailsPng?: Uint8Array;
+  /**
+   * הטבעה בתוך העמודים: משבצות ממופות + PNG לכל מפתח (הערך
+   * מרונדר בדפדפן). כשקיים — הערכים נכנסים על הקווים בטופס
+   * במקום עמודי נספח; עמוד חתימה מצורף רק אם 'signature' לא מופה.
+   */
+  overlays?: {
+    placements: FieldPlacement[];
+    images: Record<string, Uint8Array>;
+  };
   /** שורת audit בלטינית בלבד — Helvetica לא יודע עברית */
   auditLine: string;
 }
@@ -55,8 +65,60 @@ export async function buildSignedPdf(opts: BuildOpts): Promise<Uint8Array> {
     });
   }
 
+  const font = await doc.embedFont(StandardFonts.Helvetica);
+
+  function drawAudit(page: ReturnType<PDFDocument["addPage"]>, y: number, size: number) {
+    const auditWidth = font.widthOfTextAtSize(opts.auditLine, size);
+    page.drawText(opts.auditLine, {
+      x: (page.getWidth() - auditWidth) / 2,
+      y,
+      size,
+      font,
+      color: rgb(0.45, 0.5, 0.55),
+    });
+  }
+
+  // ── הטבעה בתוך העמודים (מיפוי משבצות) ──────────────────────
+  const placements = opts.overlays?.placements ?? [];
+  if (placements.length > 0) {
+    const embedded = new Map<string, PDFImage>();
+    for (const p of placements) {
+      const bytes = opts.overlays!.images[p.key];
+      if (!bytes) continue;
+      let img = embedded.get(p.key);
+      if (!img) {
+        img = await doc.embedPng(bytes);
+        embedded.set(p.key, img);
+      }
+      const pageIdx = Math.min(p.page - 1, doc.getPageCount() - 1);
+      const page = doc.getPage(pageIdx);
+      const W = page.getWidth();
+      const H = page.getHeight();
+      const boxW = p.w * W;
+      const boxH = p.h * H;
+      const s = Math.min(boxW / img.width, boxH / img.height);
+      const w = img.width * s;
+      const h = img.height * s;
+      page.drawImage(img, {
+        // טפסים בעברית — הערך צמוד לימין המשבצת, ממורכז אנכית
+        x: p.x * W + boxW - w,
+        y: H - p.y * H - boxH + (boxH - h) / 2,
+        width: w,
+        height: h,
+      });
+    }
+
+    // audit בתחתית העמוד האחרון של המקור
+    drawAudit(doc.getPage(doc.getPageCount() - 1), 14, 7);
+
+    // אם החתימה מופתה לתוך הטופס — אין צורך בעמודי נספח
+    if (placements.some((p) => p.key === "signature")) {
+      return doc.save();
+    }
+  }
+
   // ── עמוד פרטי המועמד (אם נאספו פרטים) ──────────────────────
-  if (opts.detailsPng) {
+  if (placements.length === 0 && opts.detailsPng) {
     const details = await doc.embedPng(opts.detailsPng);
     const page = doc.addPage(A4);
     const margin = 50;
@@ -75,7 +137,6 @@ export async function buildSignedPdf(opts: BuildOpts): Promise<Uint8Array> {
 
   // ── עמוד חתימה ──────────────────────────────────────────────
   const stamp = await doc.embedPng(opts.stampPng);
-  const font = await doc.embedFont(StandardFonts.Helvetica);
   const page = doc.addPage(A4);
 
   const stampMaxW = 360;
@@ -100,16 +161,7 @@ export async function buildSignedPdf(opts: BuildOpts): Promise<Uint8Array> {
     height: h,
   });
 
-  const audit = opts.auditLine;
-  const auditSize = 8.5;
-  const auditWidth = font.widthOfTextAtSize(audit, auditSize);
-  page.drawText(audit, {
-    x: (A4[0] - auditWidth) / 2,
-    y: 48,
-    size: auditSize,
-    font,
-    color: rgb(0.45, 0.5, 0.55),
-  });
+  drawAudit(page, 48, 8.5);
 
   return doc.save();
 }
