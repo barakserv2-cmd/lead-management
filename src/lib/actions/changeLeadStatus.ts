@@ -162,6 +162,8 @@ export async function changeLeadStatus(input: ChangeStatusInput): Promise<Change
   if (userId && userId.includes("@")) {
     updateData.handled_by = userId;
     updateData.handled_at = new Date().toISOString();
+    // מעבר סטטוס ידני בא אחרי שיחה — נחשב מגע אחרון עם המועמד
+    updateData.last_contact_at = updateData.handled_at;
   }
 
   // 6. Update the leads table

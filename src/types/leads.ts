@@ -52,6 +52,7 @@ export interface Lead {
   /** email of the recruiter who last moved the lead's status (see changeLeadStatus) */
   handled_by: string | null;
   handled_at: string | null;
+  last_contact_at: string | null;
   needs_attention: boolean;
   needs_attention_at: string | null;
   attention_reason: string | null;

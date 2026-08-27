@@ -82,6 +82,23 @@ function waitingChip(lead: Lead): { classes: string; label: string } {
   return { classes: "bg-blue-50 text-blue-600", label: base };
 }
 
+// כמה זמן עבר מאז המגע האחרון. הצבע הוא הסימן לתיזמון: עד 3 ימים רגיל,
+// 3–7 כתום, מעבר לשבוע אדום — ומועמד שמעולם לא יצרנו איתו קשר בולט בנפרד.
+function contactChip(iso: string | null, now: number): { classes: string; label: string; title: string } {
+  if (!iso) {
+    return { classes: "bg-slate-100 text-slate-400", label: "—", title: "לא תועד קשר" };
+  }
+  const days = Math.floor((now - new Date(iso).getTime()) / 86_400_000);
+  const title = new Date(iso).toLocaleString("he-IL", {
+    day: "numeric", month: "short", hour: "2-digit", minute: "2-digit",
+  });
+  const label =
+    days <= 0 ? "היום" : days === 1 ? "אתמול" : `לפני ${days} ימים`;
+  if (days >= 7) return { classes: "bg-red-100 text-red-700 font-bold", label, title };
+  if (days >= 3) return { classes: "bg-amber-100 text-amber-700 font-semibold", label, title };
+  return { classes: "bg-emerald-50 text-emerald-700", label, title };
+}
+
 const INCOMING_POLL_MS = 7000;
 
 export function LeadsContent({
@@ -91,6 +108,8 @@ export function LeadsContent({
   leads: Lead[];
   recruiterNames?: Record<string, string>;
 }) {
+  // נלכד פעם אחת — Date.now() בכל שורה אינו טהור ומחזיר ערכים לא יציבים
+  const [nowMs] = useState(() => Date.now());
   const [openLeadIds, setOpenLeadIds] = useState<string[]>([]);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [waDialogOpen, setWaDialogOpen] = useState(false);
@@ -203,14 +222,15 @@ export function LeadsContent({
             <th className="px-4 py-3 text-right font-medium text-gray-600">סטטוס</th>
             <th className="px-4 py-3 text-right font-medium text-gray-600">מקור</th>
             <th className="px-4 py-3 text-right font-medium text-gray-600">רכזת</th>
-            <th className="px-4 py-3 text-right font-medium text-gray-600">תאריך</th>
+            <th className="px-4 py-3 text-right font-medium text-gray-600">נוצר</th>
+            <th className="px-4 py-3 text-right font-medium text-gray-600">קשר אחרון</th>
             <th className="px-4 py-3 text-right font-medium text-gray-600">פעולות</th>
           </tr>
         </thead>
         <tbody>
           {leads.length === 0 ? (
             <tr>
-              <td colSpan={9} className="px-4 py-12 text-center text-gray-400">
+              <td colSpan={10} className="px-4 py-12 text-center text-gray-400">
                 אין לידים עדיין. חבר את Gmail כדי להתחיל.
               </td>
             </tr>
@@ -292,6 +312,19 @@ export function LeadsContent({
                       const chip = waitingChip(lead);
                       return (
                         <span className={"inline-block px-2.5 py-1 rounded-full text-xs font-medium " + chip.classes} title={formatShortDate(lead.created_at)}>
+                          {chip.label}
+                        </span>
+                      );
+                    })()}
+                  </td>
+                  <td className="px-4 py-3">
+                    {(() => {
+                      const chip = contactChip(lead.last_contact_at, nowMs);
+                      return (
+                        <span
+                          className={"inline-block px-2.5 py-1 rounded-full text-xs font-medium " + chip.classes}
+                          title={chip.title}
+                        >
                           {chip.label}
                         </span>
                       );

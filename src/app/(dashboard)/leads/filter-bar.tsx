@@ -299,6 +299,16 @@ export function FilterBar({
     router.push(`/leads?${params.toString()}`);
   }
 
+  // תור חיוג: מי שהכי מזמן לא דיברנו איתו קודם. כפתור-מתג, כדי שאפשר
+  // יהיה לחזור בקליק אחד לסדר הרגיל (הליד החדש קודם).
+  function toggleStaleSort() {
+    const params = new URLSearchParams(searchParams.toString());
+    if (params.get("sort") === "stale") params.delete("sort");
+    else params.set("sort", "stale");
+    params.delete("page");
+    router.push(`/leads?${params.toString()}`);
+  }
+
   function removeStatus(value: string) {
     const next = new Set(selectedStatuses);
     next.delete(value);
@@ -403,6 +413,20 @@ export function FilterBar({
             onChange={handleTagChange}
           />
         )}
+
+        {/* Call queue: oldest contact first */}
+        <button
+          type="button"
+          onClick={toggleStaleSort}
+          title="מיין לפי מי שהכי מזמן לא יצרנו איתו קשר"
+          className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-xs transition-colors ${
+            searchParams.get("sort") === "stale"
+              ? "border-amber-400 bg-amber-500 text-white font-semibold"
+              : "border-gray-200 bg-white text-gray-600 hover:border-amber-300"
+          }`}
+        >
+          ⏱ הכי מזמן לא דיברנו
+        </button>
 
         {/* Date search (by arrival date) */}
         <div className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-xs ${

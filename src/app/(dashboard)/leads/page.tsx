@@ -54,7 +54,7 @@ function LeadsTabs({ active, newCount }: { active: "queue" | "folders" | "all"; 
 export default async function LeadsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ page?: string; q?: string; statuses?: string; sub?: string; tags?: string; source?: string; view?: string; from?: string; to?: string; handler?: string }>;
+  searchParams: Promise<{ page?: string; q?: string; statuses?: string; sub?: string; tags?: string; source?: string; view?: string; from?: string; to?: string; handler?: string; sort?: string }>;
 }) {
   const params = await searchParams;
   const currentPage = Math.max(1, parseInt(params.page ?? "1", 10) || 1);
@@ -193,7 +193,7 @@ export default async function LeadsPage({
     "screening_fit_score, screening_availability_score, screening_experience_score, extracted_availability, " +
     "extracted_salary_expectation, extracted_location_pref, extracted_interests, needs_attention, " +
     "attention_reason, needs_human_attention, human_attention_reason, human_attention_raised_at, " +
-    "handled_by, handled_at, updated_at";
+    "handled_by, handled_at, last_contact_at, updated_at";
 
   // שאילתה אחת מחזירה גם נתונים וגם ספירה כוללת (count: "exact") —
   // במקום שאילתת ספירה נפרדת וכפולה.
@@ -240,7 +240,13 @@ export default async function LeadsPage({
   // Sort by true arrival time: email leads use their email send date, others
   // fall back to created_at (both via the generated effective_at column). This
   // keeps a backlog email ingested today from jumping above genuinely newer leads.
-  dataQuery = dataQuery.order("effective_at", { ascending: false }).range(from, to);
+  // ברירת מחדל: הליד החדש קודם. "stale" הופך את הרשימה לתור חיוג — מי
+  // שהכי מזמן לא דיברנו איתו עולה למעלה, ומי שמעולם לא דיברנו איתו ראשון.
+  dataQuery =
+    params.sort === "stale"
+      ? dataQuery.order("last_contact_at", { ascending: true, nullsFirst: true })
+      : dataQuery.order("effective_at", { ascending: false });
+  dataQuery = dataQuery.range(from, to);
 
   // Fetch all unique tags via a Postgres function (single value back, no
   // scanning of every row in JS). Cached via Next.js fetch dedup.

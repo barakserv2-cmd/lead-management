@@ -29,9 +29,11 @@ export async function getStatusHistory(leadId: string) {
 }
 
 export async function updateLeadSubStatus(leadId: string, subStatus: string | null) {
+  // תת-סטטוס נקבע אחרי ניסיון חיוג ("אין מענה 1/2/3", "מעקב") — זו נקודת
+  // הזמן היחידה שמתעדת את הניסיון, ולכן היא מעדכנת גם את מועד הקשר האחרון.
   const { error } = await getSupabase()
     .from("leads")
-    .update({ sub_status: subStatus })
+    .update({ sub_status: subStatus, last_contact_at: new Date().toISOString() })
     .eq("id", leadId);
 
   if (!error) {
