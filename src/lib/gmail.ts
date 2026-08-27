@@ -190,6 +190,56 @@ export function detectFacebookCampaign(subject: string): string | null {
   return campaign ? `פייסבוק - ${campaign}` : "פייסבוק";
 }
 
+// ── שיחות ממסקיו (מספרים וירטואליים) ─────────────────────────────
+// כל שיחה נכנסת למספר וירטואלי שולחת מייל קבוע-מבנה מ-noreplay@maskyoo.co.il:
+// "היי, התקבלה שיחה חדשה. מקור: 073-8021099 מספר מתקשר: 050-1234567
+//  ... סטטוס המענה לשיחה: ANSWER משך השיחה: 64 ... מספר יעד: 054-5273410"
+// המבנה קבוע ולכן מפורק ישירות, בלי Claude. גם שיחות שלא נענו
+// (NOANSWER/BUSY/CALLER CANCEL) הן לידים — מועמד שניסה להתקשר.
+const MASKYOO_SUBJECT = "שיחה חדשה מהמספרים הוירטואלים";
+
+// מספרים פנימיים של החברה — שיחה שמקורה בהם היא בדיקה/שיחה פנימית, לא ליד.
+// (מספרי היעד של הניתובים + מספר האדמין)
+export const INTERNAL_PHONE_NUMBERS = new Set([
+  "0545273410", // Noam WhatsApp agent
+  "0544324726",
+  "0508990188",
+  "0547000992", // admin
+]);
+
+export interface MaskyooCall {
+  caller: string; // ספרות בלבד, למשל "0501234567"
+  status: string | null; // ANSWER / NOANSWER / BUSY / CALLER CANCEL
+  durationSeconds: number | null;
+  virtualNumber: string | null; // המספר הווירטואלי שאליו התקשרו ("מקור")
+  targetNumber: string | null; // לאן נותבה השיחה ("מספר יעד")
+}
+
+export function isMaskyooEmail(from: string, subject: string): boolean {
+  return (
+    matches(from, "maskyoo.co.il") ||
+    stripReplyPrefixes(subject).includes(MASKYOO_SUBJECT)
+  );
+}
+
+/** מפרק מייל התראת שיחה של מסקיו. מחזיר null אם מספר המתקשר לא נמצא. */
+export function parseMaskyooCall(body: string): MaskyooCall | null {
+  const digits = (s: string | undefined | null) =>
+    s ? s.replace(/\D/g, "") : null;
+
+  const caller = digits(body.match(/מספר מתקשר:\s*([\d\-+ ]+)/)?.[1]);
+  if (!caller) return null;
+
+  const duration = body.match(/משך השיחה:\s*(\d+)/)?.[1];
+  return {
+    caller,
+    status: body.match(/סטטוס המענה לשיחה:\s*([A-Z ]+?)(?:\s*(?:משך|$))/)?.[1]?.trim() ?? null,
+    durationSeconds: duration ? parseInt(duration, 10) : null,
+    virtualNumber: digits(body.match(/מקור:\s*([\d\-+ ]+)/)?.[1]),
+    targetNumber: digits(body.match(/מספר יעד:\s*([\d\-+ ]+)/)?.[1]),
+  };
+}
+
 /**
  * מזהה גורם גיוס לפי כותרת המייל בלבד (מתעלם מכללים שדורשים שולח).
  * דוגמה: detectSourceFromSubject("Fwd: מועמדות חדשה מדני כהן למשרת מלצר") → "AllJobs"
@@ -352,20 +402,34 @@ export interface GmailMessage {
 export async function fetchUnreadEmails(
   maxResults = 20
 ): Promise<GmailMessage[]> {
+  return fetchEmailsByQuery(
+    // See comment below — recent window + keyword group.
+    "newer_than:1d {AllJobs CV קורות חיים משרה פנייה מועמד lead candidate CASHIERS \"FB JOBS\" INFINES נחיתה eilatjobs ליד מסקיו}",
+    maxResults
+  );
+}
+
+/** מביא מיילים לפי שאילתת Gmail חופשית (משמש גם סקריפטים חד-פעמיים). */
+export async function fetchEmailsByQuery(
+  q: string,
+  maxResults = 20
+): Promise<GmailMessage[]> {
   const gmail = await getGmailClient();
 
   const res = await gmail.users.messages.list({
     userId: "me",
-    // Query a RECENT WINDOW instead of is:unread. Relying on is:unread was
-    // fragile: opening a lead email in Gmail marks it read, so the scraper then
-    // never processed it and the lead was lost. Dedup is handled downstream by
-    // original_email_id, so re-scanning recent read mail is safe (no dupes).
-    // newer_than:4d keeps the batch small/recent so today's leads aren't buried
-    // under a huge unread backlog; -from:maskyoo.co.il drops call-notification
-    // noise. Landing-page keywords (נחיתה/eilatjobs/ליד) were added so Elementor
-    // form emails, which carry none of the job-board keywords, match too.
+    // The standard scraper query (see fetchUnreadEmails) uses a RECENT WINDOW
+    // instead of is:unread. Relying on is:unread was fragile: opening a lead
+    // email in Gmail marks it read, so the scraper then never processed it and
+    // the lead was lost. Dedup is handled downstream by original_email_id, so
+    // re-scanning recent read mail is safe (no dupes). newer_than:1d keeps the
+    // batch small/recent so today's leads aren't buried under a huge unread
+    // backlog. Landing-page keywords (נחיתה/eilatjobs/ליד) were added so
+    // Elementor form emails, which carry none of the job-board keywords, match
+    // too. מסקיו matches Maskyoo call notifications — every incoming call
+    // (answered or missed) becomes a phone lead via parseMaskyooCall.
     // False positives are harmless — parseEmailWithAI drops anything that isn't a lead.
-    q: "newer_than:1d -from:maskyoo.co.il {AllJobs CV קורות חיים משרה פנייה מועמד lead candidate CASHIERS \"FB JOBS\" INFINES נחיתה eilatjobs ליד}",
+    q,
     maxResults,
   });
 

@@ -3,7 +3,14 @@ import { normalizePhone } from "@/lib/phone";
 import { createClient } from "@supabase/supabase-js";
 import { createClient as createCookieClient } from "@/lib/supabase/server";
 import { logAudit } from "@/lib/audit";
-import { fetchUnreadEmails, parseFromHeader, detectSource } from "@/lib/gmail";
+import {
+  fetchUnreadEmails,
+  parseFromHeader,
+  detectSource,
+  isMaskyooEmail,
+  parseMaskyooCall,
+  INTERNAL_PHONE_NUMBERS,
+} from "@/lib/gmail";
 import { parseEmailWithAI } from "@/lib/ai/parse-email";
 import { LEAD_STATUSES } from "@/lib/constants";
 
@@ -105,24 +112,73 @@ async function handleFetchEmails(req: NextRequest) {
           continue;
         }
 
-        // 2b. Send to Claude AI to detect if this is a lead and extract details
-        const aiResult = await parseEmailWithAI(email.body, email.subject, email.from);
-        console.log(
-          `[Gmail] AI result: is_lead=${aiResult.is_lead}, ${aiResult.name}, phone: ${aiResult.phone}, confidence: ${aiResult.confidence}`
-        );
+        // 2b. Maskyoo call notifications have a fixed structure — parse
+        // directly, no Claude. Every incoming call (answered or missed) is a
+        // phone lead; missed calls especially, since no one else records them.
+        let name: string;
+        let job_title: string | null;
+        let phone: string | null;
+        let leadEmail: string | null = null;
+        let location: string | null = null;
+        let experience: string | null = null;
+        let age: number | null = null;
+        let confidence: number;
+        let notes: string | null = null;
+        let usedAI = false;
 
-        // 2c. Skip emails that are not leads
-        if (!aiResult.is_lead) {
-          console.log(`[Gmail] Not a lead, skipping: ${email.subject}`);
-          summary.skipped++;
-          summary.details.push(`Skipped (not a lead): ${email.subject}`);
-          continue;
+        const maskyooCall = isMaskyooEmail(email.from, email.subject)
+          ? parseMaskyooCall(email.body)
+          : null;
+
+        if (maskyooCall) {
+          const caller = normalizePhone(maskyooCall.caller);
+          if (!caller || INTERNAL_PHONE_NUMBERS.has(caller)) {
+            console.log(
+              `[Gmail] Maskyoo call from internal/invalid number ${maskyooCall.caller}, skipping`
+            );
+            summary.skipped++;
+            summary.details.push(`Skipped (internal call): ${maskyooCall.caller}`);
+            continue;
+          }
+          name = "לא ידוע";
+          job_title = null;
+          phone = caller;
+          confidence = 1;
+          const answered = maskyooCall.status === "ANSWER";
+          notes = [
+            answered
+              ? `שיחה נכנסת שנענתה (${maskyooCall.durationSeconds ?? "?"} שנ')`
+              : `שיחה נכנסת שלא נענתה (${maskyooCall.status ?? "סטטוס לא ידוע"}) — לחזור למועמד`,
+            maskyooCall.virtualNumber ? `מספר וירטואלי: ${maskyooCall.virtualNumber}` : null,
+          ]
+            .filter(Boolean)
+            .join(" | ");
+        } else {
+          // Send to Claude AI to detect if this is a lead and extract details
+          usedAI = true;
+          const aiResult = await parseEmailWithAI(email.body, email.subject, email.from);
+          console.log(
+            `[Gmail] AI result: is_lead=${aiResult.is_lead}, ${aiResult.name}, phone: ${aiResult.phone}, confidence: ${aiResult.confidence}`
+          );
+
+          // 2c. Skip emails that are not leads
+          if (!aiResult.is_lead) {
+            console.log(`[Gmail] Not a lead, skipping: ${email.subject}`);
+            summary.skipped++;
+            summary.details.push(`Skipped (not a lead): ${email.subject}`);
+            continue;
+          }
+
+          name = aiResult.name || parseFromHeader(email.from) || "לא ידוע";
+          job_title = aiResult.job_title || null;
+          // canonical 10-digit form (migration 00047) — same candidate, one card
+          phone = normalizePhone(aiResult.phone);
+          leadEmail = aiResult.email;
+          location = aiResult.location;
+          experience = aiResult.experience;
+          age = aiResult.age;
+          confidence = aiResult.confidence;
         }
-
-        const name = aiResult.name || parseFromHeader(email.from) || "לא ידוע";
-        const job_title = aiResult.job_title || null;
-        // canonical 10-digit form (migration 00047) — same candidate, one card
-        const phone = normalizePhone(aiResult.phone);
 
         // 2d. Check for duplicate by phone number
         if (phone) {
@@ -148,10 +204,10 @@ async function handleFetchEmails(req: NextRequest) {
         const { error: insertError } = await supabase.from("leads").insert({
           name,
           phone,
-          email: aiResult.email,
-          location: aiResult.location,
-          experience: aiResult.experience,
-          age: aiResult.age,
+          email: leadEmail,
+          location,
+          experience,
+          age,
           job_title,
           source: detectSource(email.from, email.subject, email.body),
           status: LEAD_STATUSES.NEW_LEAD,
@@ -166,8 +222,8 @@ async function handleFetchEmails(req: NextRequest) {
             email.date && !isNaN(new Date(email.date).getTime())
               ? new Date(email.date).toISOString()
               : null,
-          ai_confidence: aiResult.confidence,
-          notes: null,
+          ai_confidence: confidence,
+          notes,
           assigned_to: null,
         });
 
@@ -187,8 +243,9 @@ async function handleFetchEmails(req: NextRequest) {
         // no longer relies on unread status (it scans a recent time window and
         // dedups by original_email_id), so this is safe and won't re-ingest.
 
-        // Rate limit: 1s delay between Claude AI calls
-        if (summary.processed < emails.length) {
+        // Rate limit: 1s delay between Claude AI calls (Maskyoo emails are
+        // parsed locally — no AI call, no need to wait)
+        if (usedAI && summary.processed < emails.length) {
           await delay(1000);
         }
       } catch (emailError) {
