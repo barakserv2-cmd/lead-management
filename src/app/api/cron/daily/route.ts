@@ -2,12 +2,13 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient as createServerClient } from "@supabase/supabase-js";
 import { sendWhatsAppMessage } from "@/lib/whatsappService";
 
-// Vercel cron pings this URL every hour (see vercel.json).
+// Vercel cron pings this URL every hour at :30 (see vercel.json).
 // Guarded by CRON_SECRET so it can't be hit anonymously from outside.
 //
 // היה פעם ביום ב-09:00 UTC, וכל ראיון שנקבע אחרי שהקרון רץ לא נתפס לעולם —
 // ב-27/08 רק 3 מתוך 11 מועמדי היום קיבלו תזכורת. הבדיקה עברה לכל שעה;
 // occurrence_key שומר על שליחה אחת בלבד לכל מועמד לכל תאריך ראיון.
+// הריצה ב-:30 כדי שהשליחה הראשונה בחלון תיפול בדיוק על 16:30 שעון ישראל.
 
 function getAdmin() {
   return createServerClient(
@@ -26,24 +27,28 @@ interface RunSummary {
 
 const LOCK_TTL_MS = 24 * 60 * 60 * 1000;
 
-// שעות שקטות — עכשיו שהבדיקה רצה כל שעה, בלי הגבלה מועמד שנקבע לו ראיון
-// ב-23:50 היה מקבל וואטסאפ בחצות. מחוץ לחלון הזה פשוט לא שולחים; הריצה
-// הבאה בתוך החלון תתפוס את מי שעדיין לא קיבל.
-const QUIET_START_HOUR = 7;   // לא שולחים לפני
-const QUIET_END_HOUR = 22;    // ולא אחרי
+// חלון שליחה — סער ביקש שהתזכורת תצא ב-16:30 (שעון ישראל) יום לפני הראיון.
+// הקרון רץ כל שעה ב-:30 (vercel.json); ריצות לפני 16:30 מדלגות, וריצות
+// מאוחרות יותר (עד 22:00) תופסות מועמדים שהראיון שלהם נקבע אחרי 16:30.
+const SEND_START_HOUR = 16;
+const SEND_START_MINUTE = 30;
+const SEND_END_HOUR = 22; // לא שולחים וואטסאפ בשעות הלילה
 
-function israelHour(at: Date): number {
-  return Number(
-    new Intl.DateTimeFormat("en-GB", {
-      timeZone: "Asia/Jerusalem",
-      hour: "2-digit",
-      hour12: false,
-    }).format(at)
-  ) % 24;
+function israelClock(at: Date): { hour: number; minute: number } {
+  const parts = new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Asia/Jerusalem",
+    hour12: false,
+    hour: "2-digit",
+    minute: "2-digit",
+  }).formatToParts(at);
+  const get = (t: string) => Number(parts.find((p) => p.type === t)?.value ?? 0);
+  return { hour: get("hour") % 24, minute: get("minute") };
 }
 
-// ── Rule 1: Interview-tomorrow reminder ─────────────────────
-// Send a WhatsApp to every lead whose interview is tomorrow.
+// ── Rule 1: Interview reminder, 16:30 the day before ────────
+// Send a WhatsApp to every lead whose interview is tomorrow — and on
+// Thursdays also to Sunday's interviews ("ביום ראשון" instead of "מחר"),
+// so nobody gets a reminder on Shabbat with the wrong wording.
 // Idempotent per (lead_id, date) via cron_reminders.occurrence_key.
 async function runInterviewReminders(admin: ReturnType<typeof getAdmin>): Promise<RunSummary> {
   const summary: RunSummary = {
@@ -54,90 +59,100 @@ async function runInterviewReminders(admin: ReturnType<typeof getAdmin>): Promis
     details: [],
   };
 
-  // "Tomorrow" by the Israel calendar day. interview_date is stored as the
+  const { hour, minute } = israelClock(new Date());
+  const afterStart = hour > SEND_START_HOUR || (hour === SEND_START_HOUR && minute >= SEND_START_MINUTE);
+  if (!afterStart || hour >= SEND_END_HOUR) {
+    summary.details.push(`מחוץ לחלון השליחה (${hour}:${String(minute).padStart(2, "0")}) — תזכורות יוצאות בין 16:30 ל-22:00`);
+    return summary;
+  }
+
+  // Day bounds by the Israel calendar day. interview_date is stored as the
   // Israel wall-clock time with a +00:00 label (naive), so we build the
-  // day bounds in that same naive frame instead of a rolling hour window —
+  // bounds in that same naive frame instead of a rolling hour window —
   // otherwise a 00:00 (date-only) interview two days out gets "מחר".
-  const hour = israelHour(new Date());
-  if (hour < QUIET_START_HOUR || hour >= QUIET_END_HOUR) {
-    summary.details.push(`שעה שקטה (${hour}:00) — לא נשלחות תזכורות`);
-    return summary;
-  }
-
   const todayIl = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Jerusalem" }).format(new Date());
-  const tomorrow = new Date(`${todayIl}T00:00:00Z`);
-  tomorrow.setUTCDate(tomorrow.getUTCDate() + 1);
-  const dayAfter = new Date(tomorrow);
-  dayAfter.setUTCDate(dayAfter.getUTCDate() + 1);
+  const weekday = new Date(`${todayIl}T00:00:00Z`).getUTCDay(); // 0=ראשון … 4=חמישי
 
-  const { data: leads } = await admin
-    .from("leads")
-    .select("id, name, phone, interview_date, interview_type")
-    .eq("status", "INTERVIEW_BOOKED")
-    .not("phone", "is", null)
-    .gte("interview_date", tomorrow.toISOString())
-    .lt("interview_date", dayAfter.toISOString());
+  const targets: { offsetDays: number; label: string }[] = [{ offsetDays: 1, label: "מחר" }];
+  // חמישי: מתזכרים כבר עכשיו את ראיונות יום ראשון. occurrence_key מבטיח
+  // שמי שקיבל בחמישי לא יקבל שוב בשבת, ומי שנקבע אחרי חמישי ייתפס בשבת כ"מחר".
+  if (weekday === 4) targets.push({ offsetDays: 3, label: "ביום ראשון" });
 
-  if (!leads || leads.length === 0) {
-    summary.details.push("אין ראיונות מחר");
-    return summary;
-  }
+  for (const target of targets) {
+    const dayStart = new Date(`${todayIl}T00:00:00Z`);
+    dayStart.setUTCDate(dayStart.getUTCDate() + target.offsetDays);
+    const dayEnd = new Date(dayStart);
+    dayEnd.setUTCDate(dayEnd.getUTCDate() + 1);
 
-  for (const lead of leads) {
-    summary.attempted++;
-    const interviewAt = new Date(lead.interview_date as string);
-    const dateKey = interviewAt.toISOString().slice(0, 10);
-    const occurrenceKey = `interview_${dateKey}_${lead.id}`;
+    const { data: leads } = await admin
+      .from("leads")
+      .select("id, name, phone, interview_date, interview_type")
+      .eq("status", "INTERVIEW_BOOKED")
+      .not("phone", "is", null)
+      .gte("interview_date", dayStart.toISOString())
+      .lt("interview_date", dayEnd.toISOString());
 
-    // Idempotency check
-    const { data: existing } = await admin
-      .from("cron_reminders")
-      .select("id")
-      .eq("occurrence_key", occurrenceKey)
-      .maybeSingle();
-    if (existing) {
-      summary.details.push(`כבר נשלח: ${lead.name}`);
+    if (!leads || leads.length === 0) {
+      summary.details.push(`אין ראיונות ${target.label}`);
       continue;
     }
 
-    // Naive frame: stored UTC fields ARE the Israel wall-clock values.
-    const hh = interviewAt.getUTCHours().toString().padStart(2, "0");
-    const mm = interviewAt.getUTCMinutes().toString().padStart(2, "0");
-    const hasTime = !(hh === "00" && mm === "00"); // date-only entries
-    const type = lead.interview_type === "video" ? "ראיון וידאו" : "ראיון פרונטלי";
-    const message =
-      `שלום ${lead.name},\n` +
-      (hasTime
-        ? `תזכורת אוטומטית: מחר בשעה ${hh}:${mm} יש לך ${type}.\n`
-        : `תזכורת אוטומטית: מחר יש לך ${type}.\n`) +
-      `בהצלחה! 🎯`;
+    for (const lead of leads) {
+      summary.attempted++;
+      const interviewAt = new Date(lead.interview_date as string);
+      const dateKey = interviewAt.toISOString().slice(0, 10);
+      const occurrenceKey = `interview_${dateKey}_${lead.id}`;
 
-    const sendRes = await sendWhatsAppMessage(lead.phone as string, message);
+      // Idempotency check
+      const { data: existing } = await admin
+        .from("cron_reminders")
+        .select("id")
+        .eq("occurrence_key", occurrenceKey)
+        .maybeSingle();
+      if (existing) {
+        summary.details.push(`כבר נשלח: ${lead.name}`);
+        continue;
+      }
 
-    // Save the message to the lead's history too
-    if (sendRes.success) {
-      await admin.from("messages").insert({
+      // Naive frame: stored UTC fields ARE the Israel wall-clock values.
+      const hh = interviewAt.getUTCHours().toString().padStart(2, "0");
+      const mm = interviewAt.getUTCMinutes().toString().padStart(2, "0");
+      const hasTime = !(hh === "00" && mm === "00"); // date-only entries
+      const type = lead.interview_type === "video" ? "ראיון וידאו" : "ראיון פרונטלי";
+      const message =
+        `שלום ${lead.name},\n` +
+        (hasTime
+          ? `תזכורת אוטומטית: ${target.label} בשעה ${hh}:${mm} יש לך ${type}.\n`
+          : `תזכורת אוטומטית: ${target.label} יש לך ${type}.\n`) +
+        `בהצלחה! 🎯`;
+
+      const sendRes = await sendWhatsAppMessage(lead.phone as string, message);
+
+      // Save the message to the lead's history too
+      if (sendRes.success) {
+        await admin.from("messages").insert({
+          lead_id: lead.id,
+          role: "recruiter",
+          content: message,
+        });
+      }
+
+      await admin.from("cron_reminders").insert({
         lead_id: lead.id,
-        role: "recruiter",
-        content: message,
+        reminder_type: "interview_tomorrow",
+        occurrence_key: occurrenceKey,
+        payload: { interview_at: lead.interview_date, type: lead.interview_type },
+        success: sendRes.success,
+        error: sendRes.error ?? null,
       });
-    }
 
-    await admin.from("cron_reminders").insert({
-      lead_id: lead.id,
-      reminder_type: "interview_tomorrow",
-      occurrence_key: occurrenceKey,
-      payload: { interview_at: lead.interview_date, type: lead.interview_type },
-      success: sendRes.success,
-      error: sendRes.error ?? null,
-    });
-
-    if (sendRes.success) {
-      summary.succeeded++;
-      summary.details.push(`נשלח: ${lead.name} (${hh}:${mm})`);
-    } else {
-      summary.failed++;
-      summary.details.push(`כשל: ${lead.name} — ${sendRes.error}`);
+      if (sendRes.success) {
+        summary.succeeded++;
+        summary.details.push(`נשלח (${target.label}): ${lead.name} (${hh}:${mm})`);
+      } else {
+        summary.failed++;
+        summary.details.push(`כשל: ${lead.name} — ${sendRes.error}`);
+      }
     }
   }
 
