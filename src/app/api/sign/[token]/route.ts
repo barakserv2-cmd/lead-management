@@ -147,6 +147,7 @@ export async function GET(
           type: c.type === "choice" ? ("choice" as const) : ("text" as const),
           options: c.options,
           required: c.required !== false,
+          showIf: c.showIf,
         })),
     ],
     prefill: Object.fromEntries(
@@ -200,6 +201,13 @@ export async function POST(
     for (const { key, label, optional } of candidateFieldList) {
       const raw = String((details ?? {})[key] ?? "").trim();
       const def = customs.find((c) => c.key === key);
+      // שדה מותנה שהתנאי שלו לא מתקיים — לא רלוונטי, מדלגים
+      if (
+        def?.showIf &&
+        String((details ?? {})[def.showIf.key] ?? "").trim() !== def.showIf.value
+      ) {
+        continue;
+      }
       // שדה רשות שנשאר ריק — מדלגים (המשבצת תישאר ריקה בטופס)
       if ((optional || def?.required === false) && !raw) continue;
       // שאלת סימון: הערך חייב להיות אחת מהאפשרויות

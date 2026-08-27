@@ -144,6 +144,8 @@ export interface CustomFieldDef {
   options?: string[];
   /** false = רשות — אפשר לחתום בלי למלא; המשבצת נשארת ריקה */
   required?: boolean;
+  /** שדה מותנה: מוצג ונדרש רק כשהשדה key קיבל את הערך value */
+  showIf?: { key: string; value: string };
 }
 
 export const CUSTOM_KEY_RE = /^custom_[a-z0-9_]{1,40}$/;
@@ -156,12 +158,18 @@ export function sanitizeCustomFields(raw: unknown): CustomFieldDef[] {
   const seen = new Set<string>();
   for (const c of raw) {
     if (!c || typeof c !== "object") continue;
-    const { key, label, filler, type, options, required } = c as Record<string, unknown>;
+    const { key, label, filler, type, options, required, showIf } = c as Record<string, unknown>;
     if (typeof key !== "string" || !CUSTOM_KEY_RE.test(key) || seen.has(key)) continue;
     if (typeof label !== "string" || !label.trim() || label.length > 60) continue;
     if (filler !== "candidate" && filler !== "recruiter") continue;
     const def: CustomFieldDef = { key, label: label.trim(), filler };
     if (required === false) def.required = false;
+    if (showIf && typeof showIf === "object") {
+      const { key: sk, value: sv } = showIf as Record<string, unknown>;
+      if (typeof sk === "string" && sk.length <= 60 && typeof sv === "string" && sv.length <= 40) {
+        def.showIf = { key: sk, value: sv };
+      }
+    }
     if (type === "choice") {
       if (!Array.isArray(options)) continue;
       const opts = options

@@ -20,6 +20,8 @@ interface FieldInfo {
   options?: string[];
   /** false = רשות — אפשר להשאיר ריק */
   required?: boolean;
+  /** שדה מותנה: מוצג רק כשהשדה key קיבל את הערך value */
+  showIf?: { key: string; value: string };
 }
 
 interface DocInfo {
@@ -62,9 +64,18 @@ export function SignClient({ token }: { token: string }) {
 
   const fields = useMemo(() => info?.requiredFields ?? [], [info]);
 
+  // שדות מותנים מוצגים רק כשהתנאי שלהם מתקיים
+  const visibleFields = useMemo(
+    () =>
+      fields.filter(
+        (f) => !f.showIf || (values[f.showIf.key] ?? "").trim() === f.showIf.value
+      ),
+    [fields, values]
+  );
+
   const fieldErrors = useMemo(() => {
     const errs: Record<string, string> = {};
-    for (const f of fields) {
+    for (const f of visibleFields) {
       const v = values[f.key] ?? "";
       if (f.required === false && !v) continue; // רשות — מותר ריק
       const err =
@@ -76,7 +87,7 @@ export function SignClient({ token }: { token: string }) {
       if (err) errs[f.key] = err;
     }
     return errs;
-  }, [fields, values]);
+  }, [visibleFields, values]);
 
   const detailsComplete = Object.keys(fieldErrors).length === 0;
   const canSubmit = detailsComplete && hasDrawn && agreed && !submitting;
@@ -171,7 +182,7 @@ export function SignClient({ token }: { token: string }) {
       dctx.lineTo(920, 175);
       dctx.stroke();
       let y = 250;
-      for (const f of fields) {
+      for (const f of visibleFields) {
         if (!(values[f.key]?.trim())) continue; // שדה רשות ריק — לא מופיע בדף הפרטים
         // תאריך מוצג dd/mm/yyyy
         let v = values[f.key]?.trim() ?? "";
@@ -463,7 +474,7 @@ export function SignClient({ token }: { token: string }) {
           </div>
         )}
 
-        {fields.map((f) => {
+        {visibleFields.map((f) => {
           const err = touched.has(f.key) ? fieldErrors[f.key] : undefined;
           const filled = !fieldErrors[f.key];
           return (
