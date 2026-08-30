@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { STATUS_LABELS, type LeadStatusValue } from "@/lib/stateMachine";
+import { logAudit } from "@/lib/audit";
 
 // יומן אירועים לליד: אירועים ידניים (lead_events) + שינויי סטטוס
 // אוטומטיים (lead_status_history) ממוזגים לציר זמן אחד.
@@ -187,4 +188,54 @@ export async function PATCH(
   }
 
   return NextResponse.json({ event: data });
+}
+
+// Delete a manual journal entry (lead_events only). Status-change and
+// interaction rows are built from other tables and are not deletable here.
+// The row is gone, so the deletion itself is written to the audit log with
+// the text it removed — otherwise a note could vanish without a trace.
+export async function DELETE(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  const { id: leadId } = await params;
+
+  let body: { event_id?: string };
+  try {
+    body = await request.json();
+  } catch {
+    return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
+  }
+  if (!body.event_id) {
+    return NextResponse.json({ error: "חסר מזהה אירוע" }, { status: 400 });
+  }
+
+  const { data, error } = await supabase
+    .from("lead_events")
+    .delete()
+    .eq("id", body.event_id)
+    .eq("lead_id", leadId) // guard: the event must belong to this lead
+    .select("id, event_type, event_text, created_by, created_at")
+    .maybeSingle();
+
+  if (error) {
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+  if (!data) {
+    return NextResponse.json({ error: "האירוע לא נמצא" }, { status: 404 });
+  }
+
+  await logAudit({
+    action: "delete",
+    leadId,
+    actor: user.email ?? user.id,
+    changes: { lead_event: { from: `${data.event_type}: ${data.event_text}`, to: null } },
+    meta: { event_id: data.id, original_author: data.created_by, created_at: data.created_at },
+  });
+
+  return NextResponse.json({ ok: true });
 }

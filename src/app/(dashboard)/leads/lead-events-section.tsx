@@ -46,6 +46,7 @@ export function LeadEventsSection({ leadId }: { leadId: string }) {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editText, setEditText] = useState("");
   const [savingEdit, setSavingEdit] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -132,6 +133,33 @@ export function LeadEventsSection({ leadId }: { leadId: string }) {
     }
   }
 
+  // מחיקה בלתי הפיכה, ולכן מאשרים תחילה. השרת רושם את המחיקה ואת הטקסט
+  // שנמחק ביומן הביקורת, כך שלא נעלמת הערה בלי עקבות.
+  async function deleteEvent(ev: TimelineEvent) {
+    if (!confirm(`למחוק את ההערה?
+
+"${ev.text}"
+
+הפעולה אינה הפיכה.`)) return;
+    setDeletingId(ev.id);
+    try {
+      const res = await fetch(`/api/leads/${leadId}/events`, {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ event_id: ev.id }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        toast.error(data.error ?? "מחיקת ההערה נכשלה");
+        return;
+      }
+      setTimeline((prev) => prev.filter((e) => !(e.kind === "event" && e.id === ev.id)));
+      toast.success("ההערה נמחקה");
+    } finally {
+      setDeletingId(null);
+    }
+  }
+
   return (
     <div>
       <h3 className="text-sm font-bold text-gray-900 mb-2">יומן אירועים</h3>
@@ -199,13 +227,23 @@ export function LeadEventsSection({ leadId }: { leadId: string }) {
                 </span>
                 <span className="text-[10px] text-gray-400 mr-auto">{formatDateTime(ev.created_at)}</span>
                 {ev.editable && editingId !== ev.id && (
-                  <button
-                    type="button"
-                    onClick={() => startEdit(ev)}
-                    className="text-[10px] text-cyan-600 hover:text-cyan-700 hover:underline shrink-0"
-                  >
-                    ערוך
-                  </button>
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => startEdit(ev)}
+                      className="text-[10px] text-cyan-600 hover:text-cyan-700 hover:underline shrink-0"
+                    >
+                      ערוך
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => deleteEvent(ev)}
+                      disabled={deletingId === ev.id}
+                      className="text-[10px] text-red-500 hover:text-red-700 hover:underline shrink-0 disabled:opacity-50"
+                    >
+                      {deletingId === ev.id ? "מוחק…" : "מחק"}
+                    </button>
+                  </>
                 )}
               </div>
 
