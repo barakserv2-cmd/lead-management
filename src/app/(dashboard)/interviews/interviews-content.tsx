@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { LeadNotesDialog } from "../leads/lead-notes-dialog";
 import { InterviewMessageDialog } from "./interview-message-dialog";
 import Link from "next/link";
+import { useRouter, useSearchParams } from "next/navigation";
 import { STATUS_LABELS, LeadStatus, type LeadStatusValue } from "@/lib/stateMachine";
 import { StatusSelect } from "../leads/status-select";
 
@@ -98,7 +99,16 @@ const RANGE_LABELS: Record<Range, string> = {
   all: "הכל",
 };
 
-export function InterviewsContent({ rows }: { rows: InterviewRow[] }) {
+export function InterviewsContent({
+  rows,
+  customRange = null,
+}: {
+  rows: InterviewRow[];
+  /** טווח תאריכים מפורש מה-URL — מחליף את צ'יפי הטווח ואת חלון ברירת המחדל */
+  customRange?: { from: string | null; to: string | null } | null;
+}) {
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const [range, setRange] = useState<Range>("upcoming");
   const [q, setQ] = useState("");
   const [role, setRole] = useState("");
@@ -119,12 +129,17 @@ export function InterviewsContent({ rows }: { rows: InterviewRow[] }) {
     const qDigits = q.replace(/\D/g, "");
     return rows.filter((r) => {
       const key = wallDateKey(r.interview_date);
+      // טווח מפורש כבר סונן בשרת — הצ'יפים לא מצמצמים אותו שוב
+      if (customRange) {
+        // נופל דרך לשאר הפילטרים
+      } else {
       if (range === "today" && key !== today) return false;
       if (range === "yesterday" && key !== addDays(today, -1)) return false;
       if (range === "tomorrow" && key !== addDays(today, 1)) return false;
       if (range === "week" && (key < today || key > addDays(today, 7))) return false;
       if (range === "upcoming" && key < today) return false;
       if (range === "past" && key >= today) return false;
+      }
       if (role && r.job_title !== role) return false;
       if (client && r.client !== client) return false;
       if (recruiter && r.recruiter !== recruiter) return false;
@@ -137,7 +152,7 @@ export function InterviewsContent({ rows }: { rows: InterviewRow[] }) {
       }
       return true;
     });
-  }, [rows, range, q, role, client, recruiter, type, status, today]);
+  }, [rows, range, q, role, client, recruiter, type, status, today, customRange]);
 
   const groups = useMemo(() => {
     const map = new Map<string, InterviewRow[]>();
@@ -161,10 +176,26 @@ export function InterviewsContent({ rows }: { rows: InterviewRow[] }) {
     else if (range === "week") { p.set("from", today); p.set("to", addDays(today, 7)); }
     else if (range === "upcoming") p.set("from", today);
     else if (range === "past") p.set("to", addDays(today, -1));
+    if (customRange?.from) p.set("from", customRange.from);
+    if (customRange?.to) p.set("to", customRange.to);
     if (role) p.set("job", role);
     if (client) p.set("client", client);
     return `/api/assistant/export?${p.toString()}`;
   })();
+
+  // חיפוש התאריכים חי ב-URL כי הוא נפתר בשרת — כך אפשר להגיע גם לראיונות
+  // שמחוץ לחלון ברירת המחדל, והקישור ניתן לשיתוף.
+  function applyDates(nextFrom: string, nextTo: string) {
+    const params = new URLSearchParams(searchParams.toString());
+    if (nextFrom) params.set("from", nextFrom); else params.delete("from");
+    if (nextTo) params.set("to", nextTo); else params.delete("to");
+    const qs = params.toString();
+    router.push(qs ? `/interviews?${qs}` : "/interviews");
+  }
+
+  function clearDates() {
+    applyDates("", "");
+  }
 
   const clearAll = () => { setQ(""); setRole(""); setClient(""); setRecruiter(""); setType(""); setStatus(""); };
   const hasFilters = q || role || client || recruiter || type || status;
@@ -238,8 +269,49 @@ export function InterviewsContent({ rows }: { rows: InterviewRow[] }) {
         </div>
       </div>
 
+      {/* Date range search — server-side, so it reaches outside the default window */}
+      <div className="flex flex-wrap items-center gap-2 mb-3">
+        <div className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-sm ${
+          customRange ? "border-blue-400 bg-blue-50 text-blue-800" : "border-slate-300 bg-white text-slate-600"
+        }`}>
+          <span className="text-xs font-medium">חיפוש תאריכים:</span>
+          <input
+            type="date"
+            value={customRange?.from ?? ""}
+            max={customRange?.to || undefined}
+            onChange={(e) => applyDates(e.target.value, customRange?.to ?? "")}
+            className="bg-transparent text-sm outline-none w-[8rem] cursor-pointer"
+            aria-label="מתאריך"
+          />
+          <span className="text-slate-400">–</span>
+          <input
+            type="date"
+            value={customRange?.to ?? ""}
+            min={customRange?.from || undefined}
+            onChange={(e) => applyDates(customRange?.from ?? "", e.target.value)}
+            className="bg-transparent text-sm outline-none w-[8rem] cursor-pointer"
+            aria-label="עד תאריך"
+          />
+          {customRange && (
+            <button
+              type="button"
+              onClick={clearDates}
+              className="text-xs text-blue-700 hover:text-blue-900 font-semibold px-1"
+              title="נקה טווח תאריכים"
+            >
+              ✕
+            </button>
+          )}
+        </div>
+        {customRange && (
+          <span className="text-xs text-slate-500">
+            מציג {filtered.length} ראיונות בטווח שנבחר · צ&apos;יפי הטווח מושבתים
+          </span>
+        )}
+      </div>
+
       {/* Range chips */}
-      <div className="flex flex-wrap gap-1.5 mb-3">
+      <div className={`flex flex-wrap gap-1.5 mb-3 ${customRange ? "opacity-40 pointer-events-none" : ""}`}>
         {(Object.keys(RANGE_LABELS) as Range[]).map((r) => (
           <button
             key={r}

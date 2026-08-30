@@ -4,16 +4,34 @@ import { InterviewsContent, type InterviewRow } from "./interviews-content";
 
 export const dynamic = "force-dynamic";
 
-// Interviews board: every lead with a scheduled interview, from 90 days back
-// (so no-shows / arrived are still visible) to two months ahead. Filtering,
-// grouping by day and search happen client-side — the volume is small.
-export default async function InterviewsPage() {
+// Interviews board: by default every lead with a scheduled interview from 90
+// days back (so no-shows / arrived are still visible) to two months ahead.
+// ?from/?to replace that window with an explicit range, so a search can reach
+// interviews outside it. Filtering, grouping by day and search are
+// client-side — the volume is small.
+const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+export default async function InterviewsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ from?: string; to?: string }>;
+}) {
+  const { from: fromParam, to: toParam } = await searchParams;
+  const customFrom = DATE_RE.test(fromParam ?? "") ? fromParam! : null;
+  const customTo = DATE_RE.test(toParam ?? "") ? toParam! : null;
+  const isCustom = !!(customFrom || customTo);
+
   const supabase = getSupabaseAdmin();
 
   const from = new Date();
   from.setDate(from.getDate() - 90);
   const to = new Date();
   to.setDate(to.getDate() + 60);
+
+  // interview_date הוא שעון קיר ישראלי עם תווית UTC, אז גבולות היום נבנים
+  // באותה מסגרת — Z ולא +03:00 (ראו 00060 / cron/daily).
+  const rangeStart = isCustom ? `${customFrom ?? "1970-01-01"}T00:00:00Z` : from.toISOString();
+  const rangeEnd = isCustom ? `${customTo ?? "2999-12-31"}T23:59:59Z` : to.toISOString();
 
   const [{ data: leads }, { data: profiles }] = await Promise.all([
     supabase
@@ -22,8 +40,8 @@ export default async function InterviewsPage() {
         "id, name, phone, job_title, location, status, interview_date, interview_type, interview_notes, rejection_reason, hired_client, hired_position, handled_by, source, preferences, notes"
       )
       .not("interview_date", "is", null)
-      .gte("interview_date", from.toISOString())
-      .lte("interview_date", to.toISOString())
+      .gte("interview_date", rangeStart)
+      .lte("interview_date", rangeEnd)
       .in("status", [
         LeadStatus.INTERVIEW_BOOKED,
         LeadStatus.ARRIVED,
@@ -34,7 +52,7 @@ export default async function InterviewsPage() {
         LeadStatus.REJECTED,
       ])
       .order("interview_date", { ascending: true })
-      .limit(1000),
+      .limit(isCustom ? 2000 : 1000),
     supabase.from("user_profiles").select("email, name"),
   ]);
 
@@ -100,5 +118,10 @@ export default async function InterviewsPage() {
     };
   });
 
-  return <InterviewsContent rows={rows} />;
+  return (
+    <InterviewsContent
+      rows={rows}
+      customRange={isCustom ? { from: customFrom, to: customTo } : null}
+    />
+  );
 }
