@@ -8,6 +8,7 @@ import { LeadWindowManager } from "./lead-mini-windows";
 import { BulkWhatsAppDialog } from "./bulk-whatsapp-dialog";
 import { BulkImportDialog } from "./bulk-import-dialog";
 import { LeadCardPanel } from "./lead-card-panel";
+import { LeadNotesDialog } from "./lead-notes-dialog";
 import { Button } from "@/components/ui/button";
 
 function getInitials(name: string) {
@@ -340,6 +341,9 @@ export function LeadsContent({
                       >
                         <NotesIcon />
                       </button>
+                      {/* יומן האירועים ישירות מהשורה — הוספת הערה ועריכה בלי
+                          לפתוח את הכרטיס המלא, כמו בלוח הראיונות */}
+                      <LeadNotesDialog leadId={lead.id} leadName={lead.name ?? ""} size="xs" />
                       {intlPhone ? (
                         <>
                           <a
