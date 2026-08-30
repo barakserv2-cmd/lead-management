@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState, useTransition } from "react";
+import { parsePayRate, payLabel } from "@/lib/payRate";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { toast } from "sonner";
@@ -98,6 +99,10 @@ export function JobsContent({
   const [search, setSearch] = useState("");
   const [onlyUrgent, setOnlyUrgent] = useState(false);
   const [onlyUnfilled, setOnlyUnfilled] = useState(false);
+  // מיון לפי שכר שובר את הקיבוץ לפי מעסיק — משרה הכי משתלמת יכולה להיות אצל
+  // כל אחד, ולכן במצב הזה הרשימה שטוחה.
+  const [sortByPay, setSortByPay] = useState(false);
+  const [minPay, setMinPay] = useState("");
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const [expandedJob, setExpandedJob] = useState<string | null>(null);
 
@@ -151,6 +156,11 @@ export function JobsContent({
       if (j.status !== tab) return false;
       if (onlyUrgent && !j.urgent) return false;
       if (onlyUnfilled && missing(j) === 0) return false;
+      if (minPay) {
+        const { value } = parsePayRate(j.pay_rate);
+        // משרה בלי שכר מספרי ("ייקבע במעמד הראיון") לא עוברת סף — אין מה להשוות
+        if (value === null || value < Number(minPay)) return false;
+      }
       if (!q) return true;
       return (
         j.title.toLowerCase().includes(q) ||
@@ -160,6 +170,32 @@ export function JobsContent({
         (j.notes ?? "").toLowerCase().includes(q)
       );
     });
+
+    if (sortByPay) {
+      const flat = [...list].sort((a, b) => {
+        const pa = parsePayRate(a.pay_rate).value;
+        const pb = parsePayRate(b.pay_rate).value;
+        // משרות בלי שכר מספרי יורדות לסוף במקום להתחזות ל-0
+        if (pa === null && pb === null) return a.title.localeCompare(b.title, "he");
+        if (pa === null) return 1;
+        if (pb === null) return -1;
+        return pb - pa;
+      });
+      const hired = flat.reduce((n, j) => n + stat(j).hired.length, 0);
+      const needed = flat.reduce((n, j) => n + j.needed_count, 0);
+      return [{
+        id: "__by_pay__",
+        name: "כל המשרות — לפי שכר, מהגבוה לנמוך",
+        phone: null,
+        jobs: flat,
+        needed,
+        hired,
+        inProcess: new Set(flat.flatMap((j) => stat(j).inProcess.map((l) => l.id))).size,
+        pending: 0,
+        missing: needed - hired,
+        urgent: flat.some((j) => j.urgent && missing(j) > 0),
+      }];
+    }
 
     const map = new Map<string, { name: string; phone: string | null; jobs: JobWithClient[] }>();
     for (const j of list) {
@@ -194,7 +230,7 @@ export function JobsContent({
     });
     return arr;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [jobs, staffing, pendingByClient, tab, search, onlyUrgent, onlyUnfilled]);
+  }, [jobs, staffing, pendingByClient, tab, search, onlyUrgent, onlyUnfilled, sortByPay, minPay]);
 
   const visibleCount = groups.reduce((s, g) => s + g.jobs.length, 0);
 
@@ -348,6 +384,33 @@ export function JobsContent({
           <Chip active={onlyUnfilled} onClick={() => setOnlyUnfilled((v) => !v)} tone="red">
             <Users className="w-3.5 h-3.5" /> רק לא מאוישות
           </Chip>
+          <Chip active={sortByPay} onClick={() => setSortByPay((v) => !v)} tone="emerald">
+            💰 שכר גבוה קודם
+          </Chip>
+          <div
+            className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full border text-xs ${
+              minPay ? "border-emerald-400 bg-emerald-50 text-emerald-800" : "border-gray-200 bg-white text-gray-600"
+            }`}
+          >
+            <span>משכר</span>
+            <input
+              type="number"
+              inputMode="decimal"
+              min={0}
+              step={1}
+              value={minPay}
+              onChange={(e) => setMinPay(e.target.value)}
+              placeholder="₪"
+              className="w-14 bg-transparent outline-none text-center"
+              aria-label="שכר מינימלי לשעה"
+            />
+            <span>ומעלה</span>
+            {minPay && (
+              <button type="button" onClick={() => setMinPay("")} className="px-0.5 font-semibold" title="נקה">
+                ✕
+              </button>
+            )}
+          </div>
           {groups.length > 1 && (
             <button
               onClick={() =>
@@ -452,6 +515,10 @@ export function JobsContent({
                                   <AlertTriangle className="w-4 h-4" />
                                 </button>
                                 <span className="font-medium text-gray-900 truncate">{job.title}</span>
+                                {/* ברשימה השטוחה אין כותרת מעסיק מעל, אז השם נדרש בשורה */}
+                                {sortByPay && job.clients?.name && (
+                                  <span className="text-xs text-gray-600 truncate">@ {job.clients.name}</span>
+                                )}
                                 {job.location && (
                                   <span className="text-xs text-gray-400 truncate">· {job.location}</span>
                                 )}
@@ -476,11 +543,19 @@ export function JobsContent({
                             {/* Pay */}
                             <div className="col-span-4 md:col-span-2 text-sm text-gray-700">
                               {job.pay_rate ? (
-                                /^\d/.test(job.pay_rate) ? (
-                                  <span className="font-mono" dir="ltr">₪{job.pay_rate}</span>
-                                ) : (
-                                  <span className="text-gray-500">{job.pay_rate}</span>
-                                )
+                                <>
+                                  {/^\d/.test(job.pay_rate) ? (
+                                    <span className="font-mono" dir="ltr">₪{job.pay_rate}</span>
+                                  ) : (
+                                    <span className="text-gray-500">{job.pay_rate}</span>
+                                  )}
+                                  {/* מה שהמיון באמת השווה — "40+2" ממוין כ-42 */}
+                                  {sortByPay && payLabel(job.pay_rate) && payLabel(job.pay_rate) !== `₪${job.pay_rate}` && (
+                                    <span className="ms-1.5 text-[11px] px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 font-medium">
+                                      {payLabel(job.pay_rate)}
+                                    </span>
+                                  )}
+                                </>
                               ) : (
                                 <span className="text-gray-300">—</span>
                               )}
@@ -695,10 +770,15 @@ function Chip({
 }: {
   active: boolean;
   onClick: () => void;
-  tone: "amber" | "red";
+  tone: "amber" | "red" | "emerald";
   children: React.ReactNode;
 }) {
-  const on = tone === "amber" ? "bg-amber-100 text-amber-800 border-amber-200" : "bg-red-100 text-red-800 border-red-200";
+  const on =
+    tone === "amber"
+      ? "bg-amber-100 text-amber-800 border-amber-200"
+      : tone === "emerald"
+        ? "bg-emerald-100 text-emerald-800 border-emerald-200"
+        : "bg-red-100 text-red-800 border-red-200";
   return (
     <button
       onClick={onClick}
