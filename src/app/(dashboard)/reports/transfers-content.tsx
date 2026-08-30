@@ -38,6 +38,22 @@ function monthBounds(): [string, string] {
   const iso = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
   return [iso(f), iso(t)];
 }
+// העברה "אמיתית" לצורך הדוח: העובד באמת התחיל בשני המקומות. צריך שתי
+// חותמות התחלה, ושהמועד אצל המעסיק החדש כבר הגיע — אחרת מדובר בהעברה
+// מתוכננת שעדיין לא התממשה, ואין ימי עבודה לפצל בין שני מעסיקים.
+function actuallyStarted(r: TransferRow, today: string): boolean {
+  if (!r.from_start_date || !r.to_start_date) return false;
+  return r.to_start_date <= today;
+}
+
+// כמה ימים העובד צבר אצל המעסיק הקודם לפני המעבר. 0 = התחיל ועבר באותו
+// יום, כלומר אין בפועל ימים לפצל — מוצג כדי שההחלטה תהיה גלויה ולא מוסתרת.
+function daysAtPrevious(r: TransferRow): number | null {
+  if (!r.from_start_date || !r.to_start_date) return null;
+  const ms = new Date(`${r.to_start_date}T12:00:00`).getTime() - new Date(`${r.from_start_date}T12:00:00`).getTime();
+  return Math.max(0, Math.round(ms / 86_400_000));
+}
+
 function todayIso() {
   return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Jerusalem" }).format(new Date());
 }
@@ -58,6 +74,8 @@ export function TransfersContent({
   const [clientF, setClientF] = useState("");
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
+  // ברירת המחדל היא הדוח שהמשרד צריך: רק מי שבאמת עבד בשני המקומות
+  const [startedOnly, setStartedOnly] = useState(true);
 
   const [showForm, setShowForm] = useState(false);
   const [workerQ, setWorkerQ] = useState("");
@@ -77,14 +95,22 @@ export function TransfersContent({
 
   const filtered = useMemo(() => {
     const qn = q.trim().toLowerCase();
+    const today = todayIso();
     return rows.filter((r) => {
+      if (startedOnly && !actuallyStarted(r, today)) return false;
       if (clientF && r.from_client !== clientF && r.to_client !== clientF) return false;
       if (from && r.transferred_at < from) return false;
       if (to && r.transferred_at > to) return false;
       if (qn && !`${r.name} ${r.phone ?? ""} ${r.from_client ?? ""} ${r.to_client ?? ""} ${r.reason ?? ""}`.toLowerCase().includes(qn)) return false;
       return true;
     });
-  }, [rows, q, clientF, from, to]);
+  }, [rows, q, clientF, from, to, startedOnly]);
+
+  // כמה נופלים בגלל המתג — כדי שההסתרה תהיה גלויה ולא שקטה
+  const hiddenCount = useMemo(() => {
+    const today = todayIso();
+    return rows.filter((r) => !actuallyStarted(r, today)).length;
+  }, [rows]);
 
   const workerMatches = useMemo(() => {
     const s = workerQ.trim().toLowerCase();
@@ -211,7 +237,7 @@ export function TransfersContent({
         </div>
       )}
 
-      <div className="flex flex-wrap items-end gap-3 mb-5">
+      <div className="flex flex-wrap items-end gap-3 mb-2">
         <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="חיפוש שם / טלפון / מעסיק…" className="border border-gray-300 rounded-lg px-3 py-2 text-sm min-w-[200px]" />
         <select value={clientF} onChange={(e) => setClientF(e.target.value)} className="border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white">
           <option value="">כל המעסיקים</option>
@@ -230,6 +256,25 @@ export function TransfersContent({
         <span className="text-sm text-gray-500 mr-auto">{filtered.length} העברות</span>
       </div>
 
+      <label className="flex items-center gap-2 mb-4 text-sm text-gray-700 cursor-pointer w-fit">
+        <input
+          type="checkbox"
+          checked={startedOnly}
+          onChange={(e) => setStartedOnly(e.target.checked)}
+          className="w-4 h-4 accent-cyan-600"
+        />
+        רק מי שהתחיל לעבוד בפועל בשני המקומות
+        <span className="text-xs text-gray-400">
+          (תאריך התחלה אצל שני המעסיקים, ומועד ההתחלה החדש כבר הגיע)
+        </span>
+      </label>
+
+      {startedOnly && hiddenCount > 0 && (
+        <p className="mb-4 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 w-fit">
+          {hiddenCount} העברות מוסתרות — עדיין לא התחילו לעבוד בשני המקומות.
+        </p>
+      )}
+
       {filtered.length === 0 ? (
         <div className="text-center py-16 text-gray-500">אין העברות להצגה.</div>
       ) : (
@@ -242,6 +287,7 @@ export function TransfersContent({
                 <th className="px-4 py-3 font-semibold text-gray-700">טלפון</th>
                 <th className="px-4 py-3 font-semibold text-gray-700">מ־</th>
                 <th className="px-4 py-3 font-semibold text-gray-700">ל־</th>
+                <th className="px-4 py-3 font-semibold text-gray-700">ימים אצל הקודם</th>
                 <th className="px-4 py-3 font-semibold text-gray-700">סיבה</th>
                 <th className="px-4 py-3 font-semibold text-gray-700">מקור</th>
                 <th className="px-2 py-3"></th>
@@ -260,6 +306,20 @@ export function TransfersContent({
                   <td className="px-4 py-3 text-gray-900 font-medium">
                     {r.to_client ?? "—"}{r.to_position ? <span className="text-gray-500 font-normal"> · {r.to_position}</span> : null}
                     <div className="text-xs text-gray-400 font-normal">מ-{ilDate(r.to_start_date ?? r.transferred_at)}</div>
+                  </td>
+                  <td className="px-4 py-3">
+                    {(() => {
+                      const d = daysAtPrevious(r);
+                      if (d === null) return <span className="text-gray-300">—</span>;
+                      // 0 = התחיל ועבר באותו יום; אין ימים לפצל בין שני מעסיקים
+                      return (
+                        <span className={`text-xs rounded-full px-2 py-0.5 font-medium ${
+                          d === 0 ? "bg-amber-100 text-amber-800" : "bg-gray-100 text-gray-700"
+                        }`}>
+                          {d === 0 ? "אותו יום" : d === 1 ? "יום 1" : `${d} ימים`}
+                        </span>
+                      );
+                    })()}
                   </td>
                   <td className="px-4 py-3 text-gray-500 max-w-[220px] truncate" title={r.reason ?? ""}>{r.reason ?? ""}</td>
                   <td className="px-4 py-3">
