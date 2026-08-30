@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { STATUS_LABELS, type LeadStatusValue } from "@/lib/stateMachine";
 import { logAudit } from "@/lib/audit";
+import { getSupabaseAdmin } from "@/lib/api-auth";
 
 // יומן אירועים לליד: אירועים ידניים (lead_events) + שינויי סטטוס
 // אוטומטיים (lead_status_history) ממוזגים לציר זמן אחד.
@@ -172,13 +173,16 @@ export async function PATCH(
     return NextResponse.json({ error: "חסר מזהה אירוע או תוכן" }, { status: 400 });
   }
 
-  const { data, error } = await supabase
+  // ל-lead_events יש RLS עם SELECT/INSERT בלבד — עדכון דרך לקוח המשתמש פשוט
+  // לא נוגע בשום שורה. הרשאת המשתמש נבדקה למעלה והשיוך לליד נאכף כאן, אז
+  // הכתיבה עוברת בשירות. עדיף מלפתוח UPDATE/DELETE גורף ל-authenticated.
+  const { data, error } = await getSupabaseAdmin()
     .from("lead_events")
     .update({ event_text: text })
     .eq("id", body.event_id)
     .eq("lead_id", leadId) // guard: the event must belong to this lead
     .select("id, event_type, event_text, created_by, created_at")
-    .single();
+    .maybeSingle();
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
@@ -214,7 +218,9 @@ export async function DELETE(
     return NextResponse.json({ error: "חסר מזהה אירוע" }, { status: 400 });
   }
 
-  const { data, error } = await supabase
+  // כמו ב-PATCH: אין מדיניות DELETE ב-RLS, ולכן המחיקה עוברת בשירות אחרי
+  // אימות המשתמש ובדיקת השיוך לליד.
+  const { data, error } = await getSupabaseAdmin()
     .from("lead_events")
     .delete()
     .eq("id", body.event_id)
