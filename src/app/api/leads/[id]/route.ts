@@ -28,6 +28,9 @@ const EDITABLE_FIELDS = new Set([
   "start_date",
   "arrival_date",
   "employment_end_date",
+  // הערות חופשיות — הוצגו בכרטיס לקריאה בלבד ולא היה שום מסך שמאפשר לתקן
+  "notes",
+  "followup_notes",
 ]);
 
 const DATE_FIELDS = new Set(["start_date", "arrival_date", "employment_end_date"]);

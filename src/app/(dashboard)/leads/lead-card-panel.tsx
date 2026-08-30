@@ -20,6 +20,7 @@ import { clearLeadAttention } from "@/lib/actions/clearAttention";
 import { LeadDocumentsSection } from "./lead-documents-section";
 import { LeadEventsSection } from "./lead-events-section";
 import { RecruitmentInfoSection } from "./recruitment-info-section";
+import { LeadNotesEditor } from "./lead-notes-editor";
 
 // 24h lock window — must match server constant in claimLead.ts
 const LOCK_TTL_MS = 24 * 60 * 60 * 1000;
@@ -401,23 +402,12 @@ export function LeadCardPanel({ lead, open, onOpenChange, recruiterNames = {} }:
           </div>
         )}
 
-        {/* Notes */}
-        {(lead.notes || lead.followup_notes) && (
-          <div className="px-6 pb-4">
-            <h3 className="text-sm font-semibold text-gray-700 mb-2">הערות</h3>
-            <div className="bg-white rounded-lg border p-3 space-y-2">
-              {lead.notes && (
-                <p className="text-sm text-gray-700 whitespace-pre-wrap">{lead.notes}</p>
-              )}
-              {lead.followup_notes && (
-                <div className="pt-2 border-t">
-                  <span className="text-xs text-gray-500 block mb-1">הערות מעקב</span>
-                  <p className="text-sm text-gray-700 whitespace-pre-wrap">{lead.followup_notes}</p>
-                </div>
-              )}
-            </div>
-          </div>
-        )}
+        {/* Notes — עריכה במקום; מוצג תמיד, גם כשריק, כדי שאפשר יהיה להוסיף */}
+        <LeadNotesEditor
+          leadId={lead.id}
+          notes={lead.notes ?? null}
+          followupNotes={lead.followup_notes ?? null}
+        />
 
         {/* Tags */}
         {lead.tags && lead.tags.length > 0 && (
