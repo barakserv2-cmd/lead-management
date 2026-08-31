@@ -54,6 +54,8 @@ import { ChatHistory } from "./chat-history";
 import { ReminderDialog } from "./reminder-dialog";
 import { DuplicatesSection } from "./duplicates-section";
 import { PrivacySection } from "./privacy-section";
+import { LeadEventsSection } from "../lead-events-section";
+import { LeadDocumentsSection } from "../lead-documents-section";
 
 // ── Helpers ──────────────────────────────────────────────────
 
@@ -753,8 +755,13 @@ export function LeadDetail({
               <CardTitle className="text-base">מידע נוסף</CardTitle>
             </CardHeader>
             <CardContent>
-              <Tabs defaultValue="notes" dir="rtl">
+              {/* היומן ראשון — ההערות שהרכזות באמת כותבות יושבות ב-lead_events,
+                  ולא בשדה הטקסט החופשי, ולכן הדף נראה ריק בלעדיו */}
+              <Tabs defaultValue="journal" dir="rtl">
                 <TabsList className="w-full">
+                  <TabsTrigger value="journal" className="flex-1 text-xs">
+                    יומן
+                  </TabsTrigger>
                   <TabsTrigger value="notes" className="flex-1 text-xs">
                     הערות
                   </TabsTrigger>
@@ -765,6 +772,11 @@ export function LeadDetail({
                     העדפות
                   </TabsTrigger>
                 </TabsList>
+
+                {/* Journal — הערות, שיחות ואזהרות, עם הוספה/עריכה/מחיקה */}
+                <TabsContent value="journal" className="mt-3">
+                  <LeadEventsSection leadId={lead.id} />
+                </TabsContent>
 
                 {/* Notes */}
                 <TabsContent value="notes" className="mt-3 space-y-3">
@@ -855,6 +867,13 @@ export function LeadDetail({
           </Card>
         </div>
       </div>
+
+      {/* ═══ DOCUMENTS ═══════════════════════════════════════════ */}
+      <Card className="mt-4">
+        <CardContent className="pt-4">
+          <LeadDocumentsSection leadId={lead.id} />
+        </CardContent>
+      </Card>
 
       {/* ═══ PRIVACY / AUDIT ═════════════════════════════════════ */}
       <PrivacySection leadId={lead.id} anonymizedAt={lead.anonymized_at} />
