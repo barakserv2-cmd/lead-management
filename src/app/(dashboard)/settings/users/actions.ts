@@ -2,12 +2,22 @@
 
 import { createClient as createServerClient } from "@supabase/supabase-js";
 import { revalidatePath } from "next/cache";
+import { getAuthedUser } from "@/lib/api-auth";
 
 function getSupabase() {
   return createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.SUPABASE_SERVICE_ROLE_KEY!
   );
+}
+
+// server actions נגישות לכל מי שמשיג את ה-action id — בלי הבדיקות כאן
+// כל משתמש (גם לא אדמין) היה יכול ליצור/לערוך/למחוק משתמשים.
+const NOT_ADMIN = "פעולה זו מוגבלת לאדמין";
+
+async function requireAdminActor(): Promise<string | null> {
+  const user = await getAuthedUser();
+  return user?.isAdmin ? user.email : null;
 }
 
 export interface UserProfile {
@@ -19,6 +29,9 @@ export interface UserProfile {
 }
 
 export async function getUsers() {
+  const user = await getAuthedUser();
+  if (!user) return { users: [] as UserProfile[], error: "לא מחובר/ת" };
+
   const { data, error } = await getSupabase()
     .from("user_profiles")
     .select("*")
@@ -33,6 +46,8 @@ export async function createUser(user: {
   email: string;
   role: string;
 }) {
+  if (!(await requireAdminActor())) return { user: null, error: NOT_ADMIN };
+
   const { data, error } = await getSupabase()
     .from("user_profiles")
     .insert({
@@ -58,6 +73,8 @@ export async function updateUser(
   id: string,
   user: { name: string; email: string; role: string }
 ) {
+  if (!(await requireAdminActor())) return { user: null, error: NOT_ADMIN };
+
   const { data, error } = await getSupabase()
     .from("user_profiles")
     .update({
@@ -81,6 +98,8 @@ export async function updateUser(
 }
 
 export async function deleteUser(id: string) {
+  if (!(await requireAdminActor())) return { error: NOT_ADMIN };
+
   const { error } = await getSupabase()
     .from("user_profiles")
     .delete()

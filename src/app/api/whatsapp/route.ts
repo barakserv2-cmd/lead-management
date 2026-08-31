@@ -7,6 +7,7 @@ import {
   getAccountByInstance,
 } from "@/lib/whatsappService";
 import { LeadStatus } from "@/lib/stateMachine";
+import { isOptOutMessage, OPT_OUT_CONFIRMATION } from "@/lib/sendGate";
 import { analyzeWhatsappMessage, type WhatsAppNLU } from "@/lib/ai/parseWhatsappMessage";
 import {
   createLeadFromPublication,
@@ -29,6 +30,19 @@ export async function GET() {
 // POST — Incoming webhook from Green API
 export async function POST(req: NextRequest) {
   try {
+    // אימות טוקן: GreenAPI שולחת את ה-webhookUrlToken שהוגדר ב-instance
+    // בכותרת Authorization. בלי env מוגדר — אין אכיפה (פיתוח מקומי);
+    // עם env — כל בקשה בלי הטוקן הנכון נדחית ב-401.
+    const expectedToken = (process.env.GREEN_API_WEBHOOK_TOKEN ?? "").trim();
+    if (expectedToken) {
+      const auth = req.headers.get("authorization") ?? "";
+      const got = auth.startsWith("Bearer ") ? auth.slice(7) : auth;
+      if (got !== expectedToken) {
+        console.warn("[WhatsApp Webhook] rejected: bad or missing webhook token");
+        return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+      }
+    }
+
     const body = await req.json();
 
     // incomingMessageReceived — a candidate wrote to us.
@@ -130,11 +144,50 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: true });
     }
 
+    // בקשת הסרה מדיוור — נבדקת דטרמיניסטית לפני הבוט וה-NLU, כדי
+    // שבקשה כזו תיתפס ב-100% מהמקרים ולא תלויה בשיקול דעת של מודל.
+    if (isOptOutMessage(messageText)) {
+      await supabase.from("messages").insert({
+        lead_id: lead.id,
+        role: "user",
+        content: messageText,
+        via_instance: account.instanceId,
+      });
+      await supabase
+        .from("leads")
+        .update({ do_not_contact: true })
+        .eq("id", lead.id);
+      await supabase.from("lead_events").insert({
+        lead_id: lead.id,
+        event_type: "פרטיות",
+        event_text: `בקשת הסרה מדיוור בוואטסאפ ("${messageText.slice(0, 80)}") — כל שליחה עתידית נחסמת`,
+        created_by: "מערכת",
+      });
+
+      // הודעת האישור היחידה — עוקפת את השער בכוונה ורק כאן.
+      const confirmRes = await sendWhatsAppMessage(phone, OPT_OUT_CONFIRMATION, account, {
+        skipGate: true,
+      });
+      if (confirmRes.success) {
+        await supabase.from("messages").insert({
+          lead_id: lead.id,
+          role: "recruiter",
+          content: OPT_OUT_CONFIRMATION,
+          sent_by: "מערכת",
+          via_instance: account.instanceId,
+        });
+      }
+      console.log(`[WhatsApp Webhook] opt-out recorded for lead ${lead.id}`);
+      return NextResponse.json({ ok: true, optOut: true });
+    }
+
     if (lead.status === LeadStatus.SCREENING_IN_PROGRESS) {
       // Screening mode: process through AI and auto-reply
       const result = await processIncomingMessage(lead.id, messageText, account.instanceId);
 
       if (result.success && result.aiReply) {
+        // תשובה להודעה נכנסת — המועמד/ת כתב/ה ברגע זה, ולכן לא כפופה
+        // לשעות שקט (automated). השער עדיין חוסם אם הופעל opt-out.
         const sendResult = await sendWhatsAppMessage(phone, result.aiReply, account);
         if (!sendResult.success) {
           console.error(

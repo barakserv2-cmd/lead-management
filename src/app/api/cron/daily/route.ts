@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient as createServerClient } from "@supabase/supabase-js";
-import { sendWhatsAppMessage } from "@/lib/whatsappService";
+import { businessAccount, sendWhatsAppMessage } from "@/lib/whatsappService";
 
 // Vercel cron pings this URL every hour at :30 (see vercel.json).
 // Guarded by CRON_SECRET so it can't be hit anonymously from outside.
@@ -126,7 +126,9 @@ async function runInterviewReminders(admin: ReturnType<typeof getAdmin>): Promis
           : `תזכורת אוטומטית: ${target.label} יש לך ${type}.\n`) +
         `בהצלחה! 🎯`;
 
-      const sendRes = await sendWhatsAppMessage(lead.phone as string, message);
+      const sendRes = await sendWhatsAppMessage(lead.phone as string, message, businessAccount(), {
+        automated: true,
+      });
 
       // Save the message to the lead's history too
       if (sendRes.success) {

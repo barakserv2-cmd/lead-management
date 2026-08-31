@@ -876,7 +876,11 @@ export function LeadDetail({
       </Card>
 
       {/* ═══ PRIVACY / AUDIT ═════════════════════════════════════ */}
-      <PrivacySection leadId={lead.id} anonymizedAt={lead.anonymized_at} />
+      <PrivacySection
+        leadId={lead.id}
+        anonymizedAt={lead.anonymized_at}
+        doNotContact={lead.do_not_contact ?? false}
+      />
 
       {/* ═══ EDIT DETAILS DIALOG ═══════════════════════════════ */}
       <Dialog open={editOpen} onOpenChange={setEditOpen}>

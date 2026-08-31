@@ -11,6 +11,7 @@
 //      number when one is linked.
 
 import { createClient as createServerClient } from "@supabase/supabase-js";
+import { checkSendGate } from "@/lib/sendGate";
 
 export interface WhatsAppAccount {
   instanceId: string;
@@ -141,6 +142,15 @@ export interface SendResult {
   success: boolean;
   idMessage?: string;
   error?: string;
+  /** השליחה נחסמה בשער (opt-out / שעות שקט) — לא כשל טכני */
+  blocked?: "do_not_contact" | "quiet_hours";
+}
+
+export interface SendOptions {
+  /** הודעה שהמערכת יוזמת (בוט, cron, תזכורת) — כפופה גם לשעות שקט */
+  automated?: boolean;
+  /** עוקף את השער — רק לאישור ה-opt-out עצמו */
+  skipGate?: boolean;
 }
 
 function apiUrl(account: WhatsAppAccount, method: string): string {
@@ -154,8 +164,19 @@ function apiUrl(account: WhatsAppAccount, method: string): string {
 export async function sendWhatsAppMessage(
   phone: string,
   message: string,
-  account: WhatsAppAccount = businessAccount()
+  account: WhatsAppAccount = businessAccount(),
+  opts: SendOptions = {}
 ): Promise<SendResult> {
+  // שער השליחה (שלב 2 בתוכנית העבודה): opt-out חוסם כל שליחה,
+  // שעות שקט חוסמות שליחה אוטומטית. נאכף כאן כדי שאף מסלול — ידני,
+  // ברוכת, cron או בוט — לא יוכל לעקוף אותו.
+  if (!opts.skipGate) {
+    const gate = await checkSendGate(phone, { automated: opts.automated === true });
+    if (!gate.allowed) {
+      return { success: false, error: gate.error, blocked: gate.reason };
+    }
+  }
+
   const chatId = formatChatId(phone);
 
   try {
@@ -252,6 +273,9 @@ export async function configureInstanceWebhook(
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       webhookUrl,
+      // GreenAPI מחזירה את הטוקן בכותרת Authorization של כל webhook —
+      // וה-route שלנו דוחה בקשות בלעדיו (כשה-env מוגדר).
+      webhookUrlToken: (process.env.GREEN_API_WEBHOOK_TOKEN ?? "").trim(),
       incomingWebhook: "yes",
       outgoingWebhook: "yes",
       outgoingAPIMessageWebhook: "no",

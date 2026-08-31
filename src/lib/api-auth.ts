@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { createClient as createCookieClient } from "@/lib/supabase/server";
 
 // Validate API key from Authorization header
 export function validateApiKey(request: NextRequest): boolean {
@@ -37,4 +38,51 @@ export function getSupabaseAdmin() {
   }
 
   return createClient(supabaseUrl, key);
+}
+
+// ── אכיפת תפקידים בצד השרת (שלב 2 בתוכנית העבודה) ──────────
+// עד עכשיו role ב-user_profiles היה תגית תצוגה בלבד — ה-UI הסתיר
+// כפתורים אבל השרת קיבל כל בקשה ממשתמש מחובר. מעכשיו נתיבים רגישים
+// עוברים דרך requireAdmin, באותה קונבנציה כמו publishingAuth.
+
+export const ADMIN_ROLE = "אדמין";
+
+export interface AuthedUser {
+  email: string;
+  isAdmin: boolean;
+}
+
+/** המשתמש/ת המחובר/ת + תפקיד מ-user_profiles, או null כשאין session. */
+export async function getAuthedUser(): Promise<AuthedUser | null> {
+  const supabase = await createCookieClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user?.email) return null;
+
+  const email = user.email.toLowerCase();
+  const { data: profile } = await getSupabaseAdmin()
+    .from("user_profiles")
+    .select("role")
+    .ilike("email", email)
+    .maybeSingle();
+
+  return { email, isAdmin: profile?.role === ADMIN_ROLE };
+}
+
+/**
+ * שימוש בנתיב API:
+ *   const auth = await requireAdmin();
+ *   if (auth instanceof NextResponse) return auth;
+ *   // auth.email זמין מכאן
+ */
+export async function requireAdmin(): Promise<AuthedUser | NextResponse> {
+  const user = await getAuthedUser();
+  if (!user) {
+    return NextResponse.json({ error: "לא מחובר/ת" }, { status: 401 });
+  }
+  if (!user.isAdmin) {
+    return NextResponse.json({ error: "פעולה זו מוגבלת לאדמין" }, { status: 403 });
+  }
+  return user;
 }

@@ -70,14 +70,17 @@ function fmtDate(iso: string): string {
 export function PrivacySection({
   leadId,
   anonymizedAt,
+  doNotContact = false,
 }: {
   leadId: string;
   anonymizedAt?: string | null;
+  doNotContact?: boolean;
 }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [entries, setEntries] = useState<AuditEntry[] | null>(null);
-  const [busy, setBusy] = useState<"export" | "erase" | null>(null);
+  const [busy, setBusy] = useState<"export" | "erase" | "dnc" | null>(null);
+  const [dnc, setDnc] = useState(doNotContact);
 
   useEffect(() => {
     if (!open || entries) return;
@@ -116,6 +119,38 @@ export function PrivacySection({
       URL.revokeObjectURL(url);
       toast.success("קובץ המידע ירד — נרשם ביומן הגישה");
       setEntries(null); // refresh log
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function handleToggleDnc() {
+    if (busy) return;
+    const next = !dnc;
+    if (
+      next &&
+      !confirm(
+        "לסמן שהמועמד/ת ביקש/ה לא ליצור קשר?\n\n" +
+          "כל שליחת וואטסאפ אליו/ה — ידנית, אוטומטית או מתוזמנת — תיחסם."
+      )
+    )
+      return;
+    setBusy("dnc");
+    try {
+      const res = await fetch(`/api/leads/${leadId}/privacy`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ do_not_contact: next }),
+      });
+      const d = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        toast.error(d.error ?? "שגיאה בעדכון");
+        return;
+      }
+      setDnc(next);
+      toast.success(next ? "סומן — הודעות לא יישלחו יותר" : "בוטל — אפשר לשלוח הודעות");
+      setEntries(null); // refresh log
+      router.refresh();
     } finally {
       setBusy(null);
     }
@@ -164,6 +199,11 @@ export function PrivacySection({
               מידע אישי נמחק {fmtDate(anonymizedAt)}
             </span>
           )}
+          {dnc && (
+            <span className="text-[11px] font-medium bg-red-50 text-red-600 rounded-full px-2 py-0.5">
+              לא ליצור קשר
+            </span>
+          )}
         </span>
         <span className="text-xs text-gray-400">{open ? "סגור" : "פתח"}</span>
       </button>
@@ -187,6 +227,19 @@ export function PrivacySection({
               disabled={busy !== null || !!anonymizedAt}
             >
               {busy === "erase" ? "מוחק..." : "מחק מידע אישי (זכות מחיקה)"}
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              className={dnc ? "" : "text-amber-700 border-amber-200 hover:bg-amber-50"}
+              onClick={handleToggleDnc}
+              disabled={busy !== null}
+            >
+              {busy === "dnc"
+                ? "מעדכן..."
+                : dnc
+                  ? "בטל 'לא ליצור קשר'"
+                  : "סמן 'לא ליצור קשר' (הסרה מדיוור)"}
             </Button>
           </div>
           <p className="text-[11px] text-gray-400 leading-relaxed">

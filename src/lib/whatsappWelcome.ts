@@ -4,7 +4,7 @@
 
 import { changeLeadStatus } from "@/lib/actions/changeLeadStatus";
 import { processIncomingMessage } from "@/lib/aiService";
-import { sendWhatsAppMessage } from "@/lib/whatsappService";
+import { businessAccount, sendWhatsAppMessage } from "@/lib/whatsappService";
 import { LeadStatus } from "@/lib/stateMachine";
 
 /**
@@ -55,7 +55,10 @@ export async function sendWelcomeMessage(
 
     // 4. Send the AI reply to WhatsApp
     if (result.aiReply) {
-      const sendResult = await sendWhatsAppMessage(phone, result.aiReply);
+      // הודעה שהמערכת יוזמת — כפופה לשער המלא (opt-out + שעות שקט).
+      const sendResult = await sendWhatsAppMessage(phone, result.aiReply, businessAccount(), {
+        automated: true,
+      });
       if (!sendResult.success) {
         console.error(`[WhatsApp Welcome] Send failed for ${leadId}:`, sendResult.error);
       }

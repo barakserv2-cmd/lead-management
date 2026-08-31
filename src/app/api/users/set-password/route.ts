@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
 import { createClient as createServerClient } from "@supabase/supabase-js";
+import { requireAdmin } from "@/lib/api-auth";
 
 // קביעת/איפוס סיסמה למשתמש מערכת מתוך מסך המשתמשים.
 // אם למשתמש עוד אין חשבון התחברות (טבלת user_profiles היא תצוגה בלבד) —
@@ -14,9 +14,9 @@ function getAdmin() {
 }
 
 export async function POST(request: NextRequest) {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  // קביעת סיסמה למשתמש אחר — אדמין בלבד (עד עכשיו הספיק להיות מחובר/ת).
+  const auth = await requireAdmin();
+  if (auth instanceof NextResponse) return auth;
 
   let body: { email?: string; password?: string };
   try {

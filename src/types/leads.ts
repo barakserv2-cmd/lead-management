@@ -13,6 +13,8 @@ export interface Lead {
   updated_at: string;
   /** set when personal data was stripped (retention job / erasure request) */
   anonymized_at?: string | null;
+  /** opt-out: המועמד/ת ביקש/ה לא לקבל הודעות — שער השליחה חוסם הכל */
+  do_not_contact?: boolean;
   name: string;
   phone: string | null;
   phone2: string | null;

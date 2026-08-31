@@ -64,7 +64,7 @@ export async function GET(req: NextRequest) {
     }
 
     const sender = await resolveSender(row.created_by);
-    const res = await sendWhatsAppMessage(lead.phone, row.message, sender);
+    const res = await sendWhatsAppMessage(lead.phone, row.message, sender, { automated: true });
     if (res.success) {
       sent++;
       await db.from("messages").insert({
