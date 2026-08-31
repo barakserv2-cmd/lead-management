@@ -54,6 +54,7 @@ import { ChatHistory } from "./chat-history";
 import { ReminderDialog } from "./reminder-dialog";
 import { DuplicatesSection } from "./duplicates-section";
 import { PrivacySection } from "./privacy-section";
+import { BookingLinkButton } from "./booking-link-button";
 import { LeadEventsSection } from "../lead-events-section";
 import { LeadDocumentsSection } from "../lead-documents-section";
 
@@ -867,6 +868,14 @@ export function LeadDetail({
           </Card>
         </div>
       </div>
+
+      {/* ═══ SELF-BOOKING ════════════════════════════════════════ */}
+      <Card className="mt-4">
+        <CardContent className="pt-4 flex flex-wrap items-center gap-3">
+          <span className="text-sm font-semibold text-gray-700">תיאום ראיון עצמי:</span>
+          <BookingLinkButton leadId={lead.id} hasPhone={!!lead.phone} />
+        </CardContent>
+      </Card>
 
       {/* ═══ DOCUMENTS ═══════════════════════════════════════════ */}
       <Card className="mt-4">
