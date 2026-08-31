@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { LeadNotesDialog } from "../leads/lead-notes-dialog";
 import { InterviewMessageDialog } from "./interview-message-dialog";
+import { RescheduleDialog } from "./reschedule-dialog";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { STATUS_LABELS, LeadStatus, type LeadStatusValue } from "@/lib/stateMachine";
@@ -110,6 +111,7 @@ export function InterviewsContent({
   const router = useRouter();
   const searchParams = useSearchParams();
   const [range, setRange] = useState<Range>("upcoming");
+  const [rescheduling, setRescheduling] = useState<InterviewRow | null>(null);
   const [q, setQ] = useState("");
   const [role, setRole] = useState("");
   const [client, setClient] = useState("");
@@ -364,6 +366,16 @@ export function InterviewsContent({
         )}
       </div>
 
+      {rescheduling && (
+        <RescheduleDialog
+          leadId={rescheduling.id}
+          leadName={rescheduling.name}
+          currentDate={rescheduling.interview_date}
+          currentType={rescheduling.interview_type}
+          onClose={() => setRescheduling(null)}
+        />
+      )}
+
       {groups.length === 0 ? (
         <div className="bg-white border border-slate-200 rounded-xl px-6 py-12 text-center text-slate-500">
           אין ראיונות בטווח הזה.
@@ -446,6 +458,14 @@ export function InterviewsContent({
                           )}
                         </div>
                         <div className="shrink-0 flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
+                          <button
+                            type="button"
+                            onClick={() => setRescheduling(r)}
+                            title="שנה מועד ראיון"
+                            className="h-7 px-2 text-xs rounded-md border border-purple-300 text-purple-700 hover:bg-purple-50 transition-colors"
+                          >
+                            🗓 שנה מועד
+                          </button>
                           <InterviewMessageDialog
                             name={r.name}
                             phone={r.phone}

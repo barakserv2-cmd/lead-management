@@ -21,6 +21,7 @@ const EDITABLE_FIELDS = new Set([
   // מידע גיוס — נערך מהכרטיס המלא (lead-card-panel)
   "screening_score",
   "interview_date",
+  "interview_type",
   "interview_notes",
   "hired_client",
   "hired_position",
@@ -120,6 +121,12 @@ export async function PATCH(
         if (err) return NextResponse.json({ error: err }, { status: 400 });
       }
       updateData.interview_date = s || null;
+    } else if (key === "interview_type") {
+      const s = String(value ?? "").trim();
+      if (s && s !== "in_person" && s !== "video") {
+        return NextResponse.json({ error: "סוג ראיון לא חוקי" }, { status: 400 });
+      }
+      updateData.interview_type = s || null;
     } else if (key === "hired_client") {
       const s = String(value ?? "").trim();
       updateData.hired_client = s ? (await normalizeEmployerName(s)).normalized : null;
