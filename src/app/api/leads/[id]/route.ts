@@ -123,7 +123,7 @@ export async function PATCH(
       updateData.interview_date = s || null;
     } else if (key === "interview_type") {
       const s = String(value ?? "").trim();
-      if (s && s !== "in_person" && s !== "video") {
+      if (s && s !== "in_person" && s !== "video" && s !== "phone") {
         return NextResponse.json({ error: "סוג ראיון לא חוקי" }, { status: 400 });
       }
       updateData.interview_type = s || null;

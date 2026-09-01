@@ -23,7 +23,7 @@ export interface InterviewMessageInput {
   /** ISO timestamp of the arrival time. */
   interviewDate: string;
   jobTitle?: string | null;
-  interviewType?: "in_person" | "video" | null;
+  interviewType?: "phone" | "in_person" | "video" | null;
   /** Recruiter first name, signed at the bottom when known. */
   recruiter?: string | null;
 }
@@ -70,7 +70,14 @@ export function buildInterviewConfirmation(input: InterviewMessageInput): string
     `שעת הגעה ${ilTime(interviewDate)}`,
   ];
 
-  if (isVideo) {
+  if (interviewType === "phone") {
+    lines.push(
+      "",
+      "*📞 איך זה עובד*",
+      "הראיון בשיחת טלפון — נתקשר אליך בדיוק בשעה שנקבעה.",
+      "כדאי להיות במקום שקט עם קליטה טובה."
+    );
+  } else if (isVideo) {
     lines.push(
       "",
       "*🎥 איך מתחברים*",

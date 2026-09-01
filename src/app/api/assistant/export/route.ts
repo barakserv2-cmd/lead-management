@@ -175,7 +175,7 @@ export async function GET(req: NextRequest) {
           l.phone,
           l.hired_position ?? l.job_title,
           l.hired_client ?? (typeof matched === "string" ? matched : ""),
-          l.interview_type === "video" ? "וידאו" : l.interview_type === "in_person" ? "פרונטלי" : "",
+          l.interview_type === "video" ? "וידאו" : l.interview_type === "phone" ? "טלפוני" : l.interview_type === "in_person" ? "פרונטלי" : "",
           STATUS_LABELS[l.status as LeadStatusValue] ?? l.status,
           l.handled_by,
           l.location,

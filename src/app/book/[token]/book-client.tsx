@@ -12,10 +12,16 @@ type State = "loading" | "open" | "booked" | "expired" | "error";
 interface TokenInfo {
   state: "open" | "booked" | "expired";
   firstName?: string;
-  interviewType?: "in_person" | "video";
+  interviewType?: "phone" | "in_person" | "video";
   bookedStart?: string | null;
   slots?: string[];
 }
+
+const TYPE_LABELS: Record<string, string> = {
+  phone: "ראיון טלפוני",
+  in_person: "ראיון פרונטלי",
+  video: "ראיון וידאו",
+};
 
 export function BookClient({ token }: { token: string }) {
   const [state, setState] = useState<State>("loading");
@@ -105,7 +111,7 @@ export function BookClient({ token }: { token: string }) {
     }
   }
 
-  const typeLabel = info?.interviewType === "video" ? "ראיון וידאו" : "ראיון פרונטלי";
+  const typeLabel = TYPE_LABELS[info?.interviewType ?? "phone"] ?? "ראיון";
 
   return (
     <div dir="rtl" className="min-h-screen bg-gray-50 flex flex-col items-center px-4 py-8">
@@ -207,7 +213,7 @@ export function BookClient({ token }: { token: string }) {
                     <p className="text-xs font-semibold text-gray-500 mb-2">
                       יום {day.dayName} · {day.date}
                     </p>
-                    <div className="grid grid-cols-3 gap-2">
+                    <div className="grid grid-cols-4 gap-1.5">
                       {day.slots.map((s) => {
                         const f = formatSlot(s);
                         const active = selected === s;

@@ -12,7 +12,7 @@ interface Win {
   slot_minutes: number;
 }
 
-const SLOT_OPTIONS = [15, 20, 30, 45, 60];
+const SLOT_OPTIONS = [5, 10, 15, 20, 30, 45, 60];
 
 function toTime(min: number): string {
   return `${String(Math.floor(min / 60)).padStart(2, "0")}:${String(min % 60).padStart(2, "0")}`;
@@ -40,7 +40,7 @@ export function AvailabilityClient() {
   function addWindow() {
     setWindows((ws) => [
       ...(ws ?? []),
-      { weekday: 0, start_minute: 600, end_minute: 780, slot_minutes: 20 },
+      { weekday: 0, start_minute: 480, end_minute: 1020, slot_minutes: 5 },
     ]);
   }
 
@@ -82,8 +82,8 @@ export function AvailabilityClient() {
     <div className="space-y-4">
       {windows.length === 0 && (
         <p className="text-sm text-gray-500 bg-gray-50 border rounded-lg px-4 py-3">
-          אין עדיין חלונות. הוסיפי חלון ראשון — למשל: ראשון–חמישי 10:00–13:00,
-          ראיון כל 20 דקות.
+          אין עדיין חלונות. הוסיפי חלון ראשון — למשל: ראשון–חמישי 08:00–17:00,
+          ראיון טלפוני כל 5 דקות.
         </p>
       )}
 

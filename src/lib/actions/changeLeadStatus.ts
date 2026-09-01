@@ -33,7 +33,7 @@ export interface ChangeStatusInput {
     startDate?: string;
     employmentEndDate?: string;
     interviewDate?: string;
-    interviewType?: "in_person" | "video";
+    interviewType?: "phone" | "in_person" | "video";
     interviewNotes?: string;
     followupNotes?: string;
     screeningScore?: number;

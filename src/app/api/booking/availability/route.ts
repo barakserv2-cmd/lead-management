@@ -49,7 +49,7 @@ export async function PUT(request: NextRequest) {
       !Number.isInteger(w.weekday) || w.weekday < 0 || w.weekday > 6 ||
       !Number.isInteger(w.start_minute) || w.start_minute < 0 || w.start_minute > 1439 ||
       !Number.isInteger(w.end_minute) || w.end_minute <= w.start_minute || w.end_minute > 1440 ||
-      ![10, 15, 20, 30, 45, 60].includes(w.slot_minutes)
+      ![5, 10, 15, 20, 30, 45, 60].includes(w.slot_minutes)
     ) {
       return NextResponse.json({ error: "חלון לא תקין" }, { status: 400 });
     }

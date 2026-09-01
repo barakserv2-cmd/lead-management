@@ -241,7 +241,7 @@ export function StatusSelect({
     }
   }
 
-  async function handleInterviewConfirm(data: { interviewDate: string; interviewType: "in_person" | "video"; designatedRole: string }) {
+  async function handleInterviewConfirm(data: { interviewDate: string; interviewType: "phone" | "in_person" | "video"; designatedRole: string }) {
     setLoading(true);
 
     const result = await changeLeadStatus({

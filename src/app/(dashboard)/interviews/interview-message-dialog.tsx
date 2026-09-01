@@ -8,7 +8,7 @@ interface Props {
   phone: string | null;
   interviewDate: string;
   jobTitle?: string | null;
-  interviewType?: "in_person" | "video" | null;
+  interviewType?: "phone" | "in_person" | "video" | null;
   recruiter?: string | null;
 }
 

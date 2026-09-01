@@ -43,7 +43,7 @@ export interface Lead {
   hired_position: string | null;
   arrival_date: string | null;
   interview_date: string | null;
-  interview_type: "in_person" | "video" | null;
+  interview_type: "phone" | "in_person" | "video" | null;
   interview_notes: string | null;
   followup_notes: string | null;
   screening_score: number | null;

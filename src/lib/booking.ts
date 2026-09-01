@@ -10,12 +10,20 @@
 import { randomBytes } from "crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-/** זמן מינימלי מראש להזמנה (דקות) — שלא ייקבע ראיון בעוד רבע שעה. */
-export const MIN_LEAD_MINUTES = 180;
+/** זמן מינימלי מראש להזמנה (דקות) — ראיון טלפוני יכול להיקבע גם לעוד שעה. */
+export const MIN_LEAD_MINUTES = 60;
 /** כמה ימים קדימה מציעים חלונות. */
 export const BOOKING_DAYS_AHEAD = 14;
-/** תקרת חלונות שמוחזרת לדף — שומר על העמוד קליל במובייל. */
-export const MAX_SLOTS_RETURNED = 36;
+/** ברשת של 5 דקות יום מלא הוא ~108 חלונות — מגבילים כמה ימים נטענים לדף. */
+export const MAX_DAYS_WITH_SLOTS = 4;
+/** תקרת בטיחות כוללת על גודל התשובה. */
+export const MAX_SLOTS_RETURNED = 500;
+
+export const INTERVIEW_TYPE_LABELS: Record<string, string> = {
+  phone: "ראיון טלפוני",
+  in_person: "ראיון פרונטלי",
+  video: "ראיון וידאו",
+};
 
 export const HEBREW_DAYS = ["ראשון", "שני", "שלישי", "רביעי", "חמישי", "שישי", "שבת"];
 
@@ -110,13 +118,16 @@ export async function listOpenSlots(
   );
 
   const slots: string[] = [];
+  let daysWithSlots = 0;
   for (let offset = 0; offset <= BOOKING_DAYS_AHEAD && slots.length < MAX_SLOTS_RETURNED; offset++) {
+    if (daysWithSlots >= MAX_DAYS_WITH_SLOTS) break;
     const dateStr = addDays(now.dateStr, offset);
     const wd = weekdayOf(dateStr);
     const dayWindows = (windows as AvailabilityWindow[])
       .filter((w) => w.weekday === wd)
       .sort((a, b) => a.start_minute - b.start_minute);
 
+    const before = slots.length;
     for (const w of dayWindows) {
       for (
         let m = w.start_minute;
@@ -128,6 +139,7 @@ export async function listOpenSlots(
         if (!taken.has(iso)) slots.push(iso);
       }
     }
+    if (slots.length > before) daysWithSlots++;
   }
   return slots;
 }

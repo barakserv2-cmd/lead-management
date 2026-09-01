@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/api-auth";
-import { formatSlot, listOpenSlots } from "@/lib/booking";
+import { formatSlot, INTERVIEW_TYPE_LABELS, listOpenSlots } from "@/lib/booking";
 import { changeLeadStatus } from "@/lib/actions/changeLeadStatus";
 import { LeadStatus } from "@/lib/stateMachine";
 import { resolveSender, sendWhatsAppMessage } from "@/lib/whatsappService";
@@ -19,7 +19,7 @@ interface TokenRow {
   lead_id: string;
   recruiter_email: string;
   token: string;
-  interview_type: "in_person" | "video";
+  interview_type: "phone" | "in_person" | "video";
   status: "pending" | "booked" | "cancelled";
   booked_start: string | null;
   expires_at: string;
@@ -166,10 +166,11 @@ export async function POST(
 
   // אישור וואטסאפ — תגובה לפעולה של המועמד, לא כפוף לשעות שקט.
   if (lead?.phone) {
-    const typeLabel = row.interview_type === "video" ? "ראיון וידאו" : "ראיון פרונטלי";
+    const typeLabel = INTERVIEW_TYPE_LABELS[row.interview_type] ?? "ראיון";
     const confirmation =
       `הראיון נקבע! 🎯\n` +
       `יום ${f.dayName} ${f.date} בשעה ${f.time} — ${typeLabel}.\n` +
+      (row.interview_type === "phone" ? `נתקשר אליך בשעה הזאת — שווה להיות במקום שקט 🙂\n` : "") +
       `צריך לשנות או לבטל? באותו קישור בדיוק.`;
     const sender = await resolveSender(row.recruiter_email);
     const res = await sendWhatsAppMessage(lead.phone, confirmation, sender);

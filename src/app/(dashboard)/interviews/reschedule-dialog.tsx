@@ -5,7 +5,7 @@ import { toast } from "sonner";
 import { useRouter } from "next/navigation";
 import { validateInterviewLocal } from "@/lib/interviewTime";
 
-type InterviewType = "in_person" | "video";
+type InterviewType = "phone" | "in_person" | "video";
 
 // interview_date נשמר כשעון קיר ישראלי עם תווית UTC, ולכן קוראים וכותבים
 // את שדות ה-UTC כמו שהם — בדיוק כמו שהלוח מציג אותם.
@@ -124,7 +124,7 @@ export function RescheduleDialog({
         </p>
 
         <div className="grid grid-cols-2 gap-2 mt-4">
-          {([["in_person", "🏢 פרונטלי"], ["video", "🎥 וידאו"]] as const).map(([v, label]) => (
+          {([["phone", "📞 טלפוני"], ["in_person", "🏢 פרונטלי"], ["video", "🎥 וידאו"]] as const).map(([v, label]) => (
             <button
               key={v}
               type="button"

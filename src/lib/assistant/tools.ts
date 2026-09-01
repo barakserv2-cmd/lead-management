@@ -267,7 +267,7 @@ export const assistantTools = [
           iso: l.interview_date,
           job_title: l.hired_position ?? l.job_title,
           client: l.hired_client ?? (typeof matched === "string" ? matched : null),
-          type: l.interview_type === "video" ? "וידאו" : l.interview_type === "in_person" ? "פרונטלי" : null,
+          type: l.interview_type === "video" ? "וידאו" : l.interview_type === "phone" ? "טלפוני" : l.interview_type === "in_person" ? "פרונטלי" : null,
           status: label(l.status),
           recruiter: l.handled_by,
           location: l.location,

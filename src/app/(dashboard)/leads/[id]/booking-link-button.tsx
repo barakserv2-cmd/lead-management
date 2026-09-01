@@ -16,7 +16,7 @@ export function BookingLinkButton({
   hasPhone: boolean;
 }) {
   const router = useRouter();
-  const [type, setType] = useState<"in_person" | "video">("in_person");
+  const [type, setType] = useState<"phone" | "in_person" | "video">("phone");
   const [busy, setBusy] = useState(false);
 
   async function send() {
@@ -44,10 +44,11 @@ export function BookingLinkButton({
     <div className="flex flex-wrap items-center gap-2">
       <select
         value={type}
-        onChange={(e) => setType(e.target.value as "in_person" | "video")}
+        onChange={(e) => setType(e.target.value as "phone" | "in_person" | "video")}
         className="border rounded-md px-2 py-1.5 text-sm"
         disabled={busy}
       >
+        <option value="phone">ראיון טלפוני</option>
         <option value="in_person">ראיון פרונטלי</option>
         <option value="video">ראיון וידאו</option>
       </select>

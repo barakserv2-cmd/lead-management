@@ -17,7 +17,7 @@ export interface InterviewRow {
   location: string | null;
   status: LeadStatusValue;
   interview_date: string; // ISO
-  interview_type: "in_person" | "video" | null;
+  interview_type: "phone" | "in_person" | "video" | null;
   interview_notes: string | null;
   rejection_reason: string | null;
   last_note: { text: string; type: string; at: string; by: string | null } | null;
@@ -349,7 +349,8 @@ export function InterviewsContent({
           {recruiterOptions.map((o) => <option key={o} value={o}>{o}</option>)}
         </select>
         <select value={type} onChange={(e) => setType(e.target.value)} className="border border-slate-300 rounded-lg px-3 py-2 text-sm bg-white">
-          <option value="">פרונטלי / וידאו</option>
+          <option value="">כל סוגי הראיון</option>
+          <option value="phone">טלפוני</option>
           <option value="in_person">פרונטלי</option>
           <option value="video">וידאו</option>
         </select>
@@ -408,7 +409,7 @@ export function InterviewsContent({
                             {r.job_title && <span className="text-sm text-slate-700 bg-slate-100 rounded px-1.5 py-0.5">{r.job_title}</span>}
                             {r.client && <span className="text-sm text-slate-600">@ {r.client}</span>}
                             {r.interview_type && (
-                              <span className="text-xs text-slate-500">{r.interview_type === "video" ? "🎥 וידאו" : "🏢 פרונטלי"}</span>
+                              <span className="text-xs text-slate-500">{r.interview_type === "video" ? "🎥 וידאו" : r.interview_type === "phone" ? "📞 טלפוני" : "🏢 פרונטלי"}</span>
                             )}
                           </div>
                           <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1 text-sm text-slate-500">

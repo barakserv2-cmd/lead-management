@@ -14,14 +14,16 @@ export async function POST(request: NextRequest) {
   const user = await getAuthedUser();
   if (!user) return NextResponse.json({ error: "לא מחובר/ת" }, { status: 401 });
 
-  let body: { leadId?: string; interviewType?: "in_person" | "video" };
+  let body: { leadId?: string; interviewType?: "phone" | "in_person" | "video" };
   try {
     body = await request.json();
   } catch {
     return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
   }
   const leadId = body.leadId;
-  const interviewType = body.interviewType === "video" ? "video" : "in_person";
+  const interviewType = ["phone", "in_person", "video"].includes(body.interviewType ?? "")
+    ? (body.interviewType as "phone" | "in_person" | "video")
+    : "phone";
   if (!leadId) return NextResponse.json({ error: "חסר leadId" }, { status: 400 });
 
   const admin = getSupabaseAdmin();
@@ -85,7 +87,7 @@ export async function POST(request: NextRequest) {
   await admin.from("lead_events").insert({
     lead_id: leadId,
     event_type: "ראיון",
-    event_text: `נשלח לינק תיאום ראיון עצמי (${interviewType === "video" ? "וידאו" : "פרונטלי"})`,
+    event_text: `נשלח לינק תיאום ראיון עצמי (${interviewType === "video" ? "וידאו" : interviewType === "phone" ? "טלפוני" : "פרונטלי"})`,
     created_by: user.email,
   });
   await logAudit({

@@ -118,7 +118,12 @@ async function runInterviewReminders(admin: ReturnType<typeof getAdmin>): Promis
       const hh = interviewAt.getUTCHours().toString().padStart(2, "0");
       const mm = interviewAt.getUTCMinutes().toString().padStart(2, "0");
       const hasTime = !(hh === "00" && mm === "00"); // date-only entries
-      const type = lead.interview_type === "video" ? "ראיון וידאו" : "ראיון פרונטלי";
+      const type =
+        lead.interview_type === "video"
+          ? "ראיון וידאו"
+          : lead.interview_type === "phone"
+            ? "ראיון טלפוני"
+            : "ראיון פרונטלי";
       const message =
         `שלום ${lead.name},\n` +
         (hasTime
