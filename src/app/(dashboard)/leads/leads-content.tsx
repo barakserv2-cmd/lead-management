@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import type { Lead } from "@/types/leads";
+import { STATUS_LABELS, type LeadStatusValue } from "@/lib/stateMachine";
 import { StatusSelect } from "./status-select";
 import { LeadWindowManager } from "./lead-mini-windows";
 import { BulkWhatsAppDialog } from "./bulk-whatsapp-dialog";
@@ -98,6 +99,22 @@ function contactChip(iso: string | null, now: number): { classes: string; label:
   if (days >= 7) return { classes: "bg-red-100 text-red-700 font-bold", label, title };
   if (days >= 3) return { classes: "bg-amber-100 text-amber-700 font-semibold", label, title };
   return { classes: "bg-emerald-50 text-emerald-700", label, title };
+}
+
+// העדכון האחרון שנרשם על הליד: תת-הסטטוס אם יש, אחרת הסטטוס — ומתי.
+// זו השורה שאומרת לרכזת איך להמשיך: "אין מענה 2 · לפני 6 ימים" הוא מידע
+// אחר לגמרי מ"אין מענה 2" לבדו.
+function lastUpdate(lead: Lead, now: number): { label: string; when: string; classes: string } {
+  const at = lead.sub_status_at ?? lead.handled_at ?? lead.last_contact_at;
+  const label = lead.sub_status ?? STATUS_LABELS[lead.status as LeadStatusValue] ?? lead.status;
+  if (!at) return { label, when: "—", classes: "text-slate-400" };
+
+  const days = Math.floor((now - new Date(at).getTime()) / 86_400_000);
+  const when = days <= 0 ? "היום" : days === 1 ? "אתמול" : `לפני ${days} ימים`;
+  // ניסיון חיוג שנתקע: אחרי 3 ימים כתום, אחרי שבוע אדום
+  const classes =
+    days >= 7 ? "text-red-700 font-semibold" : days >= 3 ? "text-amber-700" : "text-slate-500";
+  return { label, when, classes };
 }
 
 const INCOMING_POLL_MS = 7000;
@@ -224,6 +241,7 @@ export function LeadsContent({
             <th className="px-4 py-3 text-right font-medium text-gray-600">מקור</th>
             <th className="px-4 py-3 text-right font-medium text-gray-600">רכזת</th>
             <th className="px-4 py-3 text-right font-medium text-gray-600">נוצר</th>
+            <th className="px-4 py-3 text-right font-medium text-gray-600">עדכון אחרון</th>
             <th className="px-4 py-3 text-right font-medium text-gray-600">קשר אחרון</th>
             <th className="px-4 py-3 text-right font-medium text-gray-600">פעולות</th>
           </tr>
@@ -231,7 +249,7 @@ export function LeadsContent({
         <tbody>
           {leads.length === 0 ? (
             <tr>
-              <td colSpan={10} className="px-4 py-12 text-center text-gray-400">
+              <td colSpan={11} className="px-4 py-12 text-center text-gray-400">
                 אין לידים עדיין. חבר את Gmail כדי להתחיל.
               </td>
             </tr>
@@ -315,6 +333,17 @@ export function LeadsContent({
                         <span className={"inline-block px-2.5 py-1 rounded-full text-xs font-medium " + chip.classes} title={formatShortDate(lead.created_at)}>
                           {chip.label}
                         </span>
+                      );
+                    })()}
+                  </td>
+                  <td className="px-4 py-3">
+                    {(() => {
+                      const u = lastUpdate(lead, nowMs);
+                      return (
+                        <div className="min-w-0">
+                          <div className="text-xs font-medium text-slate-800 truncate">{u.label}</div>
+                          <div className={`text-[11px] ${u.classes}`}>{u.when}</div>
+                        </div>
                       );
                     })()}
                   </td>

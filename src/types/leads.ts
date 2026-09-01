@@ -55,6 +55,7 @@ export interface Lead {
   handled_by: string | null;
   handled_at: string | null;
   last_contact_at: string | null;
+  sub_status_at: string | null;
   needs_attention: boolean;
   needs_attention_at: string | null;
   attention_reason: string | null;

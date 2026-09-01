@@ -91,6 +91,7 @@ export async function changeLeadStatus(input: ChangeStatusInput): Promise<Change
   const updateData: Record<string, unknown> = {
     status: newStatus,
     sub_status: null,
+    sub_status_at: null,
   };
 
   // Status-specific field updates

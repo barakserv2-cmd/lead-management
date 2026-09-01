@@ -33,7 +33,12 @@ export async function updateLeadSubStatus(leadId: string, subStatus: string | nu
   // הזמן היחידה שמתעדת את הניסיון, ולכן היא מעדכנת גם את מועד הקשר האחרון.
   const { error } = await getSupabase()
     .from("leads")
-    .update({ sub_status: subStatus, last_contact_at: new Date().toISOString() })
+    .update({
+      sub_status: subStatus,
+      // מתי נקבע התת-סטטוס הזה — זה מה שקובע איך ממשיכים מול המועמד
+      sub_status_at: subStatus ? new Date().toISOString() : null,
+      last_contact_at: new Date().toISOString(),
+    })
     .eq("id", leadId);
 
   if (!error) {
