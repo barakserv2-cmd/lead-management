@@ -29,12 +29,15 @@ export function RescheduleDialog({
   currentDate,
   currentType,
   onClose,
+  onMoved,
 }: {
   leadId: string;
   leadName: string;
   currentDate: string;
   currentType: InterviewType | null;
   onClose: () => void;
+  /** מקבל את היום החדש (YYYY-MM-DD) כדי שהלוח יעקוב אחרי הראיון שזז */
+  onMoved?: (newDayKey: string) => void;
 }) {
   const router = useRouter();
   const [when, setWhen] = useState(() => toWallInput(currentDate));
@@ -74,8 +77,17 @@ export function RescheduleDialog({
         }),
       }).catch(() => undefined);
 
-      toast.success("מועד הראיון עודכן");
+      const oldDay = toWallInput(currentDate).slice(0, 10);
+      const newDay = when.slice(0, 10);
+      toast.success(
+        oldDay === newDay
+          ? "מועד הראיון עודכן"
+          : `הראיון הועבר ל-${new Date(`${newDay}T12:00:00`).toLocaleDateString("he-IL", { day: "numeric", month: "long" })}`
+      );
       onClose();
+      // הראיון כבר לא ביום שמוצג — מסיטים את הלוח ואת תאריך הדוח אחריו,
+      // אחרת הוא פשוט "נעלם" והשינוי נראה כאילו לא נשמר
+      if (oldDay !== newDay) onMoved?.(newDay);
       router.refresh();
     } finally {
       setSaving(false);

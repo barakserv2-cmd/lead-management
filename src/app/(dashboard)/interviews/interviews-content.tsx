@@ -374,6 +374,10 @@ export function InterviewsContent({
           currentDate={rescheduling.interview_date}
           currentType={rescheduling.interview_type}
           onClose={() => setRescheduling(null)}
+          onMoved={(newDay) => {
+            setReportDate(newDay);
+            setRange("all");
+          }}
         />
       )}
 
