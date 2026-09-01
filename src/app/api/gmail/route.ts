@@ -13,6 +13,7 @@ import {
 } from "@/lib/gmail";
 import { parseEmailWithAI } from "@/lib/ai/parse-email";
 import { LEAD_STATUSES } from "@/lib/constants";
+import { enqueueWelcome, runWelcomeBatch } from "@/lib/whatsappWelcome";
 
 // Let the run finish instead of being cut off mid-batch — a truncated run left
 // newer lead emails un-ingested. Pro allows up to 300s.
@@ -201,7 +202,7 @@ async function handleFetchEmails(req: NextRequest) {
         }
 
         // 2e. Insert new lead
-        const { error: insertError } = await supabase.from("leads").insert({
+        const { data: insertedLead, error: insertError } = await supabase.from("leads").insert({
           name,
           phone,
           email: leadEmail,
@@ -225,7 +226,7 @@ async function handleFetchEmails(req: NextRequest) {
           ai_confidence: confidence,
           notes,
           assigned_to: null,
-        });
+        }).select("id, source").single();
 
         if (insertError) {
           console.error(`[Gmail] Insert error for ${name}:`, insertError);
@@ -237,6 +238,14 @@ async function handleFetchEmails(req: NextRequest) {
         summary.new_leads++;
         summary.details.push(`New lead: ${name} (${phone || "no phone"})`);
         console.log(`[Gmail] New lead created: ${name}`);
+
+        // בוט הפתיחה (שלב 1): רישום לתור בלבד — השליחה עם מרווחים
+        // אנושיים רצה פעם אחת בסוף הסריקה (runWelcomeBatch למטה).
+        if (insertedLead?.id && phone) {
+          await enqueueWelcome(insertedLead.id, phone, insertedLead.source ?? null, {
+            deliver: false,
+          }).catch((e) => console.error("[Gmail] enqueueWelcome failed:", e));
+        }
 
         // NOTE: we intentionally do NOT mark the email as read — new leads
         // stay unread in the inbox so they're visible there too. The scraper
@@ -263,6 +272,16 @@ async function handleFetchEmails(req: NextRequest) {
     console.log(
       `[Gmail] Done. Processed: ${summary.processed}, New: ${summary.new_leads}, Skipped: ${summary.skipped}, Duplicates: ${summary.duplicates}, Errors: ${summary.errors}`
     );
+
+    // שליחת הודעות הפתיחה שממתינות בתור (כולל מהריצות הקודמות)
+    try {
+      const batch = await runWelcomeBatch();
+      if (batch.sent > 0 || batch.pending > 0) {
+        console.log(`[Gmail] Welcome batch: sent ${batch.sent}, still pending ${batch.pending}`);
+      }
+    } catch (e) {
+      console.error("[Gmail] runWelcomeBatch failed:", e);
+    }
 
     return NextResponse.json(summary);
   } catch (error) {

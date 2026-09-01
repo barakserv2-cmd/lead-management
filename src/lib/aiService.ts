@@ -9,6 +9,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { createClient as createServerClient } from "@supabase/supabase-js";
 import { changeLeadStatus } from "@/lib/actions/changeLeadStatus";
 import { LeadStatus, type LeadStatusValue } from "@/lib/stateMachine";
+import { botRejectEnabled } from "@/lib/botConfig";
 
 // ── Anthropic Client (lazy) ──────────────────────────────────
 
@@ -91,6 +92,7 @@ interface LeadContext {
   experience: string | null;
   age: number | null;
   job_title: string | null;
+  source?: string | null;
 }
 
 // ── Holding message (sent on escalation) ─────────────────────
@@ -164,6 +166,24 @@ ${knownInfo}
 - דבר כמו מגייס אנושי חם ונעים, לא כמו רובוט. השתמש בעברית טבעית.
 - נהל שיחה של 3-5 הודעות לפני קבלת החלטה.
 - כל התשובות בעברית בלבד.
+
+=== הודעת הפתיחה (ההודעה הראשונה בשיחה) ===
+כשאין עדיין היסטוריית שיחה — זו הודעת הפתיחה, והיא קריטית:
+- קצרה: 2-3 משפטים לכל היותר. בלי קירות טקסט, בלי רשימות הטבות.
+- ציין מאיפה הגיעו הפרטים${lead.source ? ` (מקור הליד: ${lead.source})` : ""} — למשל "ראיתי שהגשת מועמדות ל... דרך AllJobs" — זה מה שהופך את הפנייה ללגיטימית.
+- אם ידוע התפקיד שביקשו — הזכר אותו. אם לא — שאל שאלת כיוון אחת.
+- הזכר את המגורים המסובסדים במשפט אחד.
+- **אסור לצרף קישורים בהודעת הפתיחה.** קישור (לתיאום ראיון) נשלח רק אחרי שהמועמד/ת ענה/תה לפחות פעם אחת.
+- סיים תמיד בשאלה אחת פשוטה שמזמינה תשובה ("עדיין רלוונטי לך?", "איזה כיוון מעניין אותך?").
+- אם המקור הוא "טלפון" — המועמד/ת התקשר/ה ולא נענה/תה: פתח בהתנצלות קצרה ("ראיתי שהתקשרת ולא הספקנו לענות").
+- אם המקור הוא "אתר - צור קשר" — לא בטוח שמדובר במועמד/ת: פתח רך ושאל אם מחפשים עבודה.
+
+=== שאלות פסילה מוקדמות (בשתי ההודעות הראשונות) ===
+ברר בעדינות, מוקדם בשיחה, את שלושת התנאים האלה — ואל תמשיך לשאלות עומק לפני שהם סגורים:
+1. גיל 18+ (אם הגיל לא ידוע ונשמע צעיר — שאל).
+2. נכונות לעבוד באילת / לעבור לאילת (המגורים המסובסדים עוזרים כאן).
+3. זמינות להתחלה בשבועות הקרובים.
+מי שנופל על אחד מהם באופן ברור וסופי (קטין/ה, לא מוכן/ה לאילת בשום אופן, לא זמין/ה בכלל) → action="REJECT" עם הודעת פרידה מכבדת ומנומקת.
 
 === ⚠ העברה למגייסת אנושית — needs_human=true ===
 תרים את הדגל ESCALATE_TO_HUMAN במקרים הבאים, ואל תמשיך לשאול שאלות:
@@ -426,12 +446,58 @@ async function persistAgentUpdate(
     patch.human_attention_reason =
       evaluation.human_reason_note ?? humanReasonLabel(evaluation.human_reason);
     patch.human_attention_raised_at = new Date().toISOString();
+
+    // הקצאה אוטומטית: לכל דגל יש שם מהרגע הראשון — הליד מופיע בטור של
+    // רכזת ספציפית במסך היום, לא ב"מגרש הציבורי" שאף אחת לא מרגישה
+    // אחראית עליו.
+    const assignee = await pickEscalationRecruiter(supabase);
+    if (assignee) {
+      patch.handled_by = assignee;
+      patch.handled_at = new Date().toISOString();
+    }
   }
 
   const { error } = await supabase.from("leads").update(patch).eq("id", leadId);
   if (error) {
     console.error(`[aiService] Failed to persist agent update for ${leadId}:`, error.message);
   }
+}
+
+/**
+ * סבב הקצאת הסלמות: הרכזת הפעילה (עם וואטסאפ מקושר) שקיבלה הכי מעט
+ * דגלים היום. אין רכזות מקושרות → null והליד נשאר לא-משויך.
+ */
+async function pickEscalationRecruiter(
+  supabase: ReturnType<typeof getSupabase>
+): Promise<string | null> {
+  const { data: accounts } = await supabase
+    .from("whatsapp_accounts")
+    .select("user_email")
+    .eq("is_active", true);
+  const recruiters = Array.from(
+    new Set((accounts ?? []).map((a) => String(a.user_email).toLowerCase()))
+  );
+  if (recruiters.length === 0) return null;
+  if (recruiters.length === 1) return recruiters[0];
+
+  const dayStart = new Date();
+  dayStart.setUTCHours(0, 0, 0, 0);
+  const { data: todays } = await supabase
+    .from("leads")
+    .select("handled_by")
+    .eq("needs_human_attention", true)
+    .gte("human_attention_raised_at", dayStart.toISOString());
+
+  const counts = new Map<string, number>(recruiters.map((r) => [r, 0]));
+  for (const row of todays ?? []) {
+    const k = String(row.handled_by ?? "").toLowerCase();
+    if (counts.has(k)) counts.set(k, (counts.get(k) ?? 0) + 1);
+  }
+  let best = recruiters[0];
+  for (const r of recruiters) {
+    if ((counts.get(r) ?? 0) < (counts.get(best) ?? 0)) best = r;
+  }
+  return best;
 }
 
 function humanReasonLabel(reason?: HumanEscalationReason): string {
@@ -459,7 +525,7 @@ export async function processIncomingMessage(
   const { data: lead, error: leadError } = await supabase
     .from("leads")
     .select(
-      "status, name, phone, email, location, experience, age, job_title, needs_human_attention"
+      "status, name, phone, email, location, experience, age, job_title, source, needs_human_attention"
     )
     .eq("id", leadId)
     .single();
@@ -503,6 +569,7 @@ export async function processIncomingMessage(
     experience: lead.experience ?? null,
     age: lead.age ?? null,
     job_title: lead.job_title ?? null,
+    source: lead.source ?? null,
   };
 
   // 2. Fetch existing chat history
@@ -546,6 +613,15 @@ export async function processIncomingMessage(
       success: false,
       error: `שגיאה בקריאה ל-AI: ${err instanceof Error ? err.message : "unknown"}`,
     };
+  }
+
+  // 5b. דחייה זהירה (ברירת המחדל בחודש הראשון): הבוט לא סוגר ליד לבד —
+  //     כל REJECT הופך להעברה לרכזת עם הסבר, עד ש-BOT_REJECT_ENABLED=true.
+  if (evaluation.action === "REJECT" && !botRejectEnabled()) {
+    evaluation.action = "ESCALATE_TO_HUMAN";
+    evaluation.needs_human = true;
+    evaluation.human_reason = "other";
+    evaluation.human_reason_note = `הבוט המליץ לדחות (ציון ${evaluation.screening_score}/100) — לבדיקת רכזת לפני סגירה`;
   }
 
   // 6. On escalation, override the reply with the canonical holding message
@@ -621,4 +697,50 @@ export async function processIncomingMessage(
     action: evaluation.action,
     needs_human: evaluation.needs_human,
   };
+}
+
+// ── Shadow mode ──────────────────────────────────────────────
+
+/**
+ * מצב צל: מנסח את הודעת הפתיחה שהבוט *היה* שולח לליד — בלי לכתוב
+ * כלום: לא הודעות, לא ציונים, לא סטטוסים. רק קריאה + LLM.
+ */
+export async function generateShadowWelcome(
+  leadId: string
+): Promise<{ success: boolean; evaluation?: AIEvaluation; error?: string }> {
+  const supabase = getSupabase();
+
+  const { data: lead, error: leadError } = await supabase
+    .from("leads")
+    .select("name, phone, email, location, experience, age, job_title, source")
+    .eq("id", leadId)
+    .single();
+  if (leadError || !lead) {
+    return { success: false, error: `ליד לא נמצא: ${leadId}` };
+  }
+
+  const leadContext: LeadContext = {
+    name: lead.name,
+    phone: lead.phone ?? null,
+    email: lead.email ?? null,
+    location: lead.location ?? null,
+    experience: lead.experience ?? null,
+    age: lead.age ?? null,
+    job_title: lead.job_title ?? null,
+    source: lead.source ?? null,
+  };
+
+  try {
+    // אותה הודעה סינתטית שמניעה את הפתיחה במצב live (whatsappWelcome)
+    const evaluation = await callLLM(
+      [{ role: "user", content: "היי, אני מעוניין/ת בעבודה" }],
+      leadContext
+    );
+    return { success: true, evaluation };
+  } catch (err) {
+    return {
+      success: false,
+      error: err instanceof Error ? err.message : "unknown",
+    };
+  }
 }
