@@ -572,7 +572,7 @@ export function StatusSelect({
           <select
             value={subStatus ?? ""}
             onChange={(e) => handleSubStatusChange(e.target.value)}
-            className="mt-1 w-full text-[10px] border border-gray-200 rounded-md px-1.5 py-0.5 text-gray-600 bg-white focus:outline-none focus:ring-1 focus:ring-cyan-400"
+            className="mt-1 w-full h-6 text-[11px] border border-gray-200 rounded-md px-1.5 text-gray-600 bg-white truncate focus:outline-none focus:ring-1 focus:ring-cyan-400"
           >
             <option value="">— תת-סטטוס —</option>
             {SUB_STATUSES[status].map((sub) => (

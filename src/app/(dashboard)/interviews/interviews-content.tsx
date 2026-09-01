@@ -479,12 +479,16 @@ export function InterviewsContent({
                             </div>
                           )}
                         </div>
-                        <div className="shrink-0 flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
+                        {/* פעולות: שורת כפתורים בגובה אחיד, ולידה עמודה קבועה
+                            לסטטוס — כך בורר תת-הסטטוס יושב תחתיו ולא מותח
+                            את השורה ומפרק את היישור */}
+                        <div className="shrink-0 flex items-start gap-2" onClick={(e) => e.stopPropagation()}>
+                          <div className="flex items-center gap-1.5">
                           <button
                             type="button"
                             onClick={() => setRescheduling(r)}
                             title="שנה מועד ראיון"
-                            className="h-7 px-2 text-xs rounded-md border border-purple-300 text-purple-700 hover:bg-purple-50 transition-colors"
+                            className="h-7 inline-flex items-center whitespace-nowrap px-2 text-xs rounded-md border border-purple-300 text-purple-700 hover:bg-purple-50 transition-colors"
                           >
                             🗓 שנה מועד
                           </button>
@@ -497,7 +501,16 @@ export function InterviewsContent({
                             recruiter={r.recruiter}
                           />
                           <LeadNotesDialog leadId={r.id} leadName={r.name} size="xs" />
-                          <StatusSelect leadId={r.id} leadName={r.name} currentStatus={r.status} allowedStatuses={INTERVIEW_STATUSES} />
+                          </div>
+                          <div className="w-36 shrink-0">
+                            <StatusSelect
+                              leadId={r.id}
+                              leadName={r.name}
+                              currentStatus={r.status}
+                              currentSubStatus={r.sub_status}
+                              allowedStatuses={INTERVIEW_STATUSES}
+                            />
+                          </div>
                         </div>
                       </li>
                     );
