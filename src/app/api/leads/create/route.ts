@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { after } from "next/server";
 import { validateApiKey, unauthorizedResponse, getSupabaseAdmin } from "@/lib/api-auth";
 import { sendWelcomeMessage } from "@/lib/whatsappWelcome";
 import { normalizePhone } from "@/lib/phone";
@@ -70,9 +71,11 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Fire-and-forget: send WhatsApp welcome if phone exists
+    // הודעת הפתיחה של הבוט — רצה אחרי שהתשובה חוזרת לטופס, עם ערבות
+    // ש-Vercel לא יקפיא את הפונקציה באמצע (fire-and-forget רגיל נהרג
+    // ברגע שהתשובה נשלחת, וקריאת ה-AI לא הספיקה להסתיים).
     if (lead.phone) {
-      sendWelcomeMessage(lead.id, lead.phone).catch(console.error);
+      after(sendWelcomeMessage(lead.id, lead.phone).catch(console.error));
     }
 
     return NextResponse.json({
