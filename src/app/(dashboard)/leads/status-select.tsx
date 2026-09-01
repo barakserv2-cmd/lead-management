@@ -13,7 +13,7 @@ import {
   getAllowedTransitions,
   type LeadStatusValue,
 } from "@/lib/stateMachine";
-import { SUB_STATUSES, NO_ANSWER_3, NOT_AVAILABLE_NOW } from "@/lib/constants";
+import { SUB_STATUSES, NO_ANSWER_3, NOT_AVAILABLE_NOW, SENT_TO_INTERVIEW } from "@/lib/constants";
 
 const SUB_STATUS_DIALOG_CONFIG: Partial<Record<LeadStatusValue, SubStatusPickerConfig>> = {
   [LeadStatus.CONTACTED]: {
@@ -37,6 +37,7 @@ import { SubStatusPickerDialog, type SubStatusPickerConfig } from "./sub-status-
 import { RejectionReasonDialog } from "./rejection-reason-dialog";
 import { StartWorkDialog } from "./start-work-dialog";
 import { CallbackReminderDialog } from "./callback-reminder-dialog";
+import { SentToInterviewDialog } from "./sent-to-interview-dialog";
 
 // סטטוסים שנושאים תאריך — לחיצה עליהם כשהם כבר הסטטוס הנוכחי פותחת את
 // הדיאלוג לעריכת התאריך במקום להיות no-op.
@@ -107,6 +108,7 @@ export function StatusSelect({
   const [showRejectionDialog, setShowRejectionDialog] = useState(false);
   const [showStartWorkDialog, setShowStartWorkDialog] = useState(false);
   const [callbackFor, setCallbackFor] = useState<string | null>(null);
+  const [sentToInterview, setSentToInterview] = useState(false);
   const [subStatusDialog, setSubStatusDialog] = useState<{ open: boolean; targetStatus: LeadStatusValue | null }>({ open: false, targetStatus: null });
 
   const router = useRouter();
@@ -394,6 +396,11 @@ export function StatusSelect({
   }
 
   async function handleSubStatusConfirm(chosenSub: string) {
+    if (chosenSub === SENT_TO_INTERVIEW) {
+      setSubStatusDialog({ open: false, targetStatus: null });
+      setSentToInterview(true);
+      return;
+    }
     const target = subStatusDialog.targetStatus;
     if (!target) return;
     setLoading(true);
@@ -468,6 +475,11 @@ export function StatusSelect({
   }
 
   async function handleSubStatusChange(value: string) {
+    // "נשלח לראיון" דורש משרה ושעה — נשמר דרך הדיאלוג, לא כבחירה חופשית
+    if (value === SENT_TO_INTERVIEW) {
+      setSentToInterview(true);
+      return;
+    }
     const newSub = value || null;
     setSubStatus(newSub);
     const result = await updateLeadSubStatus(leadId, newSub);
@@ -600,6 +612,19 @@ export function StatusSelect({
           onConfirm={handleEmploymentEndConfirm}
           onCancel={() => setShowEmploymentEndDialog(false)}
           loading={loading}
+        />
+      )}
+
+      {sentToInterview && (
+        <SentToInterviewDialog
+          leadId={leadId}
+          leadName={leadName ?? ""}
+          onDone={() => {
+            setSentToInterview(false);
+            setSubStatus(SENT_TO_INTERVIEW);
+            setToast({ message: "נשלח לראיון — נשמר", type: "success" });
+          }}
+          onCancel={() => setSentToInterview(false)}
         />
       )}
 

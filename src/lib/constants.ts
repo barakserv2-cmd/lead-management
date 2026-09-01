@@ -36,8 +36,12 @@ export const NO_ANSWER_3 = "אין מענה 3";
 // מועמד שרוצה לעבוד אבל לא עכשיו — מעביר אותו לתזכורת חזרה במקום לסגור אותו
 export const NOT_AVAILABLE_NOW = "לא זמין במיידי";
 
+// המועמד הגיע למשרד ונשלח להתראיין אצל המעסיק — דורש משרה ושעה
+export const SENT_TO_INTERVIEW = "נשלח לראיון";
+
 export const SUB_STATUSES: Record<string, string[]> = {
   CONTACTED: ["אין מענה 1", "אין מענה 2", NO_ANSWER_3, "מעקב"],
+  ARRIVED: [SENT_TO_INTERVIEW],
   NOT_SUITABLE: [
     "הסיר מועמדות",
     "לא תואם דרישות",

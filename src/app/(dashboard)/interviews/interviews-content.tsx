@@ -20,6 +20,9 @@ export interface InterviewRow {
   interview_type: "phone" | "in_person" | "video" | null;
   interview_notes: string | null;
   rejection_reason: string | null;
+  sub_status: string | null;
+  sent_interview_at: string | null;
+  sent_to_job: string | null;
   last_note: { text: string; type: string; at: string; by: string | null } | null;
   client: string | null;
   recruiter: string | null;
@@ -442,6 +445,20 @@ export function InterviewsContent({
                             <div className="mt-1.5 text-sm text-pink-900 bg-pink-50 border border-pink-200 rounded-md px-2 py-1 whitespace-pre-wrap">
                               <span className="font-semibold">לא התקבל:</span>{" "}
                               {r.rejection_reason ?? <span className="text-red-600">חסר תיעוד סיבה</span>}
+                            </div>
+                          )}
+                          {r.sent_interview_at && (
+                            <div className="mt-1.5 text-sm text-indigo-900 bg-indigo-50 border border-indigo-200 rounded-md px-2 py-1">
+                              <span className="font-semibold">נשלח לראיון:</span>{" "}
+                              {r.sent_to_job ?? "משרה לא ידועה"}
+                              <span className="text-indigo-700">
+                                {" · "}
+                                {wallDateKey(r.sent_interview_at) === today
+                                  ? "היום"
+                                  : new Date(`${wallDateKey(r.sent_interview_at)}T12:00:00`).toLocaleDateString("he-IL", { day: "numeric", month: "short" })}
+                                {" "}
+                                {wallTime(r.sent_interview_at)}
+                              </span>
                             </div>
                           )}
                           {r.last_note && (

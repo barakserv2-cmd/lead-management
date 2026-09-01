@@ -37,7 +37,7 @@ export default async function InterviewsPage({
     supabase
       .from("leads")
       .select(
-        "id, name, phone, job_title, location, status, interview_date, interview_type, interview_notes, rejection_reason, hired_client, hired_position, handled_by, source, preferences, notes"
+        "id, name, phone, job_title, location, status, sub_status, interview_date, interview_type, interview_notes, rejection_reason, sent_interview_at, jobs:sent_to_job_id (title, clients(name)), hired_client, hired_position, handled_by, source, preferences, notes"
       )
       .not("interview_date", "is", null)
       .gte("interview_date", rangeStart)
@@ -104,6 +104,13 @@ export default async function InterviewsPage({
       interview_type: (l.interview_type as InterviewRow["interview_type"]) ?? null,
       interview_notes: (l.interview_notes as string | null) ?? null,
       rejection_reason: (l.rejection_reason as string | null) ?? null,
+      sub_status: (l.sub_status as string | null) ?? null,
+      sent_interview_at: (l.sent_interview_at as string | null) ?? null,
+      sent_to_job: (() => {
+        const j = l.jobs as { title?: string; clients?: { name?: string } | null } | null;
+        if (!j?.title) return null;
+        return j.clients?.name ? `${j.title} @ ${j.clients.name}` : j.title;
+      })(),
       last_note: note
         ? {
             text: note.text,
