@@ -9,6 +9,7 @@ import {
 import { LeadStatus } from "@/lib/stateMachine";
 import { isOptOutMessage, OPT_OUT_CONFIRMATION } from "@/lib/sendGate";
 import { botModeForPhone } from "@/lib/botConfig";
+import { sendBookingLinkToLead } from "@/lib/bookingSend";
 import { analyzeWhatsappMessage, type WhatsAppNLU } from "@/lib/ai/parseWhatsappMessage";
 import {
   createLeadFromPublication,
@@ -250,6 +251,18 @@ export async function POST(req: NextRequest) {
             `[WhatsApp Webhook] Failed to send reply for lead ${lead.id}:`,
             sendResult.error
           );
+        }
+
+        // סינון הסתיים בהצלחה → המערכת שולחת את קישור התיאום האמיתי
+        // בהודעה נפרדת, מאותו מספר. הבוט עצמו לא ממציא קישורים.
+        if (result.action === "ADVANCE_TO_FIT" && !result.needs_human) {
+          const linkRes = await sendBookingLinkToLead(lead.id, { account });
+          if (!linkRes.success) {
+            console.error(
+              `[WhatsApp Webhook] booking link failed for lead ${lead.id}:`,
+              linkRes.error
+            );
+          }
         }
       } else if (!result.success) {
         console.error(
