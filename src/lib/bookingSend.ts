@@ -23,11 +23,17 @@ function admin() {
 
 /** רכזת עם לוח זמינות, הכי מעט לינקים שנשלחו היום — איזון טבעי. */
 async function pickCalendarRecruiter(db: ReturnType<typeof admin>): Promise<string | null> {
+  // רק משתמשות אמיתיות מהמערכת — לוח שנשאר מנתוני בדיקה לא ייבחר
+  const { data: profiles } = await db.from("user_profiles").select("email");
+  const realEmails = new Set((profiles ?? []).map((p) => String(p.email).toLowerCase()));
+
   const { data: withWindows } = await db
     .from("availability_slots")
     .select("recruiter_email")
     .eq("active", true);
-  const recruiters = Array.from(new Set((withWindows ?? []).map((r) => String(r.recruiter_email))));
+  const recruiters = Array.from(
+    new Set((withWindows ?? []).map((r) => String(r.recruiter_email)))
+  ).filter((r) => realEmails.has(r));
   if (recruiters.length === 0) return null;
 
   const dayStart = new Date();
