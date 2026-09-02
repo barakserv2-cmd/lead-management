@@ -121,6 +121,26 @@ export async function POST(req: NextRequest) {
     // לא הופכים ללידים), אבל instance עם capture_unknown (המספר העסקי
     // של מלי) קולט כל פונה כליד חדש — אחרת ההודעה נעלמת בשקט.
     if (!lead && isIncoming && account.captureUnknown) {
+      // חריג: נציג/ת לקוח (הטלפון מופיע אצל לקוח — ראשי או ברשימת
+      // אנשי הקשר) לא הופך לליד מועמד. השיחה נשארת בטלפון של מלי.
+      const { data: clientByPhone } = await supabase
+        .from("clients")
+        .select("id, name")
+        .in("phone", phoneVariants)
+        .limit(1);
+      const { data: clientByContact } = await supabase
+        .from("clients")
+        .select("id, name")
+        .contains("contact_phones", [phone])
+        .limit(1);
+      const clientMatch = clientByPhone?.[0] ?? clientByContact?.[0];
+      if (clientMatch) {
+        console.log(
+          `[WhatsApp Webhook] inbound from client contact (${clientMatch.name}) — not creating a lead`
+        );
+        return NextResponse.json({ ok: true, clientContact: true });
+      }
+
       const senderName: string | null = body.senderData?.senderName ?? null;
       const { data: created, error: createErr } = await supabase
         .from("leads")
