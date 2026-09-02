@@ -22,6 +22,7 @@ export function FinanceContent({
 }) {
   const router = useRouter();
   const [fee, setFee] = useState(String(data.fee || ""));
+  const [guarantee, setGuarantee] = useState(String(data.guaranteeDays ?? 30));
   const [busy, setBusy] = useState(false);
   const [costMonth, setCostMonth] = useState(data.months[data.months.length - 1] ?? "");
   const [edits, setEdits] = useState<Record<string, string>>({});
@@ -108,6 +109,33 @@ export function FinanceContent({
         <button
           type="button"
           onClick={saveFee}
+          disabled={busy}
+          className="px-3 py-1.5 rounded-md bg-cyan-600 text-white text-xs font-semibold hover:bg-cyan-700 disabled:opacity-50"
+        >
+          שמירה
+        </button>
+        <span className="text-gray-400 mr-4">ימי אחריות (ברירת מחדל):</span>
+        <input
+          type="number"
+          value={guarantee}
+          onChange={(e) => setGuarantee(e.target.value)}
+          className="border rounded-md px-2 py-1 w-20 tabular-nums"
+          dir="ltr"
+        />
+        <button
+          type="button"
+          onClick={async () => {
+            if (busy) return;
+            setBusy(true);
+            try {
+              if (await post({ action: "set_guarantee", fee: Number(guarantee) })) {
+                toast.success("ימי האחריות נשמרו");
+                router.refresh();
+              }
+            } finally {
+              setBusy(false);
+            }
+          }}
           disabled={busy}
           className="px-3 py-1.5 rounded-md bg-cyan-600 text-white text-xs font-semibold hover:bg-cyan-700 disabled:opacity-50"
         >

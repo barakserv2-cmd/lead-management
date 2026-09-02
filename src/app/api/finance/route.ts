@@ -44,6 +44,19 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ ok: true });
   }
 
+  if (body.action === "set_guarantee") {
+    const days = Number(body.fee); // reuse the numeric field
+    if (!Number.isInteger(days) || days < 0 || days > 365) {
+      return NextResponse.json({ error: "מספר ימים לא תקין" }, { status: 400 });
+    }
+    const { error } = await admin
+      .from("finance_settings")
+      .update({ default_guarantee_days: days, updated_at: new Date().toISOString() })
+      .eq("id", 1);
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ ok: true });
+  }
+
   if (body.action === "set_cost") {
     const source = (body.source ?? "").trim();
     const month = (body.month ?? "").trim();

@@ -175,6 +175,7 @@ export interface SourceFinance extends SourceStats {
 
 export interface FinanceResult {
   fee: number;
+  guaranteeDays: number;
   months: string[]; // YYYY-MM-01 בטווח
   costs: { source: string; month: string; amount: number }[];
   bySource: SourceFinance[];
@@ -204,10 +205,15 @@ export async function computeFinance(
       .from("channel_costs")
       .select("source, month, amount")
       .in("month", months),
-    db.from("finance_settings").select("default_placement_fee").eq("id", 1).maybeSingle(),
+    db
+      .from("finance_settings")
+      .select("default_placement_fee, default_guarantee_days")
+      .eq("id", 1)
+      .maybeSingle(),
   ]);
 
   const fee = Number(settings?.default_placement_fee ?? 0);
+  const guaranteeDays = Number(settings?.default_guarantee_days ?? 30);
   const spendBySource = new Map<string, number>();
   for (const c of costRows ?? []) {
     const k = String(c.source);
@@ -238,6 +244,7 @@ export async function computeFinance(
 
   return {
     fee,
+    guaranteeDays,
     months,
     costs: (costRows ?? []).map((c) => ({
       source: String(c.source),

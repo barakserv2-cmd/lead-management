@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient as createServerClient } from "@supabase/supabase-js";
 import { businessAccount, sendWhatsAppMessage } from "@/lib/whatsappService";
+import { runPostPlacementCare } from "@/lib/postPlacement";
 
 // Vercel cron pings this URL every hour at :30 (see vercel.json).
 // Guarded by CRON_SECRET so it can't be hit anonymously from outside.
@@ -269,6 +270,31 @@ async function runWeeklyDigest(admin: ReturnType<typeof getAdmin>): Promise<RunS
   return summary;
 }
 
+// ── Rule 4: ליווי אחרי השמה + תקופת אחריות (שלב 6) ──────────
+// שולח רק בשעות היום (10:00–20:00 ישראל); שער השליחה מגן בנוסף.
+async function runPlacementCare(admin: ReturnType<typeof getAdmin>): Promise<RunSummary> {
+  const summary: RunSummary = {
+    rule: "post_placement_care",
+    attempted: 0,
+    succeeded: 0,
+    failed: 0,
+    details: [],
+  };
+  const { hour } = israelClock(new Date());
+  if (hour < 10 || hour >= 20) {
+    summary.details.push("מחוץ לחלון (10:00–20:00)");
+    return summary;
+  }
+  const care = await runPostPlacementCare(admin);
+  summary.attempted = care.checkinsSent + care.guaranteeAlerts + care.failed;
+  summary.succeeded = care.checkinsSent + care.guaranteeAlerts;
+  summary.failed = care.failed;
+  summary.details.push(
+    `בדיקות שלומות: ${care.checkinsSent} · התראות אחריות: ${care.guaranteeAlerts}`
+  );
+  return summary;
+}
+
 // ── Orchestrator ────────────────────────────────────────────
 async function runDailyCron() {
   const admin = getAdmin();
@@ -276,6 +302,7 @@ async function runDailyCron() {
     runInterviewReminders(admin),
     runStaleClaimCleanup(admin),
     runWeeklyDigest(admin),
+    runPlacementCare(admin),
   ]);
   return { ok: true, ran_at: new Date().toISOString(), rules: results };
 }

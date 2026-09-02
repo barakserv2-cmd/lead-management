@@ -7,18 +7,21 @@ import { AdvancesContent, type AdvanceRow, type WorkerOption } from "./advances-
 import { TransfersContent, type TransferRow } from "./transfers-content";
 import { FunnelContent } from "./funnel-content";
 import { FinanceContent } from "./finance-content";
+import { GuaranteeContent } from "./guarantee-content";
 import { computeAnalytics, computeFinance } from "@/lib/analytics";
+import { computeGuaranteeReport } from "@/lib/postPlacement";
 import { isFinanceUser } from "@/lib/finance";
 
 export const dynamic = "force-dynamic";
 
-type Tab = "hired" | "advances" | "transfers" | "funnel" | "finance";
+type Tab = "hired" | "advances" | "transfers" | "funnel" | "finance" | "guarantee";
 
 const TABS: { key: Tab; label: string; icon: string }[] = [
   { key: "hired", label: "דוח מועסקים", icon: "👷" },
   { key: "advances", label: "דוח מקדמות לדיור", icon: "🏠" },
   { key: "transfers", label: "דוח העברות בין עבודות", icon: "🔁" },
   { key: "funnel", label: "משפך", icon: "📉" },
+  { key: "guarantee", label: "אחריות", icon: "🛡️" },
 ];
 
 /** ברירת מחדל: 30 הימים האחרונים, לפי לוח ישראל. */
@@ -39,7 +42,7 @@ export default async function ReportsPage({
   const authed = await getAuthedUser();
   const financeAllowed = isFinanceUser(authed?.email);
   const tab: Tab =
-    rawTab === "advances" || rawTab === "transfers" || rawTab === "funnel"
+    rawTab === "advances" || rawTab === "transfers" || rawTab === "funnel" || rawTab === "guarantee"
       ? rawTab
       : rawTab === "finance" && financeAllowed
         ? "finance"
@@ -69,6 +72,9 @@ export default async function ReportsPage({
   if (tab === "funnel") {
     const analytics = await computeAnalytics(supabase, fromIso, toIso);
     content = <FunnelContent data={analytics} from={from} to={to} />;
+  } else if (tab === "guarantee") {
+    const rows = await computeGuaranteeReport(supabase);
+    content = <GuaranteeContent rows={rows} />;
   } else if (tab === "finance") {
     const analytics = await computeAnalytics(supabase, fromIso, toIso);
     const finance = await computeFinance(supabase, fromIso, toIso, analytics.sources);
