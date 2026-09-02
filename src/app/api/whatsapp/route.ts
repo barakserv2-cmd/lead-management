@@ -8,7 +8,7 @@ import {
 } from "@/lib/whatsappService";
 import { LeadStatus } from "@/lib/stateMachine";
 import { isOptOutMessage, OPT_OUT_CONFIRMATION } from "@/lib/sendGate";
-import { botMode } from "@/lib/botConfig";
+import { botModeForPhone } from "@/lib/botConfig";
 import { analyzeWhatsappMessage, type WhatsAppNLU } from "@/lib/ai/parseWhatsappMessage";
 import {
   createLeadFromPublication,
@@ -235,9 +235,9 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: true, optOut: true });
     }
 
-    // המתג הראשי (שלב 1): מענה אוטומטי של הבוט רק במצב live. במצבי
-    // off/shadow ההודעה נשמרת עם NLU כרגיל (הענף למטה) ורכזת עונה.
-    if (lead.status === LeadStatus.SCREENING_IN_PROGRESS && botMode() === "live") {
+    // המתג הראשי (שלב 1): מענה אוטומטי של הבוט רק במצב live — כללי,
+    // או פר-טלפון דרך רשימת הפיילוט (SCREENING_BOT_TEST_PHONES).
+    if (lead.status === LeadStatus.SCREENING_IN_PROGRESS && botModeForPhone(phone) === "live") {
       // Screening mode: process through AI and auto-reply
       const result = await processIncomingMessage(lead.id, messageText, account.instanceId);
 

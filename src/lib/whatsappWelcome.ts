@@ -15,6 +15,7 @@ import { sendWhatsAppMessage } from "@/lib/whatsappService";
 import { pickBotSender } from "@/lib/botSender";
 import {
   botMode,
+  botModeForPhone,
   botSourceEnabled,
   FRESH_LEAD_MINUTES,
   WELCOME_BATCH_LIMIT,
@@ -44,9 +45,10 @@ export async function enqueueWelcome(
   source: string | null,
   opts: { deliver?: boolean } = {}
 ): Promise<void> {
-  const mode = botMode();
-  if (mode === "off") return;
   if (!phone) return;
+  // טלפון ברשימת הפיילוט מקבל live גם כשהמצב הכללי shadow
+  const mode = botModeForPhone(phone);
+  if (mode === "off") return;
   if (!botSourceEnabled(source)) return;
 
   if (mode === "shadow") {

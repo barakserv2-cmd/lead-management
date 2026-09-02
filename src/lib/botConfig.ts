@@ -25,6 +25,23 @@ export function botMode(): BotMode {
   return raw === "live" || raw === "shadow" ? raw : "off";
 }
 
+/**
+ * רשימת פיילוט: מספרים (מנורמלים, מופרדים בפסיקים) שמקבלים את הבוט
+ * חי גם כשהמצב הכללי הוא shadow. לניסויים בזמן אמת על הצוות, ובהמשך
+ * לפיילוט מדורג. SCREENING_BOT_TEST_PHONES="0547000992"
+ */
+export function botTestPhones(): Set<string> {
+  const raw = (process.env.SCREENING_BOT_TEST_PHONES ?? "").trim();
+  return new Set(raw.split(",").map((s) => s.replace(/\D/g, "")).filter(Boolean));
+}
+
+/** המצב האפקטיבי לליד ספציפי: טלפון ברשימת הפיילוט → live. */
+export function botModeForPhone(phone: string | null | undefined): BotMode {
+  const digits = (phone ?? "").replace(/\D/g, "").replace(/^972/, "0");
+  if (digits && botTestPhones().has(digits)) return "live";
+  return botMode();
+}
+
 /** האם המקור הזה מופעל לבוט (חל גם על מצב צל). */
 export function botSourceEnabled(source: string | null | undefined): boolean {
   const raw = (process.env.SCREENING_BOT_SOURCES ?? "").trim();
