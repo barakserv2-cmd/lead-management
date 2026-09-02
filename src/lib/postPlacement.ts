@@ -10,7 +10,7 @@
 //   checkin:{lead}:{day} · guarantee:{lead}
 
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { resolveSender, sendWhatsAppMessage, businessAccount } from "@/lib/whatsappService";
+import { getAccountForEmail, sendWhatsAppMessage, businessAccount } from "@/lib/whatsappService";
 import { LeadStatus } from "@/lib/stateMachine";
 
 export const CHECKIN_DAYS = [3, 14, 30] as const;
@@ -105,11 +105,15 @@ export async function runPostPlacementCare(db: SupabaseClient): Promise<CareSumm
 
   const { defaults, byClient } = await guaranteeDaysMap(db);
   const owner = checkinOwnerEmail();
-  const sender = (await resolveSender(owner)) ?? businessAccount();
+  // ההודעות חתומות "מלי" — יוצאות אך ורק מהמספר המקושר שלה. עד
+  // שמקושר, בדיקות השלומות פשוט לא נשלחות (התראות האחריות ממשיכות
+  // כדגלים). ברגע שהמספר מקושר ב"הוואטסאפ שלי" — הכל נדלק לבד.
+  const sender = await getAccountForEmail(owner);
 
   // ── Check-ins בימים 3/14/30 ────────────────────────────────
   const candidates: { lead: PlacedLead; day: number; key: string }[] = [];
   for (const lead of leads) {
+    if (!sender) break;
     if (!lead.phone || lead.do_not_contact || !lead.start_date) continue;
     const since = daysBetween(lead.start_date.slice(0, 10), today);
     for (const day of CHECKIN_DAYS) {
@@ -122,6 +126,7 @@ export async function runPostPlacementCare(db: SupabaseClient): Promise<CareSumm
 
   const done = await existingKeys(db, candidates.map((c) => c.key));
   for (const c of candidates) {
+    if (!sender) break;
     if (done.has(c.key)) continue;
     const message = checkinMessage(c.day, c.lead.name, c.lead.hired_client);
     const res = await sendWhatsAppMessage(c.lead.phone!, message, sender, { automated: true });
