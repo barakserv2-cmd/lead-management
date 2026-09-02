@@ -198,12 +198,84 @@ async function runStaleClaimCleanup(admin: ReturnType<typeof getAdmin>): Promise
   return summary;
 }
 
+// ── Rule 3: Weekly digest to Saar (שלב 5) ───────────────────
+// הקרון רץ פעם בשעה — יום ראשון בשעה 8 בישראל יש בדיוק ריצה אחת,
+// אז אין צורך במפתח אידמפוטנטיות: התנאי עצמו הוא המנעול.
+async function runWeeklyDigest(admin: ReturnType<typeof getAdmin>): Promise<RunSummary> {
+  const summary: RunSummary = {
+    rule: "weekly_digest",
+    attempted: 0,
+    succeeded: 0,
+    failed: 0,
+    details: [],
+  };
+
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: "Asia/Jerusalem",
+    weekday: "short",
+    hour12: false,
+    hour: "2-digit",
+  }).formatToParts(new Date());
+  const weekday = parts.find((p) => p.type === "weekday")?.value;
+  const hour = Number(parts.find((p) => p.type === "hour")?.value ?? 0) % 24;
+  if (weekday !== "Sun" || hour !== 8) {
+    summary.details.push("לא חלון הדוח (ראשון 08:00)");
+    return summary;
+  }
+
+  summary.attempted = 1;
+  const weekAgo = new Date(Date.now() - 7 * 24 * 3600_000).toISOString();
+  const [{ count: newLeads }, { data: hist }] = await Promise.all([
+    admin.from("leads").select("id", { count: "exact", head: true }).gte("created_at", weekAgo),
+    admin
+      .from("lead_status_history")
+      .select("to_status")
+      .gte("changed_at", weekAgo)
+      .limit(20000),
+  ]);
+  const interviews = (hist ?? []).filter((h) => h.to_status === "INTERVIEW_BOOKED").length;
+  const hires = (hist ?? []).filter((h) => h.to_status === "HIRED").length;
+
+  const { data: weekLeads } = await admin
+    .from("leads")
+    .select("source")
+    .gte("created_at", weekAgo)
+    .limit(5000);
+  const bySource = new Map<string, number>();
+  for (const l of weekLeads ?? []) {
+    const s = (l.source as string) || "אחר";
+    bySource.set(s, (bySource.get(s) ?? 0) + 1);
+  }
+  const top = [...bySource.entries()].sort((a, b) => b[1] - a[1]).slice(0, 3);
+
+  const message =
+    `📊 *סיכום שבועי — ברק שירותים*\n\n` +
+    `לידים חדשים: ${newLeads ?? 0}\n` +
+    `ראיונות שנקבעו: ${interviews}\n` +
+    `השמות: ${hires}\n\n` +
+    `מקורות מובילים:\n` +
+    top.map(([s, n]) => `• ${s} — ${n}`).join("\n") +
+    `\n\nהפירוט המלא: דוחות ← משפך`;
+
+  const adminPhone = (process.env.ADMIN_ALERT_PHONE ?? "0547000992").trim();
+  const res = await sendWhatsAppMessage(adminPhone, message, businessAccount(), { skipGate: true });
+  if (res.success) {
+    summary.succeeded = 1;
+    summary.details.push("הסיכום השבועי נשלח");
+  } else {
+    summary.failed = 1;
+    summary.details.push(`כשל: ${res.error}`);
+  }
+  return summary;
+}
+
 // ── Orchestrator ────────────────────────────────────────────
 async function runDailyCron() {
   const admin = getAdmin();
   const results = await Promise.all([
     runInterviewReminders(admin),
     runStaleClaimCleanup(admin),
+    runWeeklyDigest(admin),
   ]);
   return { ok: true, ran_at: new Date().toISOString(), rules: results };
 }

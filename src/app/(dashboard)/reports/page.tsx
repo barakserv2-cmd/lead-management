@@ -1,29 +1,57 @@
 import Link from "next/link";
-import { getSupabaseAdmin } from "@/lib/api-auth";
+import { getAuthedUser, getSupabaseAdmin } from "@/lib/api-auth";
 import { LEAD_STATUSES } from "@/lib/constants";
 import type { Lead } from "@/types/leads";
 import { HiredContent } from "./hired/hired-content";
 import { AdvancesContent, type AdvanceRow, type WorkerOption } from "./advances-content";
 import { TransfersContent, type TransferRow } from "./transfers-content";
+import { FunnelContent } from "./funnel-content";
+import { FinanceContent } from "./finance-content";
+import { computeAnalytics, computeFinance } from "@/lib/analytics";
+import { isFinanceUser } from "@/lib/finance";
 
 export const dynamic = "force-dynamic";
 
-type Tab = "hired" | "advances" | "transfers";
+type Tab = "hired" | "advances" | "transfers" | "funnel" | "finance";
 
 const TABS: { key: Tab; label: string; icon: string }[] = [
   { key: "hired", label: "דוח מועסקים", icon: "👷" },
   { key: "advances", label: "דוח מקדמות לדיור", icon: "🏠" },
   { key: "transfers", label: "דוח העברות בין עבודות", icon: "🔁" },
+  { key: "funnel", label: "משפך", icon: "📉" },
 ];
+
+/** ברירת מחדל: 30 הימים האחרונים, לפי לוח ישראל. */
+function defaultRange(): { from: string; to: string } {
+  const today = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Jerusalem" }).format(new Date());
+  const d = new Date(`${today}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() - 30);
+  return { from: d.toISOString().slice(0, 10), to: today };
+}
 
 export default async function ReportsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ tab?: string }>;
+  searchParams: Promise<{ tab?: string; from?: string; to?: string }>;
 }) {
-  const { tab: rawTab } = await searchParams;
-  const tab: Tab = rawTab === "advances" || rawTab === "transfers" ? rawTab : "hired";
+  const { tab: rawTab, from: rawFrom, to: rawTo } = await searchParams;
+  // הלשונית הכספית קיימת רק למשתמש המורשה — האכיפה כאן, בצד השרת
+  const authed = await getAuthedUser();
+  const financeAllowed = isFinanceUser(authed?.email);
+  const tab: Tab =
+    rawTab === "advances" || rawTab === "transfers" || rawTab === "funnel"
+      ? rawTab
+      : rawTab === "finance" && financeAllowed
+        ? "finance"
+        : "hired";
   const supabase = getSupabaseAdmin();
+
+  const dr = defaultRange();
+  const from = /^\d{4}-\d{2}-\d{2}$/.test(rawFrom ?? "") ? rawFrom! : dr.from;
+  const to = /^\d{4}-\d{2}-\d{2}$/.test(rawTo ?? "") ? rawTo! : dr.to;
+  // גבולות יום לפי שעון ישראל — created_at הוא זמן אמת
+  const fromIso = new Date(`${from}T00:00:00+03:00`).toISOString();
+  const toIso = new Date(`${to}T23:59:59+03:00`).toISOString();
 
   // Placed workers — the pick-list for both entry forms.
   const workersPromise =
@@ -38,7 +66,14 @@ export default async function ReportsPage({
 
   let content: React.ReactNode;
 
-  if (tab === "hired") {
+  if (tab === "funnel") {
+    const analytics = await computeAnalytics(supabase, fromIso, toIso);
+    content = <FunnelContent data={analytics} from={from} to={to} />;
+  } else if (tab === "finance") {
+    const analytics = await computeAnalytics(supabase, fromIso, toIso);
+    const finance = await computeFinance(supabase, fromIso, toIso, analytics.sources);
+    content = <FinanceContent data={finance} from={from} to={to} />;
+  } else if (tab === "hired") {
     // תאריך הקבלה = המעבר האחרון ל-HIRED בהיסטוריית הסטטוסים (אין עמודה
     // ייעודית על הליד). start_date נשאר "תאריך תחילת עבודה".
     const [{ data: leads }, { data: hiredHistory }] = await Promise.all([
@@ -134,7 +169,7 @@ export default async function ReportsPage({
   return (
     <div dir="rtl">
       <div className="flex items-center gap-1 mb-6 bg-gray-100 rounded-lg p-1 w-fit">
-        {TABS.map((t) => (
+        {[...TABS, ...(financeAllowed ? [{ key: "finance" as Tab, label: "כספים", icon: "💰" }] : [])].map((t) => (
           <Link
             key={t.key}
             href={`/reports?tab=${t.key}`}

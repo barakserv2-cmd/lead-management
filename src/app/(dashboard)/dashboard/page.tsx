@@ -34,18 +34,23 @@ export default async function DashboardPage() {
     statusCount(LEAD_STATUSES.HIRED),
     statusCount(LEAD_STATUSES.REJECTED),
     statusCount(LEAD_STATUSES.NOT_ACCEPTED),
-    supabase.from("leads").select("created_at").gte("created_at", since),
-    supabase.from("leads").select("source"),
+    supabase.from("leads").select("created_at").gte("created_at", since).limit(5000),
+    // בלי limit מפורש PostgREST חותך ל-1,000 — והפאי הציג רבע מהלידים
+    supabase.from("leads").select("source").limit(10000),
   ]);
 
+  // חלוקת הימים לפי לוח ישראל — created_at הוא UTC אמיתי, וליד של
+  // 23:00 בערב שייך להיום הישראלי, לא ליום ה-UTC
+  const israelDay = (d: Date) =>
+    new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Jerusalem" }).format(d);
   const dayCountsMap: Record<string, number> = {};
   for (let i = 0; i < 7; i++) {
     const d = new Date();
     d.setDate(d.getDate() - (6 - i));
-    dayCountsMap[d.toISOString().split("T")[0]] = 0;
+    dayCountsMap[israelDay(d)] = 0;
   }
   for (const lead of recentLeads ?? []) {
-    const day = lead.created_at.split("T")[0];
+    const day = israelDay(new Date(lead.created_at));
     if (day in dayCountsMap) dayCountsMap[day]++;
   }
   const leadsPerDay = Object.entries(dayCountsMap).map(([date, count]) => ({
