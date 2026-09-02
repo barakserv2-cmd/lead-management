@@ -9,6 +9,7 @@ import {
   type InstanceState,
 } from "@/lib/whatsappService";
 import { runWelcomeBatch } from "@/lib/whatsappWelcome";
+import { runAutomationRules, type EngineSummary } from "@/lib/rulesEngine";
 
 // ============================================================
 // /api/cron/scheduled — every 5 minutes (vercel.json).
@@ -110,6 +111,14 @@ export async function GET(req: NextRequest) {
     console.error("[cron/scheduled] welcome batch failed:", e);
   }
 
+  // ── שלב 3: מנוע החוקים (ראו "ספר מנוע החוקים") ─────────────
+  let automation: EngineSummary = { rules: 0, matched: 0, executed: 0, skipped: 0, errors: 0 };
+  try {
+    automation = await runAutomationRules(db);
+  } catch (e) {
+    console.error("[cron/scheduled] rules engine failed:", e);
+  }
+
   return NextResponse.json({
     ok: true,
     due: due?.length ?? 0,
@@ -117,6 +126,7 @@ export async function GET(req: NextRequest) {
     failed,
     monitored,
     welcome,
+    automation,
   });
 }
 
