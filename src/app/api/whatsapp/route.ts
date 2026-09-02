@@ -117,6 +117,39 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    // מספר לא מוכר: במספרים רגילים מתעלמים (אנשי קשר פרטיים של רכזות
+    // לא הופכים ללידים), אבל instance עם capture_unknown (המספר העסקי
+    // של מלי) קולט כל פונה כליד חדש — אחרת ההודעה נעלמת בשקט.
+    if (!lead && isIncoming && account.captureUnknown) {
+      const senderName: string | null = body.senderData?.senderName ?? null;
+      const { data: created, error: createErr } = await supabase
+        .from("leads")
+        .insert({
+          name: senderName?.trim() || phone,
+          phone,
+          source: "וואטסאפ ישיר",
+          status: LeadStatus.NEW_LEAD,
+          needs_attention: true,
+          needs_attention_at: new Date().toISOString(),
+          attention_reason: "פנייה חדשה בוואטסאפ ממספר לא מוכר",
+        })
+        .select("id, status, name, location, job_title")
+        .maybeSingle();
+      if (created) {
+        lead = created;
+        console.log(`[WhatsApp Webhook] capture_unknown: new lead ${created.id} from ${phone}`);
+      } else if (createErr) {
+        // מרוץ עם הודעה קודמת שיצרה כבר את הליד — ננסה שוב לאתר
+        const { data: retry } = await supabase
+          .from("leads")
+          .select("id, status, name, location, job_title")
+          .in("phone", phoneVariants)
+          .order("created_at", { ascending: false })
+          .limit(1);
+        lead = retry?.[0] ?? null;
+      }
+    }
+
     // No lead found — ignore
     if (!lead) {
       return NextResponse.json({ ok: true });

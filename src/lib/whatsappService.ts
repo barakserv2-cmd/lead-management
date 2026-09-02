@@ -20,6 +20,8 @@ export interface WhatsAppAccount {
   userEmail?: string;
   label?: string | null;
   phone?: string | null;
+  /** הודעה נכנסת ממספר לא מוכר יוצרת ליד חדש (המספר של מלי) */
+  captureUnknown?: boolean;
 }
 
 function adminClient() {
@@ -46,6 +48,7 @@ interface AccountRow {
   phone: string | null;
   label: string | null;
   is_active: boolean;
+  capture_unknown?: boolean;
 }
 
 function rowToAccount(r: AccountRow): WhatsAppAccount {
@@ -55,6 +58,7 @@ function rowToAccount(r: AccountRow): WhatsAppAccount {
     userEmail: r.user_email,
     label: r.label,
     phone: r.phone,
+    captureUnknown: r.capture_unknown === true,
   };
 }
 
@@ -65,7 +69,7 @@ export async function getAccountForEmail(
   if (!email) return null;
   const { data } = await adminClient()
     .from("whatsapp_accounts")
-    .select("user_email, instance_id, api_token, phone, label, is_active")
+    .select("user_email, instance_id, api_token, phone, label, is_active, capture_unknown")
     .eq("user_email", email.toLowerCase())
     .eq("is_active", true)
     .maybeSingle();
@@ -82,7 +86,7 @@ export async function getAccountByInstance(
   // DB first — the env (default) instance may itself be linked to a recruiter.
   const { data } = await adminClient()
     .from("whatsapp_accounts")
-    .select("user_email, instance_id, api_token, phone, label, is_active")
+    .select("user_email, instance_id, api_token, phone, label, is_active, capture_unknown")
     .eq("instance_id", id)
     .maybeSingle();
   return data ? rowToAccount(data as AccountRow) : biz;
@@ -106,7 +110,7 @@ export async function getDocDelegateAccount(
   if (!email) return null;
   const { data } = await adminClient()
     .from("whatsapp_accounts")
-    .select("user_email, instance_id, api_token, phone, label, is_active")
+    .select("user_email, instance_id, api_token, phone, label, is_active, capture_unknown")
     .contains("doc_delegates", JSON.stringify([email.toLowerCase()]))
     .eq("is_active", true)
     .limit(1)
