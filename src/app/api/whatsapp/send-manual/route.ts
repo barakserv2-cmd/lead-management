@@ -79,6 +79,11 @@ export async function POST(req: NextRequest) {
     if (lead.phone) {
       const result = await sendWhatsAppMessage(lead.phone, message.trim(), sender);
       whatsappSent = result.success;
+      if (result.success) {
+        // גשר התשובות למכונת הגיוס (fire-and-forget)
+        const { forwardReplyToMachine } = await import("@/lib/machineBridge");
+        await forwardReplyToMachine(lead.phone, message.trim(), "human");
+      }
       if (!result.success) {
         whatsappError = result.error ?? "שליחה נכשלה";
         console.error(

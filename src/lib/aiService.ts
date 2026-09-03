@@ -649,6 +649,10 @@ export async function processIncomingMessage(
     return { success: false, error: `שגיאה בשמירת תשובת AI: ${insertAIError.message}` };
   }
 
+  // גשר התשובות למכונת הגיוס (fire-and-forget, לא נוגע בזרימה)
+  const { forwardReplyToMachine } = await import("./machineBridge");
+  await forwardReplyToMachine(lead.phone, evaluation.reply, "crm");
+
   // 8. Persist scores + extracted fields + escalation flag to the lead row
   await persistAgentUpdate(supabase, leadId, evaluation);
 
