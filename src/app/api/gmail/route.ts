@@ -239,6 +239,30 @@ async function handleFetchEmails(req: NextRequest) {
         summary.details.push(`New lead: ${name} (${phone || "no phone"})`);
         console.log(`[Gmail] New lead created: ${name}`);
 
+        // גשר למכונת הגיוס (shadow): כל ליד חדש נשלח גם למערכת החדשה
+        // לצורך אימון. כשל כאן לעולם לא מפיל את הזרימה הקיימת.
+        if (process.env.MACHINE_INGEST_URL && process.env.MACHINE_INGEST_KEY && phone) {
+          try {
+            await fetch(`${process.env.MACHINE_INGEST_URL}/api/v1/leads`, {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                "x-ingest-key": process.env.MACHINE_INGEST_KEY,
+              },
+              body: JSON.stringify({
+                phone,
+                name,
+                city: location ?? undefined,
+                source_key: "lead_management_bridge",
+                campaign: insertedLead?.source ?? undefined,
+                job_hint: job_title ?? undefined,
+              }),
+            });
+          } catch (e) {
+            console.error("[Gmail] machine bridge failed:", e);
+          }
+        }
+
         // בוט הפתיחה (שלב 1): רישום לתור בלבד — השליחה עם מרווחים
         // אנושיים רצה פעם אחת בסוף הסריקה (runWelcomeBatch למטה).
         if (insertedLead?.id && phone) {
