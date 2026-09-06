@@ -22,6 +22,7 @@ type Body = {
   source?: string;
   status?: string; // a v1 LeadStatus code
   messages?: InMsg[];
+  escalation?: { reason?: string } | null; // raise the human-attention flag
 };
 
 export async function POST(req: NextRequest) {
@@ -121,5 +122,20 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  return NextResponse.json({ ok: true, leadId, appended, statusChanged }, { status: 200 });
+  // 4. Human-attention flag — surfaces a red banner on the lead so recruiters
+  //    (not just an admin phone) see they need to step in.
+  let escalated = false;
+  if (body.escalation && body.escalation.reason) {
+    const { error: attErr } = await db
+      .from("leads")
+      .update({
+        needs_human_attention: true,
+        human_attention_reason: body.escalation.reason,
+        human_attention_raised_at: new Date().toISOString(),
+      })
+      .eq("id", leadId);
+    if (!attErr) escalated = true;
+  }
+
+  return NextResponse.json({ ok: true, leadId, appended, statusChanged, escalated }, { status: 200 });
 }
