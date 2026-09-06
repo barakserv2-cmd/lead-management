@@ -23,6 +23,7 @@ type Body = {
   status?: string; // a v1 LeadStatus code
   messages?: InMsg[];
   escalation?: { reason?: string } | null; // raise the human-attention flag
+  note?: string; // a distilled recruiter-style note → lead_events
 };
 
 export async function POST(req: NextRequest) {
@@ -137,5 +138,18 @@ export async function POST(req: NextRequest) {
     if (!attErr) escalated = true;
   }
 
-  return NextResponse.json({ ok: true, leadId, appended, statusChanged, escalated }, { status: 200 });
+  // 5. Distilled recruiter-style note → the lead's event log, so a recruiter
+  //    sees the key facts at a glance without reading the whole chat.
+  let noted = false;
+  if (body.note && body.note.trim()) {
+    const { error: nErr } = await db.from("lead_events").insert({
+      lead_id: leadId,
+      event_type: "גובגט",
+      event_text: body.note.trim().slice(0, 1000),
+      created_by: GUBGET_EMAIL,
+    });
+    if (!nErr) noted = true;
+  }
+
+  return NextResponse.json({ ok: true, leadId, appended, statusChanged, escalated, noted }, { status: 200 });
 }
