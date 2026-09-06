@@ -90,7 +90,7 @@ export async function POST(req: NextRequest) {
     const supabase = getSupabase();
     const { data: leadRows } = await supabase
       .from("leads")
-      .select("id, status, name, location, job_title")
+      .select("id, status, name, location, job_title, needs_human_attention")
       .in("phone", phoneVariants)
       .order("created_at", { ascending: false })
       .limit(1);
@@ -108,7 +108,7 @@ export async function POST(req: NextRequest) {
       if (newLeadId) {
         const { data: created } = await supabase
           .from("leads")
-          .select("id, status, name, location, job_title")
+          .select("id, status, name, location, job_title, needs_human_attention")
           .eq("id", newLeadId)
           .maybeSingle();
         lead = created ?? null;
@@ -154,7 +154,7 @@ export async function POST(req: NextRequest) {
           needs_attention_at: new Date().toISOString(),
           attention_reason: "פנייה חדשה בוואטסאפ ממספר לא מוכר",
         })
-        .select("id, status, name, location, job_title")
+        .select("id, status, name, location, job_title, needs_human_attention")
         .maybeSingle();
       if (created) {
         lead = created;
@@ -163,7 +163,7 @@ export async function POST(req: NextRequest) {
         // מרוץ עם הודעה קודמת שיצרה כבר את הליד — ננסה שוב לאתר
         const { data: retry } = await supabase
           .from("leads")
-          .select("id, status, name, location, job_title")
+          .select("id, status, name, location, job_title, needs_human_attention")
           .in("phone", phoneVariants)
           .order("created_at", { ascending: false })
           .limit(1);
@@ -238,7 +238,7 @@ export async function POST(req: NextRequest) {
 
     // המתג הראשי (שלב 1): מענה אוטומטי של הבוט רק במצב live — כללי,
     // או פר-טלפון דרך רשימת הפיילוט (SCREENING_BOT_TEST_PHONES).
-    if (lead.status === LeadStatus.SCREENING_IN_PROGRESS && botModeForPhone(phone) === "live") {
+    if (lead.status === LeadStatus.SCREENING_IN_PROGRESS && botModeForPhone(phone) === "live" && !lead.needs_human_attention) {
       // Screening mode: process through AI and auto-reply
       const result = await processIncomingMessage(lead.id, messageText, account.instanceId);
 

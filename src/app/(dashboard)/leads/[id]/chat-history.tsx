@@ -65,10 +65,24 @@ export function ChatHistory({
       .catch(() => {});
   }, []);
 
-  const isScreening = leadStatus === LeadStatus.SCREENING_IN_PROGRESS;
+  // When a recruiter has taken over (needs_human_attention), the box sends for
+  // real and the bot backs off — even though the lead is still "בסינון".
+  const [humanTakeover, setHumanTakeover] = useState(false);
+  const [takingOver, setTakingOver] = useState(false);
+  const isScreening = leadStatus === LeadStatus.SCREENING_IN_PROGRESS && !humanTakeover;
 
   // Determines if a message is outgoing (from our side: AI or recruiter)
   const isOutgoing = (role: string) => role === "assistant" || role === "recruiter";
+
+  async function takeOver() {
+    setTakingOver(true);
+    try {
+      const res = await fetch(`/api/leads/${leadId}/takeover`, { method: "POST" });
+      if (res.ok) setHumanTakeover(true);
+    } finally {
+      setTakingOver(false);
+    }
+  }
 
   const fetchMessages = useCallback(async () => {
     // Server-side: only conversations this recruiter may see (business
@@ -81,6 +95,7 @@ export function ChatHistory({
       } else {
         setMessages((data.messages as Message[]) ?? []);
         if (typeof data.canSend === "boolean") setCanSend(data.canSend);
+        if (typeof data.needsHumanAttention === "boolean") setHumanTakeover(data.needsHumanAttention);
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : "שגיאה בטעינת ההודעות");
@@ -312,6 +327,17 @@ export function ChatHistory({
               </Link>
             </span>
           )}
+        </div>
+      )}
+
+      {/* Take-over bar: in screening the box only SIMULATES the candidate.
+          A recruiter who wants to message for real takes over here. */}
+      {canSend && isScreening && (
+        <div className="flex items-center justify-between gap-2 px-4 py-2 bg-amber-50 border-t border-amber-100 text-xs text-amber-800">
+          <span>הבוט מנהל את הסינון — התיבה מסמלצת מועמד. כדי לכתוב למועמד/ת באמת:</span>
+          <Button onClick={takeOver} disabled={takingOver} size="sm" variant="outline" className="h-7 px-3 text-xs flex-shrink-0">
+            {takingOver ? "..." : "קח שליטה"}
+          </Button>
         </div>
       )}
 

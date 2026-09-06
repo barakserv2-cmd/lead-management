@@ -31,9 +31,19 @@ export async function GET(
 
   const { data, error } = await q;
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  // human-takeover flag: when a recruiter owns the conversation the chat box
+  // sends for real (not the screening simulator) and the bot backs off.
+  const { data: leadRow } = await admin
+    .from("leads")
+    .select("needs_human_attention")
+    .eq("id", id)
+    .maybeSingle();
+
   return NextResponse.json({
     messages: data ?? [],
     scope: scope.all ? "all" : "own",
     canSend: scope.canSend,
+    needsHumanAttention: leadRow?.needs_human_attention ?? false,
   });
 }
