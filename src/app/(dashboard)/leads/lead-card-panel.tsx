@@ -271,6 +271,23 @@ export function LeadCardPanel({ lead, open, onOpenChange, recruiterNames = {} }:
           </div>
         )}
 
+        {/* גובגט is the first responder. While it owns a fresh lead (and hasn't
+            escalated), tell recruiters to hold off so they don't pre-empt it —
+            they get the lead when it's ready for an interview or on escalation. */}
+        {!lead.needs_human_attention && !lead.needs_attention &&
+          (lead.handled_by === "gubget@eilatjobs.com" || !lead.handled_by) &&
+          ["NEW_LEAD", "CONTACTED", "SCREENING_IN_PROGRESS", "FIT_FOR_INTERVIEW"].includes(lead.status) && (
+          <div className="mx-6 mt-5 -mb-1 p-4 rounded-xl bg-sky-50 border-2 border-sky-200 flex items-start gap-3">
+            <span className="text-xl leading-none shrink-0 mt-0.5">🤖</span>
+            <div className="flex-1 min-w-0">
+              <div className="text-sm font-semibold text-sky-800">גובגט מטפלת בליד</div>
+              <div className="text-sm text-sky-700 mt-0.5">
+                אין צורך ליזום מגע — גובגט עונה ומסננת, ותעביר אליכם כשהמועמד/ת מוכן/ה לראיון או אם צריך התערבות.
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Needs-attention banner — set by the WhatsApp NLU.
             Suppressed when the screening agent has already escalated:
             the bigger Phase-4 banner above supersedes it and the bot is stopped. */}
