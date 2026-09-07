@@ -23,19 +23,30 @@ export async function GET(req: NextRequest) {
   const db = getAdmin();
   const { data: jobs, error } = await db
     .from("jobs")
-    .select("id, title, location, pay_rate, requirements, notes, needed_count")
+    .select("id, title, location, pay_rate, requirements, notes, needed_count, client_id")
     .eq("status", "Open")
     .limit(2000);
   if (error) return NextResponse.json({ ok: false, error: error.message }, { status: 500 });
 
-  const mapped = (jobs ?? []).map((j) => ({
-    external_ref: j.id,
-    title: j.title,
-    city: j.location || "לא צוין",
-    role_type: j.title,
-    salary_range: j.pay_rate ? { min: j.pay_rate } : {},
-    requirements: { details: j.notes || "", needed: j.needed_count ?? null },
-  }));
+  // employer context per job — gubget should know which client + where, like a recruiter
+  const { data: clients } = await db.from("clients").select("id, name, city");
+  const clientMap = new Map((clients ?? []).map((c) => [c.id, c]));
+
+  const mapped = (jobs ?? []).map((j) => {
+    const client = j.client_id ? clientMap.get(j.client_id) : null;
+    return {
+      external_ref: j.id,
+      title: j.title,
+      city: j.location || client?.city || "לא צוין",
+      role_type: j.title,
+      salary_range: j.pay_rate ? { min: j.pay_rate } : {},
+      requirements: {
+        details: j.notes || "",
+        needed: j.needed_count ?? null,
+        employer: client?.name ?? null,
+      },
+    };
+  });
 
   try {
     const res = await fetch(`${url}/api/v1/bridge/jobs`, {
