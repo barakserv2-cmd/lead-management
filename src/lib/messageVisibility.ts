@@ -11,7 +11,7 @@
 // ============================================================
 
 import { createClient as createServerClient } from "@supabase/supabase-js";
-import { businessAccount, getAccountForEmail } from "@/lib/whatsappService";
+import { getAccountForEmail } from "@/lib/whatsappService";
 
 const ADMIN_ROLE = "אדמין";
 
@@ -71,12 +71,13 @@ export async function getMessageScope(
 export function scopeFilter(scope: MessageScope): string | null {
   if (scope.all) return null;
   const parts: string[] = [];
-  const biz = businessAccount().instanceId;
   for (const i of scope.instances) {
     parts.push(`via_instance.eq.${i}`);
-    // legacy rows (before stamping) all ran on the default env instance
-    if (i === biz) parts.push("via_instance.is.null");
   }
-  // nothing matches → impossible predicate
-  return parts.length ? parts.join(",") : "id.eq.00000000-0000-0000-0000-000000000000";
+  // House conversations — the business line, גובגט (the machine), and legacy
+  // rows — carry no personal-instance stamp (via_instance = null). They are
+  // shared with every recruiter; only a recruiter's OWN personal number stays
+  // private to them.
+  parts.push("via_instance.is.null");
+  return parts.join(",");
 }
