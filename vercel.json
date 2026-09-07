@@ -26,6 +26,10 @@
     {
       "path": "/api/cron/sync-jobs",
       "schedule": "0 */2 * * *"
+    },
+    {
+      "path": "/api/cron/sync-new-leads",
+      "schedule": "* * * * *"
     }
   ]
 }
