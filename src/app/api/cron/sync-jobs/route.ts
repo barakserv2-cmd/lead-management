@@ -1,0 +1,51 @@
+import { NextRequest, NextResponse } from "next/server";
+import { createClient } from "@supabase/supabase-js";
+
+// Push v1's OPEN jobs to גובגט so it screens against the real, current set.
+// Guarded by CRON_SECRET. Uses MACHINE_INGEST_URL + MACHINE_INGEST_KEY
+// (already configured for the leads bridge).
+
+function getAdmin() {
+  return createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!);
+}
+function isAuthorized(req: NextRequest): boolean {
+  const secret = process.env.CRON_SECRET;
+  if (!secret) return true;
+  return (req.headers.get("authorization") ?? "") === `Bearer ${secret}`;
+}
+
+export async function GET(req: NextRequest) {
+  if (!isAuthorized(req)) return NextResponse.json({ ok: false, error: "unauthorized" }, { status: 401 });
+  const url = process.env.MACHINE_INGEST_URL;
+  const key = process.env.MACHINE_INGEST_KEY;
+  if (!url || !key) return NextResponse.json({ ok: false, error: "machine bridge not configured" });
+
+  const db = getAdmin();
+  const { data: jobs, error } = await db
+    .from("jobs")
+    .select("id, title, location, pay_rate, requirements, notes, needed_count")
+    .eq("status", "Open")
+    .limit(2000);
+  if (error) return NextResponse.json({ ok: false, error: error.message }, { status: 500 });
+
+  const mapped = (jobs ?? []).map((j) => ({
+    external_ref: j.id,
+    title: j.title,
+    city: j.location || "לא צוין",
+    role_type: j.title,
+    salary_range: j.pay_rate ? { min: j.pay_rate } : {},
+    requirements: { details: j.notes || "", needed: j.needed_count ?? null },
+  }));
+
+  try {
+    const res = await fetch(`${url}/api/v1/bridge/jobs`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "x-ingest-key": key },
+      body: JSON.stringify({ jobs: mapped }),
+    });
+    const body = await res.json().catch(() => ({}));
+    return NextResponse.json({ ok: res.ok, pushed: mapped.length, machine: body });
+  } catch (e) {
+    return NextResponse.json({ ok: false, error: (e as Error).message }, { status: 502 });
+  }
+}
