@@ -24,7 +24,15 @@ type Body = {
   messages?: InMsg[];
   escalation?: { reason?: string } | null; // raise the human-attention flag
   note?: string; // a distilled recruiter-style note → lead_events
+  // interview booked through גובגט — naive Israel wall-clock "YYYY-MM-DDTHH:mm"
+  // (no Z), the same convention v1's own self-booking writes. Without this the
+  // lead never lands on the ראיונות board and is lost.
+  interviewAt?: string;
+  interviewType?: "phone" | "in_person" | "video";
 };
+
+// accept exactly the naive wall-clock shape v1 stores (YYYY-MM-DDTHH:mm[:ss])
+const INTERVIEW_AT_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2})?$/;
 
 export async function POST(req: NextRequest) {
   const key = req.headers.get("x-machine-key");
@@ -123,6 +131,17 @@ export async function POST(req: NextRequest) {
     }
   }
 
+  // 3b. Interview date — write it whenever גובגט booked a slot, so the lead
+  //     appears on the ראיונות board (which requires interview_date IS NOT
+  //     NULL). Stored naive, exactly as v1's own self-booking does.
+  let interviewSet = false;
+  if (body.interviewAt && INTERVIEW_AT_RE.test(body.interviewAt)) {
+    const patch: Record<string, unknown> = { interview_date: body.interviewAt };
+    if (body.interviewType) patch.interview_type = body.interviewType;
+    const { error: ivErr } = await db.from("leads").update(patch).eq("id", leadId);
+    if (!ivErr) interviewSet = true;
+  }
+
   // 4. Human-attention flag — surfaces a red banner on the lead so recruiters
   //    (not just an admin phone) see they need to step in.
   let escalated = false;
@@ -151,5 +170,5 @@ export async function POST(req: NextRequest) {
     if (!nErr) noted = true;
   }
 
-  return NextResponse.json({ ok: true, leadId, appended, statusChanged, escalated, noted }, { status: 200 });
+  return NextResponse.json({ ok: true, leadId, appended, statusChanged, interviewSet, escalated, noted }, { status: 200 });
 }
