@@ -14,6 +14,7 @@ import {
   Megaphone,
   Settings,
   MessageSquareWarning,
+  Gauge,
 } from "lucide-react";
 
 const NAV_ITEMS = [
@@ -26,6 +27,7 @@ const NAV_ITEMS = [
   { href: "/campaigns", label: "אקסטרות", icon: CalendarDays },
   { href: "/publishing", label: "פרסום בפייסבוק", icon: Megaphone },
   { href: "/reports", label: "דוחות", icon: BarChart3 },
+  { href: "/autonomy", label: "מד אוטונומיה", icon: Gauge },
   { href: "/feedback", label: "דיווח בעיות", icon: MessageSquareWarning },
   { href: "/settings", label: "הגדרות", icon: Settings },
 ];
