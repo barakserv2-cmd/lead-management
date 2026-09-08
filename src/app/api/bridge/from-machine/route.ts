@@ -114,9 +114,19 @@ export async function POST(req: NextRequest) {
     appended++;
   }
 
-  // 3. Move status (validateTransition currently gates on validity only)
+  // 3. Move status (validateTransition currently gates on validity only).
+  //    Guard: never regress a lead that already progressed past the interview
+  //    (or reached a terminal outcome) back to INTERVIEW_BOOKED — the interview
+  //    reconciliation cron re-pushes INTERVIEW_BOOKED for every booked slot, and
+  //    without this an ARRIVED/HIRED candidate would be dragged backwards.
+  const POST_OR_TERMINAL = new Set([
+    "ARRIVED", "HIRED", "STARTED", "NO_SHOW", "NOT_ACCEPTED",
+    "REJECTED", "LOST_CONTACT", "NOT_SUITABLE", "EMPLOYMENT_ENDED",
+  ]);
   let statusChanged = false;
-  if (body.status && isValidStatus(body.status) && body.status !== currentStatus) {
+  const wouldRegressToBooked =
+    body.status === "INTERVIEW_BOOKED" && POST_OR_TERMINAL.has(currentStatus ?? "");
+  if (body.status && isValidStatus(body.status) && body.status !== currentStatus && !wouldRegressToBooked) {
     const target = body.status as LeadStatusValue;
     const { error: upErr } = await db.from("leads").update({ status: target }).eq("id", leadId);
     if (!upErr) {
