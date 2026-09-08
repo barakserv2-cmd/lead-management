@@ -16,6 +16,7 @@ import {
   MessageSquareWarning,
   Gauge,
   Radar,
+  ClipboardList,
 } from "lucide-react";
 
 const NAV_ITEMS = [
@@ -30,6 +31,7 @@ const NAV_ITEMS = [
   { href: "/reports", label: "דוחות", icon: BarChart3 },
   { href: "/autonomy", label: "מד אוטונומיה", icon: Gauge },
   { href: "/channels", label: "ביצועי ערוצים", icon: Radar },
+  { href: "/survey", label: "שאלון משוב", icon: ClipboardList },
   { href: "/feedback", label: "דיווח בעיות", icon: MessageSquareWarning },
   { href: "/settings", label: "הגדרות", icon: Settings },
 ];
