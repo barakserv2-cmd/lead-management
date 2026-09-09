@@ -22,7 +22,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { getLeadNotes, updateLeadNotes, updateLeadDetails } from "./actions";
+import { getLeadNotes, updateLeadDetails } from "./actions";
+import { saveLeadNotes } from "@/lib/leadNotesClient";
 import { ConversationSheet } from "./[id]/conversation-sheet";
 import type { Lead } from "@/types/leads";
 import {
@@ -164,14 +165,16 @@ export function LeadSheet({
   const sourceColor = SOURCE_COLORS[lead.source] ?? "bg-gray-100 text-gray-600";
 
   async function handleSaveNotes() {
+    if (loading) return; // never save before the real notes have loaded
     setSaving(true);
-    const result = await updateLeadNotes(lead!.id, notes);
+    const result = await saveLeadNotes(lead!.id, notes);
     setSaving(false);
     if (result.error) {
       toast.error("שגיאה בשמירת ההערות");
-    } else {
-      toast.success("ההערות נשמרו!");
+      return;
     }
+    if (result.notes !== undefined) setNotes(result.notes); // re-sync to what's stored
+    toast.success(result.skipped === "empty_ignored" ? "הערות ריקות לא נשמרו — הקיימות נשמרו" : "ההערות נשמרו!");
   }
 
   function openEditDialog() {

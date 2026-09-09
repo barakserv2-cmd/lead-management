@@ -25,8 +25,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { saveLeadNotes } from "@/lib/leadNotesClient";
 import {
-  updateLeadNotes,
   updateLeadPreferences,
   updateLeadDetails,
   getStatusHistory,
@@ -311,11 +311,13 @@ export function LeadDetailDrawer({
   }
 
   async function handleSaveNotes() {
+    if (notesLoading) return; // never save before the real notes have loaded
     setSavingNotes(true);
-    const result = await updateLeadNotes(lead.id, notes);
+    const result = await saveLeadNotes(lead.id, notes);
     setSavingNotes(false);
-    if (result.error) toast.error("שגיאה בשמירה");
-    else toast.success("הערות נשמרו!");
+    if (result.error) { toast.error("שגיאה בשמירה"); return; }
+    if (result.notes !== undefined) setNotes(result.notes); // re-sync to what's stored
+    toast.success(result.skipped === "empty_ignored" ? "הערות ריקות לא נשמרו — הקיימות נשמרו" : "הערות נשמרו!");
   }
 
   async function handleSavePreferences() {

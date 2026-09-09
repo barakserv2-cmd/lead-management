@@ -26,12 +26,12 @@ import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import {
-  updateLeadNotes,
   updateLeadPreferences,
   updateLeadDetails,
   getStatusHistory,
   normalizeEmployer,
 } from "../actions";
+import { saveLeadNotes } from "@/lib/leadNotesClient";
 import { STATUS_COLORS as SM_COLORS, STATUS_LABELS, type LeadStatusValue } from "@/lib/stateMachine";
 
 function getStatusColorClasses(status: string): string {
@@ -424,10 +424,11 @@ export function LeadDetail({
 
   async function handleSaveNotes() {
     setSavingNotes(true);
-    const result = await updateLeadNotes(lead.id, notes);
+    const result = await saveLeadNotes(lead.id, notes);
     setSavingNotes(false);
-    if (result.error) toast.error("שגיאה בשמירה");
-    else toast.success("הערות נשמרו!");
+    if (result.error) { toast.error("שגיאה בשמירה"); return; }
+    if (result.notes !== undefined) setNotes(result.notes); // re-sync to what's stored
+    toast.success(result.skipped === "empty_ignored" ? "הערות ריקות לא נשמרו — הקיימות נשמרו" : "הערות נשמרו!");
   }
 
   async function handleSavePreferences() {
