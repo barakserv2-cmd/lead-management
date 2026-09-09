@@ -179,6 +179,17 @@ async function handleFetchEmails(req: NextRequest) {
           experience = aiResult.experience;
           age = aiResult.age;
           confidence = aiResult.confidence;
+
+          // AllJobs sometimes sends a "bare" application — name only, no
+          // phone/city/CV — and routes contact through its own relay. Nothing
+          // to parse; tell the recruiter exactly how to reach the candidate so
+          // the lead isn't a dead end sitting in "מספר לא תקין".
+          if (!phone && /alljobs/i.test(`${email.from} ${email.subject}`)) {
+            notes =
+              "אולג'ובס לא העביר טלפון במייל (מועמדות ללא פרטי קשר). " +
+              "לפנייה: 'השב' למייל המקורי בתיבת barakserv2 (עובר דרך מערכת AllJobs), " +
+              "או לפתוח את המועמד ב'ניהול מועמדים' באולג'ובס ולבקש טלפון.";
+          }
         }
 
         // 2d. Check for duplicate by phone number
