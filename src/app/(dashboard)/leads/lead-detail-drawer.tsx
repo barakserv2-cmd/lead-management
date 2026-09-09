@@ -25,9 +25,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { saveLeadNotes } from "@/lib/leadNotesClient";
+import { saveLeadNotes, saveLeadPreferences } from "@/lib/leadNotesClient";
 import {
-  updateLeadPreferences,
   updateLeadDetails,
   getStatusHistory,
   getLeadNotes,
@@ -322,14 +321,15 @@ export function LeadDetailDrawer({
 
   async function handleSavePreferences() {
     setSavingPrefs(true);
-    const result = await updateLeadPreferences(lead.id, {
-      ...prefs,
+    const result = await saveLeadPreferences(lead.id, {
       client_preferences: clientPrefs,
       past_issues: pastIssues,
     });
     setSavingPrefs(false);
-    if (result.error) toast.error("שגיאה בשמירה");
-    else toast.success("העדפות נשמרו!");
+    if (result.error) { toast.error("שגיאה בשמירה"); return; }
+    const p = (result.preferences ?? {}) as Record<string, string>;
+    if (result.preferences) { setClientPrefs(p.client_preferences ?? ""); setPastIssues(p.past_issues ?? ""); }
+    toast.success("העדפות נשמרו!");
   }
 
   const contactFields = [

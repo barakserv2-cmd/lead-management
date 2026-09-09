@@ -22,3 +22,26 @@ export async function saveLeadNotes(
     return { error: e instanceof Error ? e.message : "שגיאת רשת" };
   }
 }
+
+/**
+ * Save lead preferences via the robust fetch API. Send only the keys you edit —
+ * the server merges them into the stored object, so unspecified keys survive.
+ * Returns the merged preferences so the caller can re-sync.
+ */
+export async function saveLeadPreferences(
+  leadId: string,
+  preferences: Record<string, unknown>
+): Promise<{ error: string | null; preferences?: Record<string, unknown> }> {
+  try {
+    const res = await fetch(`/api/leads/${leadId}/preferences`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ preferences }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) return { error: data.error ?? "שגיאה בשמירה" };
+    return { error: null, preferences: data.preferences };
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : "שגיאת רשת" };
+  }
+}
