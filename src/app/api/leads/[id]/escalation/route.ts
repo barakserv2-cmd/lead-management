@@ -30,21 +30,36 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
   const { data: lead } = await db.from("leads").select("id, phone, name").eq("id", id).maybeSingle();
   if (!lead) return NextResponse.json({ error: "הליד לא נמצא" }, { status: 404 });
 
+  const GUBGET_EMAIL = "gubget@eilatjobs.com";
+  const clearFlag = { needs_human_attention: false, human_attention_reason: null, human_attention_raised_at: null };
+
   if (action === "release") {
     // must confirm Gubget actually un-froze before we clear the flag
     const ok = await setMachineConversationMode(lead.phone, "bot");
     if (!ok) {
       return NextResponse.json({ error: "שחרור גובגט נכשל — נסו שוב" }, { status: 502 });
     }
+    // Gubget owns the lead again: un-pause and hand ownership back so the
+    // card's "גובגט מטפלת" banner reflects reality.
+    await db
+      .from("leads")
+      .update({ ...clearFlag, bot_paused: false, handled_by: GUBGET_EMAIL })
+      .eq("id", id);
   } else {
     // takeover: keep Gubget frozen (best-effort — it's already in human mode)
     await setMachineConversationMode(lead.phone, "human");
+    // The recruiter who clicked now owns the lead — otherwise handled_by stays
+    // "gubget" and the card would keep claiming Gubget is handling it.
+    await db
+      .from("leads")
+      .update({
+        ...clearFlag,
+        bot_paused: true,
+        handled_by: user.email ?? undefined,
+        handled_at: new Date().toISOString(),
+      })
+      .eq("id", id);
   }
-
-  await db
-    .from("leads")
-    .update({ needs_human_attention: false, human_attention_reason: null, human_attention_raised_at: null })
-    .eq("id", id);
 
   await db
     .from("lead_events")

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/api-auth";
 import { normalizePhone } from "@/lib/phone";
-import { isValidStatus, STATUS_LABELS, type LeadStatusValue } from "@/lib/stateMachine";
+import { isValidStatus, validateTransition, STATUS_LABELS, type LeadStatusValue } from "@/lib/stateMachine";
 
 /**
  * POST /api/bridge/from-machine — the autonomous machine ("גובגט") reports
@@ -29,6 +29,9 @@ type Body = {
   // lead never lands on the ראיונות board and is lost.
   interviewAt?: string;
   interviewType?: "phone" | "in_person" | "video";
+  // 0-100 overall screening score from גובגט's verdict — required by the
+  // state machine for an automated move to FIT_FOR_INTERVIEW.
+  screeningScore?: number;
 };
 
 // accept exactly the naive wall-clock shape v1 stores (YYYY-MM-DDTHH:mm[:ss])
@@ -55,7 +58,7 @@ export async function POST(req: NextRequest) {
   // 1. Upsert the lead by phone
   const { data: existing } = await db
     .from("leads")
-    .select("id, name, status, handled_by")
+    .select("id, name, status, handled_by, interview_date")
     .eq("phone", phone)
     .maybeSingle();
 
@@ -114,30 +117,44 @@ export async function POST(req: NextRequest) {
     appended++;
   }
 
-  // 3. Move status (validateTransition currently gates on validity only).
-  //    Guard: never regress a lead that already progressed past the interview
-  //    (or reached a terminal outcome) back to INTERVIEW_BOOKED — the interview
-  //    reconciliation cron re-pushes INTERVIEW_BOOKED for every booked slot, and
-  //    without this an ARRIVED/HIRED candidate would be dragged backwards.
-  const POST_OR_TERMINAL = new Set([
-    "ARRIVED", "HIRED", "STARTED", "NO_SHOW", "NOT_ACCEPTED",
-    "REJECTED", "LOST_CONTACT", "NOT_SUITABLE", "EMPLOYMENT_ENDED",
-  ]);
+  // 3. Move status — through the state machine, as actor "machine". That
+  //    scope is what keeps the interview-reconciliation cron (which re-pushes
+  //    INTERVIEW_BOOKED for every booked slot) from dragging an ARRIVED/HIRED
+  //    candidate backwards, and keeps גובגט from reopening a human's closure.
   let statusChanged = false;
-  const wouldRegressToBooked =
-    body.status === "INTERVIEW_BOOKED" && POST_OR_TERMINAL.has(currentStatus ?? "");
-  if (body.status && isValidStatus(body.status) && body.status !== currentStatus && !wouldRegressToBooked) {
+  let statusBlocked: string | null = null;
+  const validInterviewAt = !!(body.interviewAt && INTERVIEW_AT_RE.test(body.interviewAt));
+  const screeningScore =
+    typeof body.screeningScore === "number" && body.screeningScore >= 0 && body.screeningScore <= 100
+      ? Math.round(body.screeningScore)
+      : null;
+  if (body.status && isValidStatus(body.status) && body.status !== currentStatus) {
     const target = body.status as LeadStatusValue;
-    const { error: upErr } = await db.from("leads").update({ status: target }).eq("id", leadId);
-    if (!upErr) {
-      statusChanged = true;
-      await db.from("lead_status_history").insert({
-        lead_id: leadId,
-        from_status: isValidStatus(currentStatus ?? "") ? currentStatus : null,
-        to_status: target,
-        changed_by: GUBGET_EMAIL,
-        notes: `עדכון אוטומטי מגובגט (${STATUS_LABELS[target] ?? target})`,
-      });
+    const from = isValidStatus(currentStatus ?? "") ? (currentStatus as LeadStatusValue) : null;
+    const check = from
+      ? validateTransition(from, target, {
+          actor: "machine",
+          screening_score: screeningScore,
+          interview_date: validInterviewAt ? body.interviewAt : existing?.interview_date ?? null,
+          human_approval: false,
+        })
+      : { valid: true };
+    if (!check.valid) {
+      statusBlocked = check.error ?? "blocked";
+    } else {
+      const patch: Record<string, unknown> = { status: target };
+      if (target === "FIT_FOR_INTERVIEW" && screeningScore != null) patch.screening_score = screeningScore;
+      const { error: upErr } = await db.from("leads").update(patch).eq("id", leadId);
+      if (!upErr) {
+        statusChanged = true;
+        await db.from("lead_status_history").insert({
+          lead_id: leadId,
+          from_status: from,
+          to_status: target,
+          changed_by: GUBGET_EMAIL,
+          notes: `עדכון אוטומטי מגובגט (${STATUS_LABELS[target] ?? target})`,
+        });
+      }
     }
   }
 
@@ -145,7 +162,7 @@ export async function POST(req: NextRequest) {
   //     appears on the ראיונות board (which requires interview_date IS NOT
   //     NULL). Stored naive, exactly as v1's own self-booking does.
   let interviewSet = false;
-  if (body.interviewAt && INTERVIEW_AT_RE.test(body.interviewAt)) {
+  if (validInterviewAt && body.interviewAt) {
     const patch: Record<string, unknown> = { interview_date: body.interviewAt };
     if (body.interviewType) patch.interview_type = body.interviewType;
     const { error: ivErr } = await db.from("leads").update(patch).eq("id", leadId);
@@ -162,6 +179,7 @@ export async function POST(req: NextRequest) {
         needs_human_attention: true,
         human_attention_reason: body.escalation.reason,
         human_attention_raised_at: new Date().toISOString(),
+        bot_paused: true, // Gubget froze itself on escalation — stays paused until a recruiter releases it
       })
       .eq("id", leadId);
     if (!attErr) escalated = true;
@@ -180,5 +198,8 @@ export async function POST(req: NextRequest) {
     if (!nErr) noted = true;
   }
 
-  return NextResponse.json({ ok: true, leadId, appended, statusChanged, interviewSet, escalated, noted }, { status: 200 });
+  return NextResponse.json(
+    { ok: true, leadId, appended, statusChanged, statusBlocked, interviewSet, escalated, noted },
+    { status: 200 }
+  );
 }

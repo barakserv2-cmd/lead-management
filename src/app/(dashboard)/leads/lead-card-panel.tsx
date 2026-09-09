@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import type { Lead } from "@/types/leads";
 import { STATUS_LABELS, STATUS_COLORS } from "@/lib/stateMachine";
@@ -18,6 +19,51 @@ import { StatusSelect } from "./status-select";
 import { claimLead, releaseLead } from "@/lib/actions/claimLead";
 import { clearLeadAttention } from "@/lib/actions/clearAttention";
 import { LeadDocumentsSection } from "./lead-documents-section";
+
+/**
+ * Shown while Gubget is frozen for this lead after a recruiter took over
+ * (bot_paused, no open escalation). The only way to hand the conversation
+ * back to Gubget from the card — it calls the same release action as the
+ * escalations tab and only clears once the machine confirms it un-froze.
+ */
+function GubgetPausedBanner({ leadId, handledBy }: { leadId: string; handledBy: string | null }) {
+  const router = useRouter();
+  const [busy, setBusy] = useState(false);
+  async function handBack() {
+    setBusy(true);
+    try {
+      const res = await fetch(`/api/leads/${leadId}/escalation`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "release" }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        toast.error(data.error ?? "החזרה לגובגט נכשלה");
+        return;
+      }
+      toast.success("הוחזר לגובגט — היא תמשיך את השיחה");
+      router.refresh();
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <div className="mx-6 mt-5 -mb-1 p-4 rounded-xl bg-amber-50 border-2 border-amber-200 flex items-start gap-3">
+      <span className="text-xl leading-none shrink-0 mt-0.5">⏸️</span>
+      <div className="flex-1 min-w-0">
+        <div className="text-sm font-semibold text-amber-900">גובגט מוקפאת — הליד בטיפול ידני</div>
+        <div className="text-sm text-amber-800 mt-0.5">
+          {handledBy ? `בטיפול של ${handledBy.split("@")[0]}. ` : ""}
+          גובגט לא תענה למועמד/ת עד שתחזירו לה את השיחה.
+        </div>
+      </div>
+      <Button size="sm" variant="outline" disabled={busy} onClick={handBack} className="shrink-0 border-amber-300 text-amber-900 hover:bg-amber-100">
+        {busy ? "..." : "החזר לגובגט"}
+      </Button>
+    </div>
+  );
+}
 import { LeadEventsSection } from "./lead-events-section";
 import { RecruitmentInfoSection } from "./recruitment-info-section";
 import { LeadNotesEditor } from "./lead-notes-editor";
@@ -271,10 +317,15 @@ export function LeadCardPanel({ lead, open, onOpenChange, recruiterNames = {} }:
           </div>
         )}
 
+        {/* Taken over: Gubget frozen, no open escalation → offer the hand-back */}
+        {!lead.needs_human_attention && lead.bot_paused && (
+          <GubgetPausedBanner leadId={lead.id} handledBy={lead.handled_by} />
+        )}
+
         {/* גובגט is the first responder. While it owns a fresh lead (and hasn't
             escalated), tell recruiters to hold off so they don't pre-empt it —
             they get the lead when it's ready for an interview or on escalation. */}
-        {!lead.needs_human_attention && !lead.needs_attention &&
+        {!lead.needs_human_attention && !lead.needs_attention && !lead.bot_paused &&
           (lead.handled_by === "gubget@eilatjobs.com" || !lead.handled_by) &&
           ["NEW_LEAD", "CONTACTED", "SCREENING_IN_PROGRESS", "FIT_FOR_INTERVIEW"].includes(lead.status) && (
           <div className="mx-6 mt-5 -mb-1 p-4 rounded-xl bg-sky-50 border-2 border-sky-200 flex items-start gap-3">

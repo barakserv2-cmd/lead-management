@@ -62,6 +62,8 @@ export interface Lead {
   // ── Phase 4: Recruitment Agent v2 ───────────────────────────
   needs_human_attention: boolean;
   human_attention_reason: string | null;
+  /** Gubget is frozen for this lead (escalated / taken over) until a recruiter hands it back */
+  bot_paused?: boolean;
   human_attention_raised_at: string | null;
   screening_motivation_score: number | null;
   screening_fit_score: number | null;
