@@ -11,10 +11,12 @@ import { GuaranteeContent } from "./guarantee-content";
 import { computeAnalytics, computeFinance } from "@/lib/analytics";
 import { computeGuaranteeReport } from "@/lib/postPlacement";
 import { isFinanceUser } from "@/lib/finance";
+import { computeSourceFolders } from "@/lib/sourceFolders";
+import { FoldersView } from "../leads/folders-view";
 
 export const dynamic = "force-dynamic";
 
-type Tab = "hired" | "advances" | "transfers" | "funnel" | "finance" | "guarantee";
+type Tab = "hired" | "advances" | "transfers" | "funnel" | "finance" | "guarantee" | "sources";
 
 const TABS: { key: Tab; label: string; icon: string }[] = [
   { key: "hired", label: "דוח מועסקים", icon: "👷" },
@@ -22,6 +24,7 @@ const TABS: { key: Tab; label: string; icon: string }[] = [
   { key: "transfers", label: "דוח העברות בין עבודות", icon: "🔁" },
   { key: "funnel", label: "משפך", icon: "📉" },
   { key: "guarantee", label: "אחריות", icon: "🛡️" },
+  { key: "sources", label: "תיקיות לפי גורם גיוס", icon: "📁" },
 ];
 
 /** ברירת מחדל: 30 הימים האחרונים, לפי לוח ישראל. */
@@ -42,7 +45,7 @@ export default async function ReportsPage({
   const authed = await getAuthedUser();
   const financeAllowed = isFinanceUser(authed?.email);
   const tab: Tab =
-    rawTab === "advances" || rawTab === "transfers" || rawTab === "funnel" || rawTab === "guarantee"
+    rawTab === "advances" || rawTab === "transfers" || rawTab === "funnel" || rawTab === "guarantee" || rawTab === "sources"
       ? rawTab
       : rawTab === "finance" && financeAllowed
         ? "finance"
@@ -69,7 +72,10 @@ export default async function ReportsPage({
 
   let content: React.ReactNode;
 
-  if (tab === "funnel") {
+  if (tab === "sources") {
+    const folders = await computeSourceFolders(supabase);
+    content = <FoldersView folders={folders} />;
+  } else if (tab === "funnel") {
     const analytics = await computeAnalytics(supabase, fromIso, toIso);
     content = <FunnelContent data={analytics} from={from} to={to} />;
   } else if (tab === "guarantee") {

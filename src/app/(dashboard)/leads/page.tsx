@@ -8,28 +8,18 @@ import { Pagination } from "./pagination";
 import { AddLeadDialog } from "./add-lead-dialog";
 import { SearchInput } from "./search-input";
 import { FilterBar } from "./filter-bar";
-import { FoldersView, type SourceFolderStats } from "./folders-view";
 import { LeadStatus } from "@/lib/stateMachine";
 import { Suspense } from "react";
 
 const PAGE_SIZE = 50;
 
 // קיבוץ סטטוסים למדדי תיקייה: הצלחה = התקבל / התחיל לעבוד
-const SUCCESS_STATUSES = new Set<string>([LeadStatus.HIRED, LeadStatus.STARTED]);
-const NEW_STATUSES = new Set<string>([LeadStatus.NEW_LEAD]);
-const CLOSED_STATUSES = new Set<string>([
-  LeadStatus.NO_SHOW,
-  LeadStatus.NOT_ACCEPTED,
-  LeadStatus.REJECTED,
-  LeadStatus.LOST_CONTACT,
-  LeadStatus.NOT_SUITABLE,
-]);
 
-// טאבים עליונים: תור עבודה (ברירת מחדל) / תיקיות מדידה / כל הלידים
-function LeadsTabs({ active, newCount }: { active: "queue" | "folders" | "all"; newCount: number }) {
+// טאבים עליונים: תור עבודה (ברירת מחדל) / כל הלידים
+// ("תיקיות לפי גורם גיוס" עברה לדוחות — /reports?tab=sources)
+function LeadsTabs({ active, newCount }: { active: "queue" | "all"; newCount: number }) {
   const tabs = [
     { key: "queue" as const, href: "/leads", label: `חדשים לטיפול${newCount > 0 ? ` (${newCount})` : ""}` },
-    { key: "folders" as const, href: "/leads?view=folders", label: "תיקיות לפי גורם גיוס" },
     { key: "all" as const, href: "/leads?source=__all__", label: "כל הלידים" },
   ];
   return (
@@ -69,7 +59,6 @@ export default async function LeadsPage({
   const sourceParam = params.source ?? null;
   const dateFrom = /^\d{4}-\d{2}-\d{2}$/.test(params.from ?? "") ? params.from! : null;
   const dateTo = /^\d{4}-\d{2}-\d{2}$/.test(params.to ?? "") ? params.to! : null;
-  const viewParam = params.view ?? null;
   const from = (currentPage - 1) * PAGE_SIZE;
   const to = from + PAGE_SIZE - 1;
 
@@ -82,67 +71,6 @@ export default async function LeadsPage({
     .select("*", { count: "exact", head: true })
     .neq("is_candidate", false)
     .eq("status", LeadStatus.NEW_LEAD);
-
-  // ── תצוגת תיקיות (?view=folders) ────────────────────────────
-  // סופרים את כל הלידים לפי מקור וסטטוס — בלי נעילת שיוך, כי זו
-  // תצוגת מדידה, לא תור עבודה.
-  if (!sourceParam && viewParam === "folders") {
-    type Row = { source: string | null; status: string; hired_client: string | null };
-
-    // ספירה + מונה תור במקביל, ואז כל עמודי הסריקה במקביל (לא בטור)
-    const [{ count: newLeadsCount }, { count: totalRows }] = await Promise.all([
-      newCountQuery,
-      supabase.from("leads").select("*", { count: "exact", head: true }).neq("is_candidate", false),
-    ]);
-    const newCount = newLeadsCount ?? 0;
-
-    const pageCount = Math.max(1, Math.ceil((totalRows ?? 0) / 1000));
-    const pages = await Promise.all(
-      Array.from({ length: pageCount }, (_, i) =>
-        supabase
-          .from("leads")
-          .select("source, status, hired_client")
-          .neq("is_candidate", false)
-          .order("id")
-          .range(i * 1000, i * 1000 + 999)
-      )
-    );
-    const rows: Row[] = pages.flatMap((p) => (p.data ?? []) as Row[]);
-
-    const bySource = new Map<string, SourceFolderStats>();
-    for (const row of rows) {
-      const key = row.source?.trim() || "__none__";
-      const label = row.source?.trim() || "ללא מקור";
-      let stats = bySource.get(key);
-      if (!stats) {
-        stats = { key, label, total: 0, newCount: 0, inProgress: 0, success: 0, closed: 0 };
-        bySource.set(key, stats);
-      }
-      stats.total++;
-      // הצלחה = סטטוס התקבל/התחיל, או מעסיק רשום — השמות ההיסטוריות
-      // (ייבוא מצבת) רשומות דרך hired_client בלי מעבר סטטוס.
-      if (SUCCESS_STATUSES.has(row.status) || row.hired_client) stats.success++;
-      else if (NEW_STATUSES.has(row.status)) stats.newCount++;
-      else if (CLOSED_STATUSES.has(row.status)) stats.closed++;
-      else stats.inProgress++;
-    }
-
-    const folders = [...bySource.values()].sort((a, b) => b.total - a.total);
-
-    return (
-      <div>
-        <div className="flex items-center justify-between mb-6">
-          <div>
-            <h1 className="text-2xl font-bold">לידים לפי גורם גיוס</h1>
-            <p className="text-sm text-gray-500 mt-0.5">בחר תיקייה כדי לעבוד על הלידים שבה</p>
-          </div>
-          <AddLeadDialog />
-        </div>
-        <LeadsTabs active="folders" newCount={newCount} />
-        <FoldersView folders={folders} />
-      </div>
-    );
-  }
 
   // ── תור עבודה (ברירת מחדל) או תיקייה בודדת (?source=...) ────
   // תור העבודה: כל הלידים בסטטוס "ממתין לנציג", החדש ביותר ראשון.
@@ -322,7 +250,7 @@ export default async function LeadsPage({
         <div className="flex items-center gap-3">
           {isNamedFolder && (
             <Link
-              href="/leads?view=folders"
+              href="/reports?tab=sources"
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-gray-200 bg-white text-xs font-medium text-gray-600 hover:border-cyan-300 hover:text-cyan-700 transition-colors"
             >
               <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-3.5 h-3.5">
