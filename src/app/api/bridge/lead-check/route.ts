@@ -54,7 +54,9 @@ export async function GET(req: NextRequest) {
     humanOwned,
     status: lead.status,
     lastHumanContactDays,
-    // recruiter took over / escalation open → the machine must stay silent
-    botPaused: !!lead.bot_paused,
+    // recruiter took over / escalation open → the machine must stay silent.
+    // An open red flag counts even if bot_paused was never set (takeovers
+    // from before the flag existed) — a human owns it either way.
+    botPaused: !!(lead.bot_paused || lead.needs_human_attention),
   });
 }
