@@ -11,16 +11,24 @@ import { FilterBar } from "./filter-bar";
 import { LeadStatus } from "@/lib/stateMachine";
 import { InterviewsContent } from "../interviews/interviews-content";
 import { fetchInterviewRows, interviewWindow } from "@/lib/interviewsBoard";
+import { EscalationsView, type EscalationRow } from "./escalations-view";
 import { Suspense } from "react";
 
 const PAGE_SIZE = 50;
 
-// טאבים עליונים: תור עבודה (ברירת מחדל) / ראיון טלפון / כל הלידים
+// טאבים עליונים: תור עבודה (ברירת מחדל) / ראיון טלפון / אסקלציות / כל הלידים
 // ("תיקיות לפי גורם גיוס" עברה לדוחות — /reports?tab=sources)
-function LeadsTabs({ active, newCount }: { active: "queue" | "phone" | "all"; newCount: number }) {
+async function LeadsTabs({ active, newCount }: { active: "queue" | "phone" | "escalations" | "all"; newCount: number }) {
+  // open escalations (Gubget → recruiter handoffs) — surfaced as a live count
+  const { count: escRaw } = await getSupabaseAdmin()
+    .from("leads")
+    .select("*", { count: "exact", head: true })
+    .eq("needs_human_attention", true);
+  const escCount = escRaw ?? 0;
   const tabs = [
     { key: "queue" as const, href: "/leads", label: `חדשים לטיפול${newCount > 0 ? ` (${newCount})` : ""}` },
     { key: "phone" as const, href: "/leads?view=phone", label: "ראיון טלפון" },
+    { key: "escalations" as const, href: "/leads?view=escalations", label: `אסקלציות${escCount > 0 ? ` (${escCount})` : ""}` },
     { key: "all" as const, href: "/leads?source=__all__", label: "כל הלידים" },
   ];
   return (
@@ -33,7 +41,9 @@ function LeadsTabs({ active, newCount }: { active: "queue" | "phone" | "all"; ne
             active === tab.key
               ? "bg-white text-gray-900 shadow-sm"
               : "text-gray-500 hover:text-gray-800"
-          } ${tab.key === "queue" && newCount > 0 && active !== "queue" ? "text-blue-600" : ""}`}
+          } ${tab.key === "queue" && newCount > 0 && active !== "queue" ? "text-blue-600" : ""} ${
+            tab.key === "escalations" && escCount > 0 && active !== "escalations" ? "text-red-600" : ""
+          }`}
         >
           {tab.label}
         </Link>
@@ -73,6 +83,41 @@ export default async function LeadsPage({
     .select("*", { count: "exact", head: true })
     .neq("is_candidate", false)
     .eq("status", LeadStatus.NEW_LEAD);
+
+  // ── טאב "אסקלציות" (?view=escalations) ──────────────────────
+  // כל העברה של גובגט לרכזת (needs_human_attention). גובגט מוקפא עד שהרכזת
+  // לוחצת "קח שליטה" (נשאר מוקפא, היא מטפלת) או "אפשר לגובגט להמשיך" (שחרור).
+  if (!sourceParam && viewParam === "escalations") {
+    const [{ count: newLeadsCount }, { data: escLeads }] = await Promise.all([
+      newCountQuery,
+      supabase
+        .from("leads")
+        .select("id, name, phone, human_attention_reason, human_attention_raised_at")
+        .eq("needs_human_attention", true)
+        .order("human_attention_raised_at", { ascending: false })
+        .limit(500),
+    ]);
+    const escRows: EscalationRow[] = ((escLeads ?? []) as Array<Record<string, unknown>>).map((l) => ({
+      id: l.id as string,
+      name: (l.name as string | null) ?? null,
+      phone: (l.phone as string | null) ?? null,
+      reason: (l.human_attention_reason as string | null) ?? null,
+      raised_at: (l.human_attention_raised_at as string | null) ?? null,
+    }));
+    return (
+      <div>
+        <div className="flex items-center justify-between mb-6">
+          <div>
+            <h1 className="text-2xl font-bold">אסקלציות</h1>
+            <p className="text-sm text-gray-500 mt-0.5">שיחות שגובגט העביר לרכזת — גובגט מוקפא עד שתאשרו לו להמשיך</p>
+          </div>
+          <AddLeadDialog />
+        </div>
+        <LeadsTabs active="escalations" newCount={newLeadsCount ?? 0} />
+        <EscalationsView rows={escRows} />
+      </div>
+    );
+  }
 
   // ── טאב "ראיון טלפון" (?view=phone) ─────────────────────────
   // שיחות סינון טלפוניות שגובגט מתאם — לא בדף "ראיונות" (שם פרונטליים בלבד),
