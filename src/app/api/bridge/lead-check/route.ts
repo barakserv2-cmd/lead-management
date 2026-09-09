@@ -23,7 +23,7 @@ export async function GET(req: NextRequest) {
   const db = getSupabaseAdmin();
   const { data: lead } = await db
     .from("leads")
-    .select("id, status, handled_by, do_not_contact, updated_at, bot_paused")
+    .select("id, status, handled_by, do_not_contact, updated_at, bot_paused, needs_human_attention")
     .eq("phone", phone)
     .maybeSingle();
 
