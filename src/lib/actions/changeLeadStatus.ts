@@ -7,6 +7,7 @@ import {
   type LeadStatusValue,
   isValidStatus,
   validateTransition,
+  actorFromUserId,
   type LeadGuardrailData,
 } from "@/lib/stateMachine";
 import { normalizeEmployerName } from "@/lib/employerNormalization";
@@ -74,10 +75,15 @@ export async function changeLeadStatus(input: ChangeStatusInput): Promise<Change
     return { success: true };
   }
 
-  // 3. Build guardrail data (merge DB data + incoming extra)
+  // 3. Build guardrail data (merge DB data + incoming extra).
+  //    "Human approval" for a hire = a human made the move (the hire dialog
+  //    is human-only), or it was explicitly granted, or it was already on
+  //    the lead. Automated actors can never satisfy it on their own.
+  const actor = actorFromUserId(userId);
   const guardrailData: LeadGuardrailData = {
+    actor,
     screening_score: extra?.screeningScore ?? lead.screening_score,
-    human_approval: extra?.humanApproval ?? lead.human_approval,
+    human_approval: extra?.humanApproval ?? (actor === "human" ? true : lead.human_approval),
     interview_date: extra?.interviewDate ?? lead.interview_date,
   };
 
@@ -147,6 +153,13 @@ export async function changeLeadStatus(input: ChangeStatusInput): Promise<Change
     if (extra?.interviewType) updateData.interview_type = extra.interviewType;
     if (extra?.interviewNotes) updateData.interview_notes = extra.interviewNotes;
     if (extra?.hiredPosition) updateData.hired_position = extra.hiredPosition;
+  }
+
+  // "דחה הגעה" carries the NEW interview date the candidate was moved to, so
+  // the interview stays on the board with its updated time.
+  if (newStatus === LeadStatus.POSTPONED_ARRIVAL) {
+    if (extra?.interviewDate) updateData.interview_date = extra.interviewDate;
+    if (extra?.interviewType) updateData.interview_type = extra.interviewType;
   }
 
   if (newStatus === LeadStatus.FIT_FOR_INTERVIEW && extra?.screeningScore != null) {

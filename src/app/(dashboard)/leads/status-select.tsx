@@ -103,6 +103,7 @@ export function StatusSelect({
   const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(null);
   const [loading, setLoading] = useState(false);
   const [showInterviewDialog, setShowInterviewDialog] = useState(false);
+  const [showPostponeDialog, setShowPostponeDialog] = useState(false);
   const [showHiredDialog, setShowHiredDialog] = useState(false);
   const [showEmploymentEndDialog, setShowEmploymentEndDialog] = useState(false);
   const [showRejectionDialog, setShowRejectionDialog] = useState(false);
@@ -193,6 +194,12 @@ export function StatusSelect({
       return;
     }
 
+    // Intercept POSTPONED_ARRIVAL ("דחה הגעה") — ask for the new interview date
+    if (newStatus === LeadStatus.POSTPONED_ARRIVAL) {
+      setShowPostponeDialog(true);
+      return;
+    }
+
     // Intercept HIRED — open client/date dialog instead
     if (newStatus === LeadStatus.HIRED) {
       setShowHiredDialog(true);
@@ -267,6 +274,29 @@ export function StatusSelect({
       setStatus(LeadStatus.INTERVIEW_BOOKED);
       setSubStatus(null);
       setToast({ message: "ראיון נקבע בהצלחה", type: "success" });
+    }
+  }
+
+  async function handlePostponeConfirm(data: { interviewDate: string; interviewType: "phone" | "in_person" | "video"; designatedRole: string }) {
+    setLoading(true);
+
+    const result = await changeLeadStatus({
+      leadId,
+      newStatus: LeadStatus.POSTPONED_ARRIVAL,
+      userId: "user",
+      notes: "דחה הגעה — נקבע מועד חדש",
+      extra: { interviewDate: data.interviewDate, interviewType: data.interviewType },
+    });
+
+    setLoading(false);
+    setShowPostponeDialog(false);
+
+    if (!result.success) {
+      setToast({ message: result.error ?? "שגיאה בעדכון", type: "error" });
+    } else {
+      setStatus(LeadStatus.POSTPONED_ARRIVAL);
+      setSubStatus(null);
+      setToast({ message: "דחה הגעה — המועד עודכן", type: "success" });
     }
   }
 
@@ -594,6 +624,14 @@ export function StatusSelect({
         open={showInterviewDialog}
         onConfirm={handleInterviewConfirm}
         onCancel={() => setShowInterviewDialog(false)}
+        loading={loading}
+      />
+
+      {/* "דחה הגעה" — pick the new interview date */}
+      <InterviewScheduleDialog
+        open={showPostponeDialog}
+        onConfirm={handlePostponeConfirm}
+        onCancel={() => setShowPostponeDialog(false)}
         loading={loading}
       />
 
