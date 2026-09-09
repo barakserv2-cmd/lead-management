@@ -5,7 +5,7 @@ import type { InterviewReportRow } from "./interviewsXlsx";
 const EXTRA_SOURCE = /אקסטר|excel/i;
 
 export const INTERVIEW_REPORT_SELECT =
-  "name, phone, interview_date, job_title, hired_position, hired_client, interview_notes, rejection_reason, start_date, status, source, preferences";
+  "name, phone, interview_date, postponed_from_date, job_title, hired_position, hired_client, interview_notes, rejection_reason, start_date, status, source, preferences";
 
 export function leadToReportRow(l: Record<string, unknown>): InterviewReportRow {
   const status = l.status as string;

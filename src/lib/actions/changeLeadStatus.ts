@@ -155,10 +155,16 @@ export async function changeLeadStatus(input: ChangeStatusInput): Promise<Change
     if (extra?.hiredPosition) updateData.hired_position = extra.hiredPosition;
   }
 
-  // "דחה הגעה" carries the NEW interview date the candidate was moved to, so
-  // the interview stays on the board with its updated time.
+  // "דחה הגעה" carries the NEW interview date. We keep the ORIGINAL date in
+  // postponed_from_date so the candidate shows on BOTH days (the day they were
+  // meant to arrive and postponed, and the new day) on the board and in the
+  // Excel report.
   if (newStatus === LeadStatus.POSTPONED_ARRIVAL) {
-    if (extra?.interviewDate) updateData.interview_date = extra.interviewDate;
+    if (extra?.interviewDate) {
+      // preserve the first-appointment date only on a real reschedule
+      if (lead.interview_date) updateData.postponed_from_date = lead.interview_date;
+      updateData.interview_date = extra.interviewDate;
+    }
     if (extra?.interviewType) updateData.interview_type = extra.interviewType;
   }
 

@@ -27,6 +27,8 @@ export interface InterviewRow {
   client: string | null;
   recruiter: string | null;
   source: string | null;
+  /** true on the ORIGINAL-date row of a postponed ("דחה הגעה") candidate */
+  postponedOriginal?: boolean;
 }
 
 const TZ = "Asia/Jerusalem";
@@ -408,7 +410,7 @@ export function InterviewsContent({
                 <ul className="divide-y divide-slate-100">
                   {g.rows.map((r) => {
                     return (
-                      <li key={r.id} className="flex items-start gap-3 px-5 py-3 hover:bg-slate-50 transition-colors">
+                      <li key={`${r.id}-${r.interview_date}`} className="flex items-start gap-3 px-5 py-3 hover:bg-slate-50 transition-colors">
                         <span className="text-base font-bold text-slate-900 w-14 shrink-0 tabular-nums pt-0.5">{wallTime(r.interview_date)}</span>
                         <div className="min-w-0 flex-1">
                           <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
@@ -419,6 +421,11 @@ export function InterviewsContent({
                             {r.client && <span className="text-sm text-slate-600">@ {r.client}</span>}
                             {r.interview_type && (
                               <span className="text-xs text-slate-500">{r.interview_type === "video" ? "🎥 וידאו" : r.interview_type === "phone" ? "📞 טלפוני" : "🏢 פרונטלי"}</span>
+                            )}
+                            {r.status === LeadStatus.POSTPONED_ARRIVAL && (
+                              <span className="text-[11px] font-semibold rounded px-1.5 py-0.5 bg-teal-100 text-teal-800">
+                                {r.postponedOriginal ? "דחה הגעה · מועד מקורי" : "דחה הגעה · מועד חדש"}
+                              </span>
                             )}
                           </div>
                           <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1 text-sm text-slate-500">

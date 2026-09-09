@@ -27,17 +27,34 @@ export async function GET(req: NextRequest) {
   const clientFilter = req.nextUrl.searchParams.get("client")?.trim();
 
   const db = getSupabaseAdmin();
-  const { data, error } = await db
-    .from("leads")
-    .select(INTERVIEW_REPORT_SELECT)
-    // interview_date הוא שעון קיר ישראלי עם תווית UTC — גבולות היום באותה מסגרת
-    .gte("interview_date", `${date}T00:00:00Z`)
-    .lte("interview_date", `${date}T23:59:59Z`)
-    .order("interview_date", { ascending: true })
-    .limit(1000);
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  // interview_date הוא שעון קיר ישראלי עם תווית UTC — גבולות היום באותה מסגרת.
+  // שתי שאילתות: מי שהראיון שלו ביום זה, ומי שדחה הגעה והמועד המקורי שלו ביום
+  // זה (postponed_from_date) — כך מועמד דחוי מופיע גם ביום המקורי וגם בחדש.
+  const [{ data: byInterview, error: e1 }, { data: byPostponed, error: e2 }] = await Promise.all([
+    db
+      .from("leads")
+      .select(INTERVIEW_REPORT_SELECT)
+      .gte("interview_date", `${date}T00:00:00Z`)
+      .lte("interview_date", `${date}T23:59:59Z`)
+      .order("interview_date", { ascending: true })
+      .limit(1000),
+    db
+      .from("leads")
+      .select(INTERVIEW_REPORT_SELECT)
+      .not("postponed_from_date", "is", null)
+      .gte("postponed_from_date", `${date}T00:00:00Z`)
+      .lte("postponed_from_date", `${date}T23:59:59Z`)
+      .limit(1000),
+  ]);
+  if (e1 || e2) return NextResponse.json({ error: (e1 ?? e2)!.message }, { status: 500 });
 
-  let rows = ((data ?? []) as Record<string, unknown>[]).map(leadToReportRow);
+  let rows = [
+    ...((byInterview ?? []) as Record<string, unknown>[]).map(leadToReportRow),
+    // original-date rows: render the postpone on its FIRST-appointment day
+    ...((byPostponed ?? []) as Record<string, unknown>[]).map((l) =>
+      leadToReportRow({ ...l, interview_date: l.postponed_from_date, status: "POSTPONED_ARRIVAL" })
+    ),
+  ];
   if (clientFilter) rows = rows.filter((r) => (r.accepted_to ?? "").includes(clientFilter));
 
   const buf = await buildInterviewsWorkbook(date, rows);
