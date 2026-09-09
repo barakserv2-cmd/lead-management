@@ -314,8 +314,31 @@ export function extractEmail(text: string): string | null {
   return null;
 }
 
+/**
+ * AllJobs "bare" applications (no CV summary in the body) still carry the
+ * candidate's phone — only inside the "call / WhatsApp" button links:
+ *   MailDirect/RiderectThanks.aspx?applicationType=phone&phoneNumber=050-4461265
+ * stripHtml discards every href, so the phone vanished and the lead landed as
+ * "מספר לא תקין". Harvest those numbers so the parser sees them as text.
+ */
+export function harvestLinkPhones(html: string): string[] {
+  const out = new Set<string>();
+  const re = /phoneNumber=(\+?972[-\s]?\d{1,2}[-\s]?\d{3}[-\s]?\d{4}|0\d{1,2}[-\s]?\d{3}[-\s]?\d{4})/gi;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(html)) !== null) {
+    const raw = decodeURIComponent(m[1]).replace(/\s+/g, "");
+    // mobiles only (05x / +9725x): the same links also carry AllJobs' own
+    // 077 business line, which must never be attributed to the candidate
+    const digits = raw.replace(/\D/g, "").replace(/^972/, "0");
+    if (/^05\d{8}$/.test(digits)) out.add(raw);
+  }
+  return [...out];
+}
+
 function stripHtml(html: string): string {
-  return html
+  const phones = harvestLinkPhones(html);
+  const phoneLines = phones.length ? "\n" + phones.map((p) => `טלפון: ${p}`).join("\n") + "\n" : "";
+  return (html
     .replace(/<br\s*\/?>/gi, "\n")
     .replace(/<\/?(p|div|tr|li)[^>]*>/gi, "\n")
     .replace(/<[^>]+>/g, " ")
@@ -327,7 +350,7 @@ function stripHtml(html: string): string {
     .replace(/&#39;/g, "'")
     .replace(/\n{3,}/g, "\n\n")
     .replace(/ {2,}/g, " ")
-    .trim();
+    .trim()) + phoneLines;
 }
 
 function decodeBase64Url(data: string): string {
@@ -346,10 +369,15 @@ function extractBodyFromPayload(payload: {
 }): string {
   // If the payload has parts, recurse
   if (payload.parts) {
-    // Prefer text/plain, fall back to text/html
+    // Prefer text/plain, fall back to text/html — but a text/plain part has
+    // no links, and AllJobs hides the candidate's phone inside the HTML
+    // buttons only. Harvest it from the HTML sibling and append it.
+    const htmlPart = payload.parts.find((p) => p.mimeType === "text/html" && p.body?.data);
     for (const part of payload.parts) {
       if (part.mimeType === "text/plain" && part.body?.data) {
-        return decodeBase64Url(part.body.data);
+        const text = decodeBase64Url(part.body.data);
+        const phones = htmlPart?.body?.data ? harvestLinkPhones(decodeBase64Url(htmlPart.body.data)) : [];
+        return phones.length ? `${text}\n${phones.map((p) => `טלפון: ${p}`).join("\n")}\n` : text;
       }
     }
     for (const part of payload.parts) {
