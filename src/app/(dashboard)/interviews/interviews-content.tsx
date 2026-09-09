@@ -110,10 +110,13 @@ const RANGE_LABELS: Record<Range, string> = {
 export function InterviewsContent({
   rows,
   customRange = null,
+  title = "ראיונות",
 }: {
   rows: InterviewRow[];
   /** טווח תאריכים מפורש מה-URL — מחליף את צ'יפי הטווח ואת חלון ברירת המחדל */
   customRange?: { from: string | null; to: string | null } | null;
+  /** כותרת הלוח — "ראיונות" בדף הראיונות, "ראיונות טלפון" בטאב שבלידים */
+  title?: string;
 }) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -213,7 +216,7 @@ export function InterviewsContent({
     <div dir="rtl" className="max-w-6xl">
       <div className="flex flex-wrap items-end justify-between gap-3 mb-5">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">ראיונות</h1>
+          <h1 className="text-2xl font-bold text-slate-900">{title}</h1>
           <p className="text-sm text-slate-500 mt-1">
             <span className="font-semibold text-slate-700">{todayCount}</span> היום ·{" "}
             <span className="font-semibold text-slate-700">{upcomingCount}</span> קרובים · לוח משותף לכל המחלקות

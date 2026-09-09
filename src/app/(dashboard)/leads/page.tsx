@@ -9,17 +9,18 @@ import { AddLeadDialog } from "./add-lead-dialog";
 import { SearchInput } from "./search-input";
 import { FilterBar } from "./filter-bar";
 import { LeadStatus } from "@/lib/stateMachine";
+import { InterviewsContent } from "../interviews/interviews-content";
+import { fetchInterviewRows, interviewWindow } from "@/lib/interviewsBoard";
 import { Suspense } from "react";
 
 const PAGE_SIZE = 50;
 
-// קיבוץ סטטוסים למדדי תיקייה: הצלחה = התקבל / התחיל לעבוד
-
-// טאבים עליונים: תור עבודה (ברירת מחדל) / כל הלידים
+// טאבים עליונים: תור עבודה (ברירת מחדל) / ראיון טלפון / כל הלידים
 // ("תיקיות לפי גורם גיוס" עברה לדוחות — /reports?tab=sources)
-function LeadsTabs({ active, newCount }: { active: "queue" | "all"; newCount: number }) {
+function LeadsTabs({ active, newCount }: { active: "queue" | "phone" | "all"; newCount: number }) {
   const tabs = [
     { key: "queue" as const, href: "/leads", label: `חדשים לטיפול${newCount > 0 ? ` (${newCount})` : ""}` },
+    { key: "phone" as const, href: "/leads?view=phone", label: "ראיון טלפון" },
     { key: "all" as const, href: "/leads?source=__all__", label: "כל הלידים" },
   ];
   return (
@@ -59,6 +60,7 @@ export default async function LeadsPage({
   const sourceParam = params.source ?? null;
   const dateFrom = /^\d{4}-\d{2}-\d{2}$/.test(params.from ?? "") ? params.from! : null;
   const dateTo = /^\d{4}-\d{2}-\d{2}$/.test(params.to ?? "") ? params.to! : null;
+  const viewParam = params.view ?? null;
   const from = (currentPage - 1) * PAGE_SIZE;
   const to = from + PAGE_SIZE - 1;
 
@@ -71,6 +73,32 @@ export default async function LeadsPage({
     .select("*", { count: "exact", head: true })
     .neq("is_candidate", false)
     .eq("status", LeadStatus.NEW_LEAD);
+
+  // ── טאב "ראיון טלפון" (?view=phone) ─────────────────────────
+  // שיחות סינון טלפוניות שגובגט מתאם — לא בדף "ראיונות" (שם פרונטליים בלבד),
+  // אלא כאן, כתור עבודה נפרד לרכזות. אותו לוח כמו ראיונות, מסונן לטלפון.
+  if (!sourceParam && viewParam === "phone") {
+    const [{ count: newLeadsCount }] = await Promise.all([newCountQuery]);
+    const { rangeStart, rangeEnd, isCustom } = interviewWindow(dateFrom, dateTo);
+    const phoneRows = await fetchInterviewRows(supabase, { rangeStart, rangeEnd, isCustom, typeMode: "phone" });
+    return (
+      <div>
+        <div className="flex items-center justify-between mb-6">
+          <div>
+            <h1 className="text-2xl font-bold">ראיון טלפון</h1>
+            <p className="text-sm text-gray-500 mt-0.5">שיחות סינון טלפוניות שגובגט תיאם — לביצוע ע"י הרכזות</p>
+          </div>
+          <AddLeadDialog />
+        </div>
+        <LeadsTabs active="phone" newCount={newLeadsCount ?? 0} />
+        <InterviewsContent
+          rows={phoneRows}
+          title="ראיונות טלפון"
+          customRange={isCustom ? { from: dateFrom, to: dateTo } : null}
+        />
+      </div>
+    );
+  }
 
   // ── תור עבודה (ברירת מחדל) או תיקייה בודדת (?source=...) ────
   // תור העבודה: כל הלידים בסטטוס "ממתין לנציג", החדש ביותר ראשון.
