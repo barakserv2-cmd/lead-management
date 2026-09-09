@@ -46,6 +46,8 @@ export default async function InterviewsPage({
         LeadStatus.INTERVIEW_BOOKED,
         LeadStatus.ARRIVED,
         LeadStatus.NO_SHOW,
+        LeadStatus.CANCELLED_ARRIVAL,
+        LeadStatus.POSTPONED_ARRIVAL,
         LeadStatus.HIRED,
         LeadStatus.STARTED,
         LeadStatus.NOT_ACCEPTED,

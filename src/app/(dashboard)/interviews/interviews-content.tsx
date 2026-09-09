@@ -86,6 +86,8 @@ const INTERVIEW_STATUSES: LeadStatusValue[] = [
   LeadStatus.ARRIVED,
   LeadStatus.HIRED,
   LeadStatus.NO_SHOW,
+  LeadStatus.CANCELLED_ARRIVAL,
+  LeadStatus.POSTPONED_ARRIVAL,
   LeadStatus.NOT_ACCEPTED,
   LeadStatus.REJECTED,
   LeadStatus.LOST_CONTACT,
@@ -359,7 +361,7 @@ export function InterviewsContent({
         </select>
         <select value={status} onChange={(e) => setStatus(e.target.value)} className="border border-slate-300 rounded-lg px-3 py-2 text-sm bg-white">
           <option value="">כל הסטטוסים</option>
-          {[LeadStatus.INTERVIEW_BOOKED, LeadStatus.ARRIVED, LeadStatus.NO_SHOW, LeadStatus.HIRED, LeadStatus.STARTED, LeadStatus.NOT_ACCEPTED, LeadStatus.REJECTED].map((s) => (
+          {[LeadStatus.INTERVIEW_BOOKED, LeadStatus.ARRIVED, LeadStatus.NO_SHOW, LeadStatus.CANCELLED_ARRIVAL, LeadStatus.POSTPONED_ARRIVAL, LeadStatus.HIRED, LeadStatus.STARTED, LeadStatus.NOT_ACCEPTED, LeadStatus.REJECTED].map((s) => (
             <option key={s} value={s}>{STATUS_LABELS[s]}</option>
           ))}
         </select>

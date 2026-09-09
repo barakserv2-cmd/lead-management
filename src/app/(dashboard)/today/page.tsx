@@ -63,13 +63,13 @@ const SUMMARY: { label: string; statuses: LeadStatusValue[]; tone: string }[] = 
   { label: "נוצר קשר", statuses: [LeadStatus.CONTACTED], tone: "text-cyan-700" },
   {
     label: "ראיון נקבע / הגיע",
-    statuses: [LeadStatus.FIT_FOR_INTERVIEW, LeadStatus.INTERVIEW_BOOKED, LeadStatus.ARRIVED],
+    statuses: [LeadStatus.FIT_FOR_INTERVIEW, LeadStatus.INTERVIEW_BOOKED, LeadStatus.ARRIVED, LeadStatus.POSTPONED_ARRIVAL],
     tone: "text-violet-700",
   },
   { label: "התקבלו", statuses: [LeadStatus.HIRED, LeadStatus.STARTED], tone: "text-emerald-700" },
   {
     label: "לא מתאים / נדחה / לא התקבל",
-    statuses: [LeadStatus.NOT_SUITABLE, LeadStatus.REJECTED, LeadStatus.NOT_ACCEPTED, LeadStatus.LOST_CONTACT],
+    statuses: [LeadStatus.NOT_SUITABLE, LeadStatus.REJECTED, LeadStatus.NOT_ACCEPTED, LeadStatus.LOST_CONTACT, LeadStatus.NO_SHOW, LeadStatus.CANCELLED_ARRIVAL],
     tone: "text-slate-500",
   },
 ];
