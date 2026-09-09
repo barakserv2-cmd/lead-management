@@ -34,9 +34,12 @@ export async function GET(
 
   // human-takeover flag: when a recruiter owns the conversation the chat box
   // sends for real (not the screening simulator) and the bot backs off.
+  // "Owns" = an open escalation OR Gubget paused for this lead (after
+  // "קח שליטה" the escalation flag is cleared but bot_paused stays true —
+  // without this the box silently fell back to the simulator).
   const { data: leadRow } = await admin
     .from("leads")
-    .select("needs_human_attention")
+    .select("needs_human_attention, bot_paused")
     .eq("id", id)
     .maybeSingle();
 
@@ -44,6 +47,6 @@ export async function GET(
     messages: data ?? [],
     scope: scope.all ? "all" : "own",
     canSend: scope.canSend,
-    needsHumanAttention: leadRow?.needs_human_attention ?? false,
+    needsHumanAttention: !!(leadRow?.needs_human_attention || leadRow?.bot_paused),
   });
 }

@@ -204,6 +204,31 @@ export async function sendWhatsAppMessage(
   }
 }
 
+/**
+ * Is this number on WhatsApp at all? Used to explain a failed manual send:
+ * "the recruiter's WhatsApp is disconnected" and "this candidate has no
+ * WhatsApp" are different problems with different fixes. Returns null when
+ * the check itself fails (don't guess).
+ */
+export async function checkWhatsappExists(
+  phone: string,
+  account: WhatsAppAccount = businessAccount()
+): Promise<boolean | null> {
+  const digits = formatChatId(phone).replace(/@c\.us$/, "");
+  try {
+    const res = await fetch(apiUrl(account, "checkWhatsapp"), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ phoneNumber: Number(digits) }),
+    });
+    if (!res.ok) return null;
+    const body = (await res.json()) as { existsWhatsapp?: boolean };
+    return typeof body.existsWhatsapp === "boolean" ? body.existsWhatsapp : null;
+  } catch {
+    return null;
+  }
+}
+
 // ------------------------------------------------------------
 // Instance management (used by /settings/whatsapp)
 // ------------------------------------------------------------

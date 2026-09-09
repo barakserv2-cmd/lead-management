@@ -12,6 +12,7 @@ import {
 } from "@/lib/stateMachine";
 import { normalizeEmployerName } from "@/lib/employerNormalization";
 import { logAudit } from "@/lib/audit";
+import { setMachineConversationMode } from "@/lib/machineBridge";
 
 function getSupabase() {
   return createServerClient(
@@ -60,7 +61,7 @@ export async function changeLeadStatus(input: ChangeStatusInput): Promise<Change
   // 2. Fetch current lead data
   const { data: lead, error: fetchError } = await supabase
     .from("leads")
-    .select("status, screening_score, human_approval, interview_date")
+    .select("status, screening_score, human_approval, interview_date, phone")
     .eq("id", leadId)
     .single();
 
@@ -99,6 +100,9 @@ export async function changeLeadStatus(input: ChangeStatusInput): Promise<Change
     sub_status: null,
     sub_status_at: null,
   };
+  // A human moving the lead is now driving it: Gubget stays silent until a
+  // recruiter explicitly hands the conversation back ("החזר לגובגט").
+  if (actor === "human") updateData.bot_paused = true;
 
   // Status-specific field updates
   // "נדחה" ו"לא התקבל" חולקים את אותו שדה סיבה — שניהם סגירה של מועמד,
@@ -194,6 +198,13 @@ export async function changeLeadStatus(input: ChangeStatusInput): Promise<Change
 
   if (updateError) {
     return { success: false, error: `שגיאה בעדכון: ${updateError.message}` };
+  }
+
+  // Tell Gubget to stop talking to this candidate — best-effort: bot_paused
+  // is already persisted above, and the machine re-checks it on every inbound
+  // message, so a missed call here can't let the bot keep going.
+  if (actor === "human" && lead.phone) {
+    setMachineConversationMode(lead.phone as string, "human").catch(() => undefined);
   }
 
   // 7. Log to status history

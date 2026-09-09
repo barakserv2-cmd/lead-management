@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient as createServerClient } from "@supabase/supabase-js";
-import { sendWhatsAppMessage, resolveSender } from "@/lib/whatsappService";
+import { sendWhatsAppMessage, resolveSender, checkWhatsappExists } from "@/lib/whatsappService";
 import { getMessageScope } from "@/lib/messageVisibility";
 import { createClient as createCookieClient } from "@/lib/supabase/server";
 
@@ -96,12 +96,21 @@ export async function POST(req: NextRequest) {
     // כישלון וואטסאפ הוא לא הצלחה שקטה — הרכזת חייבת לדעת שההודעה
     // לא הגיעה למועמד (למשל כשהחיבור ל-GreenAPI נפל).
     if (lead.phone && !whatsappSent) {
+      // Name the real reason. A candidate with no WhatsApp on that number
+      // (test leads, landlines, typos) is not a connection problem — telling
+      // the recruiter to "check your WhatsApp" sends them chasing a ghost.
+      const exists = await checkWhatsappExists(lead.phone, sender);
+      const error =
+        exists === false
+          ? `ההודעה נשמרה בצ'אט אבל לא נשלחה — המספר ${lead.phone} לא רשום בוואטסאפ (מספר שגוי/קווי/בדיקה). נסו להתקשר או לאמת את המספר.`
+          : sender.userEmail
+            ? "ההודעה נשמרה בצ'אט אבל לא נשלחה — הוואטסאפ האישי שלך כנראה מנותק. בדוק בהגדרות > וואטסאפ."
+            : "ההודעה נשמרה בצ'אט אבל לא נשלחה לוואטסאפ — ייתכן שהחיבור נותק. פנה למנהל המערכת.";
       return NextResponse.json({
         success: false,
         savedToChat: true,
-        error: sender.userEmail
-          ? "ההודעה נשמרה בצ'אט אבל לא נשלחה — הוואטסאפ האישי שלך כנראה מנותק. בדוק בהגדרות > וואטסאפ."
-          : "ההודעה נשמרה בצ'אט אבל לא נשלחה לוואטסאפ — ייתכן שהחיבור נותק. פנה למנהל המערכת.",
+        numberNotOnWhatsapp: exists === false,
+        error,
         detail: whatsappError,
       });
     }

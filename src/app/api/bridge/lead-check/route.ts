@@ -23,7 +23,7 @@ export async function GET(req: NextRequest) {
   const db = getSupabaseAdmin();
   const { data: lead } = await db
     .from("leads")
-    .select("id, status, handled_by, do_not_contact, updated_at")
+    .select("id, status, handled_by, do_not_contact, updated_at, bot_paused")
     .eq("phone", phone)
     .maybeSingle();
 
@@ -54,5 +54,7 @@ export async function GET(req: NextRequest) {
     humanOwned,
     status: lead.status,
     lastHumanContactDays,
+    // recruiter took over / escalation open → the machine must stay silent
+    botPaused: !!lead.bot_paused,
   });
 }

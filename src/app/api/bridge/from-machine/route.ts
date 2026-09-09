@@ -58,7 +58,7 @@ export async function POST(req: NextRequest) {
   // 1. Upsert the lead by phone
   const { data: existing } = await db
     .from("leads")
-    .select("id, name, status, handled_by, interview_date")
+    .select("id, name, status, handled_by, interview_date, bot_paused")
     .eq("phone", phone)
     .maybeSingle();
 
@@ -161,8 +161,17 @@ export async function POST(req: NextRequest) {
   // 3b. Interview date — write it whenever גובגט booked a slot, so the lead
   //     appears on the ראיונות board (which requires interview_date IS NOT
   //     NULL). Stored naive, exactly as v1's own self-booking does.
+  //     Never onto a lead a human closed or took over: the reconciliation cron
+  //     re-pushes every booked slot, and it must not resurrect an interview
+  //     for a rejected/paused candidate.
+  const CLOSED = new Set([
+    "REJECTED", "NOT_SUITABLE", "LOST_CONTACT", "NOT_ACCEPTED",
+    "INVALID_PHONE", "EMPLOYMENT_ENDED", "NO_SHOW", "CANCELLED_ARRIVAL",
+  ]);
+  const statusNow = statusChanged ? (body.status as string) : (currentStatus ?? "");
+  const leadLocked = CLOSED.has(statusNow) || !!existing?.bot_paused;
   let interviewSet = false;
-  if (validInterviewAt && body.interviewAt) {
+  if (validInterviewAt && body.interviewAt && !leadLocked) {
     const patch: Record<string, unknown> = { interview_date: body.interviewAt };
     if (body.interviewType) patch.interview_type = body.interviewType;
     const { error: ivErr } = await db.from("leads").update(patch).eq("id", leadId);
