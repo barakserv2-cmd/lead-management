@@ -34,14 +34,26 @@ export async function GET(req: NextRequest) {
 
   const mapped = (jobs ?? []).map((j) => {
     const client = j.client_id ? clientMap.get(j.client_id) : null;
+    // The jobs.requirements column was being dropped — only `notes` was sent,
+    // which is why גובגט never told candidates what a job actually requires
+    // (תמי in the survey: דיוק המשרות 1/5, "ללא הסבר מה תנאי המשרה או היקף
+    // והדרישות"). Send both, requirements first.
+    const reqList = Array.isArray(j.requirements)
+      ? (j.requirements as unknown[]).map((r) => String(r).trim()).filter(Boolean)
+      : typeof j.requirements === "string" && j.requirements.trim()
+        ? [j.requirements.trim()]
+        : [];
+    const details = [reqList.join(" · "), (j.notes ?? "").trim()].filter(Boolean).join(" · ");
     return {
       external_ref: j.id,
       title: j.title,
       city: j.location || client?.city || "לא צוין",
       role_type: j.title,
-      salary_range: j.pay_rate ? { min: j.pay_rate } : {},
+      // pay_rate is an HOURLY rate ("40", "50-55"). Sending a bare number made
+      // גובגט quote it as if it were the whole package.
+      salary_range: j.pay_rate ? { min: j.pay_rate, unit: "לשעה" } : {},
       requirements: {
-        details: j.notes || "",
+        details,
         needed: j.needed_count ?? null,
         employer: client?.name ?? null,
       },
