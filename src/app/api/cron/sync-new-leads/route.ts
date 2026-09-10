@@ -32,7 +32,12 @@ export async function GET(req: NextRequest) {
   let pushed = 0;
   for (const l of leads ?? []) {
     if (!l.phone) continue;
-    if (l.source === "גובגט" || l.handled_by === "gubget@eilatjobs.com") continue; // don't echo גובגט's own leads back
+    if (l.source === "גובגט") continue; // don't echo גובגט's own leads back
+    // Someone already owns this lead, so a first message from גובגט would be a
+    // second voice on a candidate a recruiter is already handling — that is
+    // exactly what happens when a recruiter types a lead in by hand. גובגט's
+    // own leads are covered by the same rule.
+    if (l.handled_by) continue;
     try {
       await fetch(`${url}/api/v1/leads`, {
         method: "POST",

@@ -47,6 +47,10 @@ export async function POST(request: NextRequest) {
     if (existing) return NextResponse.json(duplicatePhonePayload(existing), { status: 409 });
   }
 
+  // מי שהקלידה את הליד כבר דיברה עם המועמד — היא הבעלים מרגע היצירה.
+  // בלי זה הליד נולד בלי בעלים, הגשר מעביר אותו לגובגט כאילו הוא ליד קר,
+  // וגובגט שולח הודעת פתיחה למישהו שכבר בטיפול.
+  const now = new Date().toISOString();
   const { data: lead, error } = await supabase
     .from("leads")
     .insert({
@@ -55,6 +59,8 @@ export async function POST(request: NextRequest) {
       job_title: body.job_title?.trim() || null,
       source: body.source || "אחר",
       status: body.status || LeadStatus.NEW_LEAD,
+      handled_by: user.email,
+      handled_at: now,
     })
     .select("id")
     .single();
