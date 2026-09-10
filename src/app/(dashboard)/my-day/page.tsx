@@ -1,5 +1,7 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
+import { getSupabaseAdmin } from "@/lib/api-auth";
+import { FOLLOW_UP } from "@/lib/constants";
 import { MyReminders } from "../today/my-reminders";
 import { LeadStatus, STATUS_LABELS, type LeadStatusValue } from "@/lib/stateMachine";
 
@@ -155,7 +157,7 @@ export default async function MyDayPage() {
 
   const today = israelToday();
 
-  const [escRes, ivRes, pastIvRes, openRes] = await Promise.all([
+  const [escRes, ivRes, pastIvRes, openRes, remRes] = await Promise.all([
     // אסקלציות שממתינות לי: מה שגובגט העביר ועדיין לא נלקח, או מה שכבר עליי
     supabase
       .from("leads")
@@ -189,6 +191,14 @@ export default async function MyDayPage() {
       .ilike("handled_by", email)
       .in("status", OPEN_STATUSES)
       .limit(500),
+    // התזכורות הפתוחות שלי — רק כדי לדעת למי כבר יש מועד. reminders נקרא
+    // דרך service role, בדיוק כמו ב-/api/reminders.
+    getSupabaseAdmin()
+      .from("reminders")
+      .select("lead_id")
+      .eq("recruiter", email)
+      .eq("is_completed", false)
+      .limit(500),
   ]);
 
   const escalations = (escRes.data ?? []).filter((l) => {
@@ -203,19 +213,30 @@ export default async function MyDayPage() {
   const pastInterviews = pastIvRes.data ?? [];
   const pastIds = new Set(pastInterviews.map((l) => l.id as string));
 
+  // "מעקב" שנשמר לפני שהמועד הפך לחובה — החלטה שנדחתה ואיש לא קבע מתי לחזור
+  const remindedLeadIds = new Set((remRes.data ?? []).map((r) => r.lead_id as string));
+  const undatedFollowUps = (openRes.data ?? []).filter(
+    (l) => l.sub_status === FOLLOW_UP && !remindedLeadIds.has(l.id as string)
+  );
+  const undatedIds = new Set(undatedFollowUps.map((l) => l.id as string));
+
   const stale = (openRes.data ?? [])
     .map((l) => ({
       ...l,
       lastTouch: (l.last_contact_at ?? l.handled_at ?? l.created_at) as string,
     }))
-    // מי שכבר מופיע ב"ראיונות שעברו" לא חוזר כאן — אותה משימה, פעם אחת
-    .filter((l) => !pastIds.has(l.id as string))
+    // מי שכבר מופיע בבלוק אחר לא חוזר כאן — אותה משימה מוצגת פעם אחת
+    .filter((l) => !pastIds.has(l.id as string) && !undatedIds.has(l.id as string))
     .filter((l) => daysSince(l.lastTouch) >= STALE_DAYS)
     .sort((a, b) => new Date(a.lastTouch).getTime() - new Date(b.lastTouch).getTime());
 
   const openCount = (openRes.data ?? []).length;
   const actionable =
-    escalations.length + interviews.length + pastInterviews.length + stale.length;
+    escalations.length +
+    interviews.length +
+    pastInterviews.length +
+    undatedFollowUps.length +
+    stale.length;
 
   return (
     <div>
@@ -320,6 +341,29 @@ export default async function MyDayPage() {
 
         {/* התזכורות מביאות את עצמן — אותה רשימה שכבר קיימת ב"לידים של היום" */}
         <MyReminders />
+
+        <Block
+          title="🗓️ מעקב בלי תאריך"
+          count={undatedFollowUps.length}
+          hint="לקבוע מתי לחזור, אחרת זה לא משימה"
+          border="border-amber-200"
+          head="bg-amber-50 text-amber-900"
+        >
+          {undatedFollowUps.map((l) => (
+            <LeadRow
+              key={l.id}
+              id={l.id as string}
+              name={l.name as string | null}
+              phone={l.phone as string | null}
+              tone="amber"
+              meta={
+                <>
+                  {statusLabel(l.status as string)} · סומן &quot;מעקב&quot; ואין מועד חזרה
+                </>
+              }
+            />
+          ))}
+        </Block>
 
         <Block
           title="⏳ לא נגעת בהם"

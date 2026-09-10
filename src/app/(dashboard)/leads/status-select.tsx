@@ -13,7 +13,7 @@ import {
   getAllowedTransitions,
   type LeadStatusValue,
 } from "@/lib/stateMachine";
-import { SUB_STATUSES, NO_ANSWER_3, NOT_AVAILABLE_NOW, SENT_TO_INTERVIEW } from "@/lib/constants";
+import { SUB_STATUSES, NO_ANSWER_3, NOT_AVAILABLE_NOW, SENT_TO_INTERVIEW, FOLLOW_UP } from "@/lib/constants";
 
 const SUB_STATUS_DIALOG_CONFIG: Partial<Record<LeadStatusValue, SubStatusPickerConfig>> = {
   [LeadStatus.CONTACTED]: {
@@ -109,6 +109,8 @@ export function StatusSelect({
   const [showRejectionDialog, setShowRejectionDialog] = useState(false);
   const [showStartWorkDialog, setShowStartWorkDialog] = useState(false);
   const [callbackFor, setCallbackFor] = useState<string | null>(null);
+  // "מעקב" מחייב מועד; "לא זמין במיידי" רק מציע אותו
+  const [callbackRequired, setCallbackRequired] = useState(false);
   const [sentToInterview, setSentToInterview] = useState(false);
   const [subStatusDialog, setSubStatusDialog] = useState<{ open: boolean; targetStatus: LeadStatusValue | null }>({ open: false, targetStatus: null });
 
@@ -477,8 +479,11 @@ export function StatusSelect({
     setToast({ message: `${STATUS_LABELS[target]} — ${chosenSub}`, type: "success" });
 
     // "לא זמין במיידי" — המועמד רלוונטי, רק לא עכשיו. שואלים מיד מתי לחזור
-    // אליו, אחרת הוא נסגר ונשכח.
-    if (chosenSub === NOT_AVAILABLE_NOW) setCallbackFor(chosenSub);
+    // אליו, אחרת הוא נסגר ונשכח. "מעקב" מחייב מועד ולא מאפשר לוותר עליו.
+    if (chosenSub === NOT_AVAILABLE_NOW || chosenSub === FOLLOW_UP) {
+      setCallbackRequired(chosenSub === FOLLOW_UP);
+      setCallbackFor(chosenSub);
+    }
   }
 
   async function handleCallbackConfirm(data: { dueAt: string; title: string; priority: "high" | "normal" }) {
@@ -495,6 +500,7 @@ export function StatusSelect({
         return;
       }
       setCallbackFor(null);
+      setCallbackRequired(false);
       setToast({
         message: `תזכורת נקבעה ל-${new Date(data.dueAt).toLocaleDateString("he-IL", { day: "numeric", month: "short" })}`,
         type: "success",
@@ -516,6 +522,13 @@ export function StatusSelect({
     if (result.error) {
       setToast({ message: `שגיאה: ${result.error}`, type: "error" });
       return;
+    }
+
+    // אותו כלל גם כשבוחרים מהרשימה הנפתחת ולא מהדיאלוג — אחרת יש דלת צדדית
+    // שדרכה "מעקב" עדיין נשמר בלי מועד.
+    if (newSub === NOT_AVAILABLE_NOW || newSub === FOLLOW_UP) {
+      setCallbackRequired(newSub === FOLLOW_UP);
+      setCallbackFor(newSub);
     }
 
     // Auto-transition: "אין מענה 3" pushes the lead to LOST_CONTACT.
@@ -671,8 +684,9 @@ export function StatusSelect({
           leadName={leadName}
           reason={callbackFor}
           onConfirm={handleCallbackConfirm}
-          onSkip={() => setCallbackFor(null)}
+          onSkip={() => { setCallbackFor(null); setCallbackRequired(false); }}
           loading={loading}
+          required={callbackRequired}
         />
       )}
 

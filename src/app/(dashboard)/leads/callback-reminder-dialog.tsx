@@ -8,6 +8,11 @@ interface CallbackReminderDialogProps {
   onConfirm: (data: { dueAt: string; title: string; priority: "high" | "normal" }) => void;
   onSkip: () => void;
   loading?: boolean;
+  /**
+   * מועד חובה. "מעקב" בלי תאריך הוא לא משימה — הוא רק כוונה, ולכן 21 מועמדים
+   * נתקעו שם בלי שדבר יזכיר עליהם. כשזה דלוק אי אפשר לוותר על המועד.
+   */
+  required?: boolean;
 }
 
 // ברירת מחדל 10:00 — שעה שבה מתחילים להתקשר, לא השעה שבה סימנו את הסטטוס.
@@ -41,6 +46,7 @@ export function CallbackReminderDialog({
   onConfirm,
   onSkip,
   loading,
+  required = false,
 }: CallbackReminderDialogProps) {
   const [when, setWhen] = useState(() => toLocalInput(atCallHour(7)));
   const [picked, setPicked] = useState<number | null>(7);
@@ -67,7 +73,10 @@ export function CallbackReminderDialog({
 
   return (
     <div className="fixed inset-0 z-[200] flex items-center justify-center">
-      <div className="absolute inset-0 bg-black/40" onClick={() => !loading && onSkip()} />
+      <div
+        className="absolute inset-0 bg-black/40"
+        onClick={() => !loading && !required && onSkip()}
+      />
 
       <div
         className="relative bg-white rounded-xl shadow-2xl border border-gray-200 w-full max-w-md mx-4 p-6"
@@ -88,6 +97,11 @@ export function CallbackReminderDialog({
             <p className="text-sm text-gray-500">
               {leadName ? `${leadName} — ` : ""}תזכורת אישית שלך, לא נשלחת למועמד
             </p>
+            {required && (
+              <p className="text-xs text-amber-700 font-medium mt-0.5">
+                מעקב בלי מועד נעלם — חובה לבחור מתי
+              </p>
+            )}
           </div>
         </div>
 
@@ -134,14 +148,16 @@ export function CallbackReminderDialog({
           >
             {loading ? "שומר..." : "קבע תזכורת"}
           </button>
-          <button
-            type="button"
-            onClick={onSkip}
-            disabled={loading}
-            className="px-4 py-2.5 text-gray-500 text-sm hover:text-gray-800 transition-colors"
-          >
-            בלי תזכורת
-          </button>
+          {!required && (
+            <button
+              type="button"
+              onClick={onSkip}
+              disabled={loading}
+              className="px-4 py-2.5 text-gray-500 text-sm hover:text-gray-800 transition-colors"
+            >
+              בלי תזכורת
+            </button>
+          )}
         </div>
       </div>
     </div>
