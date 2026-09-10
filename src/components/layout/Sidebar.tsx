@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
 import {
   LayoutDashboard,
@@ -38,6 +39,27 @@ const NAV_ITEMS = [
 
 export default function Sidebar() {
   const pathname = usePathname();
+  // כמה דיווחי בעיות עדיין פתוחים. עד עכשיו דיווח נראה רק בסיכום היומי
+  // ב-18:00, ולכן דיווח מהבוקר חיכה יום שלם. עכשיו הוא מסומן בתפריט.
+  const [openReports, setOpenReports] = useState(0);
+  useEffect(() => {
+    let alive = true;
+    const load = async () => {
+      try {
+        const res = await fetch("/api/feedback/open-count");
+        const data = await res.json();
+        if (alive) setOpenReports(Number(data.open) || 0);
+      } catch {
+        // רשת נפלה — הסימון פשוט לא מתעדכן
+      }
+    };
+    load();
+    const timer = setInterval(load, 120_000);
+    return () => {
+      alive = false;
+      clearInterval(timer);
+    };
+  }, [pathname]);
 
   return (
     <aside className="w-64 min-h-screen bg-gradient-to-b from-[#0c1222] to-[#162032] text-white flex flex-col">
@@ -62,6 +84,14 @@ export default function Sidebar() {
                 >
                   <Icon className="w-5 h-5" />
                   <span>{item.label}</span>
+                  {item.href === "/feedback" && openReports > 0 && (
+                    <span
+                      className="mr-auto min-w-5 px-1.5 h-5 inline-flex items-center justify-center rounded-full bg-red-500 text-white text-[11px] font-bold tabular-nums"
+                      title={`${openReports} דיווחים ממתינים לטיפול`}
+                    >
+                      {openReports}
+                    </span>
+                  )}
                 </Link>
               </li>
             );

@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAuthedUser, getSupabaseAdmin } from "@/lib/api-auth";
+import { businessAccount, sendWhatsAppMessage } from "@/lib/whatsappService";
 
 const CATEGORIES = ["machine", "system", "other"] as const;
+const CAT_LABEL: Record<string, string> = { machine: "המכונה", system: "המערכת", other: "אחר" };
 
 /** GET /api/feedback — admin sees all reports; a recruiter sees their own. */
 export async function GET() {
@@ -43,5 +45,25 @@ export async function POST(req: NextRequest) {
     body: text.slice(0, 2000),
   });
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  // Until now a report only surfaced in the 18:00 digest, so something filed at
+  // 09:00 sat unseen all day — three reports of notes vanishing waited two days
+  // that way. Alert immediately as well; the digest still groups the day.
+  // Fire-and-forget: a WhatsApp hiccup must never fail the recruiter's submit.
+  const alert = [
+    `🔔 דיווח בעיה חדש · ${CAT_LABEL[category as string] ?? category}`,
+    `מאת: ${user.email}`,
+    "",
+    text.slice(0, 600),
+    "",
+    "לטיפול: /feedback",
+  ].join("\n");
+  void sendWhatsAppMessage(
+    process.env.FEEDBACK_DIGEST_PHONE ?? "0547000992",
+    alert,
+    businessAccount(),
+    { skipGate: true }
+  ).catch(() => undefined);
+
   return NextResponse.json({ ok: true }, { status: 201 });
 }
