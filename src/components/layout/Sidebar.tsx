@@ -18,9 +18,12 @@ import {
   Gauge,
   Radar,
   ClipboardList,
+  Sun,
 } from "lucide-react";
 
 const NAV_ITEMS = [
+  // ראשון בכוונה: זה המסך שרכזת פותחת בבוקר במקום לחפש בחמישה דפים
+  { href: "/my-day", label: "היום שלי", icon: Sun },
   { href: "/dashboard", label: "דשבורד", icon: LayoutDashboard },
   { href: "/clients", label: "מעסיקים", icon: Building2 },
   { href: "/jobs", label: "משרות", icon: Briefcase },
