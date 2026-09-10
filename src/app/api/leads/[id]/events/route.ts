@@ -8,14 +8,35 @@ import { getSupabaseAdmin } from "@/lib/api-auth";
 // אוטומטיים (lead_status_history) ממוזגים לציר זמן אחד.
 // fetch+API ולא server action — הדפוס הקבוע בפרויקט (Next 16).
 
+export const GUBGET_EMAIL = "gubget@eilatjobs.com";
+// PostgREST filter for "this row was not written by גובגט". `neq` alone drops
+// rows where created_by IS NULL (NULL comparisons are never true), which would
+// lock older system rows out of editing — hence the explicit null branch.
+const NOT_GUBGET = `created_by.is.null,created_by.neq."${GUBGET_EMAIL}"`;
+
 export interface TimelineEvent {
   id: string;
   kind: "event" | "status";
   event_type: string;
   text: string;
   created_by: string;
+  /** Display name for created_by — a recruiter's name, "גובגט", or "מערכת". */
+  author: string;
+  /**
+   * Who did this. The recruiters' complaint was that they could not tell the
+   * bot's work from their own in the same journal — so the timeline says it
+   * explicitly instead of leaving it to be inferred from an email address.
+   */
+  actor: "bot" | "human" | "system";
   created_at: string;
   editable?: boolean; // true only for manual journal entries (lead_events)
+}
+
+function classify(createdBy: string | null | undefined): { author: string; actor: TimelineEvent["actor"] } {
+  const by = (createdBy ?? "").trim();
+  if (!by || by === "מערכת" || by === "system") return { author: "מערכת", actor: "system" };
+  if (by.toLowerCase() === GUBGET_EMAIL) return { author: "גובגט", actor: "bot" };
+  return { author: by, actor: "human" };
 }
 
 export async function GET(
@@ -56,8 +77,11 @@ export async function GET(
     event_type: e.event_type,
     text: e.event_text,
     created_by: e.created_by || "מערכת",
+    ...classify(e.created_by),
     created_at: e.created_at,
-    editable: true,
+    // גובגט's own entries are a record of what the bot did — a recruiter may
+    // not rewrite or erase them.
+    editable: classify(e.created_by).actor === "human",
   }));
 
   const statusChanges: TimelineEvent[] = (historyRes.data ?? []).map((h) => ({
@@ -68,6 +92,7 @@ export async function GET(
       `${STATUS_LABELS[h.from_status as LeadStatusValue] ?? h.from_status} ← ${STATUS_LABELS[h.to_status as LeadStatusValue] ?? h.to_status}` +
       (h.notes ? ` — ${h.notes}` : ""),
     created_by: h.changed_by ?? "מערכת",
+    ...classify(h.changed_by),
     created_at: h.changed_at,
   }));
 
@@ -91,12 +116,29 @@ export async function GET(
       (INTERACTION_OUTCOME_LABELS[i.outcome] ? `${INTERACTION_OUTCOME_LABELS[i.outcome]}` : "") +
       (i.notes ? `${i.outcome ? " — " : ""}${i.notes}` : ""),
     created_by: "רכזת",
+    author: "רכזת",
+    actor: "human" as const,
     created_at: i.created_at,
   }));
 
   const timeline = [...manual, ...statusChanges, ...interactions].sort(
     (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
   );
+
+  // Turn recruiter emails into the names the team actually uses. user_profiles
+  // is readable only through the admin client (see 00088_rls_recruiters_only).
+  const emails = [...new Set(timeline.filter((e) => e.actor === "human" && e.author.includes("@")).map((e) => e.author))];
+  if (emails.length) {
+    const { data: profiles } = await getSupabaseAdmin()
+      .from("user_profiles")
+      .select("email, name")
+      .in("email", emails);
+    const names = new Map((profiles ?? []).map((p) => [String(p.email).toLowerCase(), p.name as string | null]));
+    for (const e of timeline) {
+      const n = names.get(e.author.toLowerCase());
+      if (n) e.author = n;
+    }
+  }
 
   return NextResponse.json({
     timeline,
@@ -181,6 +223,7 @@ export async function PATCH(
     .update({ event_text: text })
     .eq("id", body.event_id)
     .eq("lead_id", leadId) // guard: the event must belong to this lead
+    .or(NOT_GUBGET) // guard: גובגט's own log is a record, not a draft
     .select("id, event_type, event_text, created_by, created_at")
     .maybeSingle();
 
@@ -188,7 +231,7 @@ export async function PATCH(
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
   if (!data) {
-    return NextResponse.json({ error: "האירוע לא נמצא" }, { status: 404 });
+    return NextResponse.json({ error: "האירוע לא נמצא (רישום של גובגט אינו ניתן לעריכה)" }, { status: 404 });
   }
 
   return NextResponse.json({ event: data });
@@ -225,6 +268,7 @@ export async function DELETE(
     .delete()
     .eq("id", body.event_id)
     .eq("lead_id", leadId) // guard: the event must belong to this lead
+    .or(NOT_GUBGET) // guard: גובגט's own log is a record, not a draft
     .select("id, event_type, event_text, created_by, created_at")
     .maybeSingle();
 
@@ -232,7 +276,7 @@ export async function DELETE(
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
   if (!data) {
-    return NextResponse.json({ error: "האירוע לא נמצא" }, { status: 404 });
+    return NextResponse.json({ error: "האירוע לא נמצא (רישום של גובגט אינו ניתן למחיקה)" }, { status: 404 });
   }
 
   await logAudit({

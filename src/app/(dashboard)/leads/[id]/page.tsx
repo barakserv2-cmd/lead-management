@@ -5,6 +5,7 @@ import { getSupabaseAdmin } from "@/lib/api-auth";
 import { logAudit } from "@/lib/audit";
 import type { Lead } from "@/types/leads";
 import { LeadDetail } from "./lead-detail";
+import { buildGubgetSnapshot } from "./gubget-summary";
 
 export default async function LeadDetailPage({
   params,
@@ -35,6 +36,19 @@ export default async function LeadDetailPage({
     recruiterName = profile?.name ?? null;
   }
 
+  // ההערה האחרונה שגובגט כתב ביומן — ממנה בנויה שורת "מה גובגט יודע".
+  // lead_events נקרא דרך לקוח המשתמש (יש policy ל-authenticated).
+  const { data: gubgetNote } = await supabase
+    .from("lead_events")
+    .select("event_text, created_at")
+    .eq("lead_id", id)
+    .eq("event_type", "גובגט")
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  const machine = buildGubgetSnapshot(lead as Lead, gubgetNote ?? null);
+
   // תיעוד צפייה ברשומה (תקנה 10) — נכתב אחרי שהתגובה נשלחה, לא מעכב רינדור
   after(() =>
     logAudit({
@@ -45,5 +59,5 @@ export default async function LeadDetailPage({
     })
   );
 
-  return <LeadDetail lead={lead as Lead} recruiterName={recruiterName} />;
+  return <LeadDetail lead={lead as Lead} recruiterName={recruiterName} machine={machine} />;
 }

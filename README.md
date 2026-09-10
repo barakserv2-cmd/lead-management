@@ -1,36 +1,83 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Lead Management — ברק שירותים
 
-## Getting Started
+מערכת ניהול המועמדים הפנימית של ברק שירותים (חברת העסקה וגיוס, אילת).
+קולטת לידים מכל ערוץ, מנהלת את הפייפליין, מפעילה וואטסאפ פר-רכזת, לוח משרות
+ומעסיקים, פרסום לקבוצות פייסבוק, חתימה דיגיטלית, פרטיות לפי תיקון 13 ודוחות.
+הסוכן האוטונומי (גובגט, `../recruitment-machine`) עובד לצידה דרך bridge.
 
-First, run the development server:
+פרודקשן: `lead-management-umber.vercel.app` (Vercel `fra1`, Supabase `eu-central-1`).
+
+## Stack
+
+Next.js 16 (App Router) · React 19 · TypeScript · Tailwind 4 + shadcn · Supabase
+(Postgres + Auth + RLS) · GreenAPI (WhatsApp) · Anthropic (עוזר AI + ניסוח) ·
+Vercel Cron.
+
+## פיתוח
 
 ```bash
+npm install
+cp .env.example .env.local   # ראו רשימת משתנים למטה
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+| פקודה | מה |
+|---|---|
+| `npm run dev` | שרת פיתוח |
+| `npm run build` | build לפרודקשן |
+| `npm run lint` | ESLint |
+| `npm run typecheck` | `tsc --noEmit` |
+| `npm test` | Vitest (מכונת המצבים ועוד) |
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## מבנה
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+```
+src/app/(dashboard)/   מסכי הרכזות: today, leads, interviews, jobs, clients,
+                       publishing, reports, channels, autonomy, survey, settings
+src/app/api/           API routes — כל route מאמת בעצמו (getAuthedUser /
+                       requireAdmin / CRON_SECRET / MACHINE_BRIDGE_KEY)
+src/app/api/bridge/    from-machine, lead-check, lead-summary — הצד שלנו ב-bridge לגובגט
+src/app/sign/[token]   חתימה דיגיטלית ציבורית
+src/app/book/[token]   קביעת ראיון עצמית
+src/lib/stateMachine.ts   מפת המעברים + guardrails — כל שינוי סטטוס עובר כאן
+src/lib/actions/changeLeadStatus.ts   נתיב הכתיבה היחיד לסטטוס
+src/lib/gmail.ts       סורק Gmail + SOURCE_RULES (תיוג מקור)
+src/lib/whatsappService.ts, messageVisibility.ts   וואטסאפ פר-רכזת
+src/lib/publishing.ts  פרסום לקבוצות פייסבוק (קודי BK)
+src/lib/privacy.ts, audit.ts   תיקון 13: יומן ביקורת, DSAR, שמירה
+supabase/migrations/   סכמה — ראו README בתיקייה
+scripts/               כלי תחזוקה חד-פעמיים (db-query, apply-migration, backfills)
+```
 
-## Learn More
+## מכונת המצבים
 
-To learn more about Next.js, take a look at the following resources:
+15 סטטוסים. המפה ב-`src/lib/stateMachine.ts` נבנתה מנתוני אמת ואוכפת:
+"התחיל לעבוד" רק אחרי "התקבל", "סיום העסקה" רק למי שהתקבל, "לא הגיע" רק
+כשהיה ראיון, "הגיע לראיון" רק אחרי ראיון שנקבע, ואין נסיגה של מועסק לפייפליין.
+גובגט (actor `machine`) רשאית לפעול רק בתוך שלבי הטרום-ראיון ולעולם לא מקבלת,
+דוחה או פותחת סגירה של רכזת. הבדיקות ב-`src/lib/stateMachine.test.ts`.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## אוטומציה (vercel.json)
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+| cron | תדירות | תפקיד |
+|---|---|---|
+| `/api/gmail` | כל 2 דק' | סריקת מיילים → לידים |
+| `/api/cron/sync-new-leads` | כל דקה | דחיפת לידים חדשים לגובגט |
+| `/api/cron/scheduled` | כל 5 דק' | הודעות מתוזמנות + מנוע חוקים |
+| `/api/cron/sync-jobs` | כל שעתיים | משרות פתוחות לגובגט |
+| `/api/cron/daily` | כל שעה | תזכורות ראיון (חלון 16:30–22:00) |
+| `/api/cron/feedback-digest` | יומי | סיכום משוב |
+| `/api/cron/retention` | שבועי | אנונימיזציה ומחיקה לפי מדיניות |
 
-## Deploy on Vercel
+## משתני סביבה
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+`NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`,
+`ANTHROPIC_API_KEY`, `CRON_SECRET`, `GREEN_API_*` (מספר עסקי משותף),
+`MACHINE_BRIDGE_KEY` + `MACHINE_INGEST_URL` (bridge לגובגט), `FINANCE_EMAILS`,
+Gmail OAuth (`GOOGLE_CLIENT_ID/SECRET`). מיגרציות: `FRANKFURT_DB_PASSWORD_REAL` ב-`.env.migration`.
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## ידוע
+
+- Server actions של Next 16 לטפסי POST לא יציבים — להעדיף `fetch` + API route.
+- `interview_date` נשמר כשעון קיר ישראלי עם תווית UTC; לקרוא רק דרך שדות UTC.
+- טלפון ייחודי לכל מועמד (טריגר נרמול + UNIQUE); לצפות ל-23505 ולהציע מיזוג.

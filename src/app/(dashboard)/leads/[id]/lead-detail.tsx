@@ -56,6 +56,7 @@ import { PrivacySection } from "./privacy-section";
 import { BookingLinkButton } from "./booking-link-button";
 import { LeadEventsSection } from "../lead-events-section";
 import { LeadDocumentsSection } from "../lead-documents-section";
+import { GubgetSummary, type GubgetSnapshot } from "./gubget-summary";
 
 // ── Helpers ──────────────────────────────────────────────────
 
@@ -280,10 +281,13 @@ function HistoryTimeline({
 export function LeadDetail({
   lead,
   recruiterName = null,
+  machine = null,
 }: {
   lead: Lead;
   /** display name of the recruiter behind lead.handled_by (resolved server-side) */
   recruiterName?: string | null;
+  /** what גובגט knows and what it will do next (resolved server-side) */
+  machine?: GubgetSnapshot | null;
 }) {
   const router = useRouter();
   const [displayName, setDisplayName] = useState(lead.name);
@@ -626,6 +630,9 @@ export function LeadDetail({
           </div>
         );
       })()}
+
+      {/* ═══ מה גובגט יודע ומה הלאה ═══════════════════════════ */}
+      {machine && <GubgetSummary snapshot={machine} />}
 
       {/* ═══ TWO-PANEL LAYOUT ════════════════════════════════ */}
       <div className="flex flex-col lg:flex-row gap-4" style={{ minHeight: "calc(100vh - 220px)" }}>

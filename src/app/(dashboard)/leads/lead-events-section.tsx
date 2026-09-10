@@ -22,12 +22,28 @@ const TYPE_COLORS: Record<string, string> = {
   // סוגים שנרשמים אוטומטית מתוך פעולות הרכזת
   "הערה": "bg-violet-100 text-violet-700",
   "דחייה": "bg-red-100 text-red-700",
+  "לא התקבל": "bg-red-100 text-red-700",
   "ראיון": "bg-purple-100 text-purple-700",
   "מעקב": "bg-teal-100 text-teal-700",
   "שיחה נכנסת": "bg-cyan-100 text-cyan-700",
   "שיחה יוצאת": "bg-cyan-100 text-cyan-700",
   "וואטסאפ": "bg-green-100 text-green-700",
+  // סוגים שנרשמו עד היום בלי צבע, ולכן נראו כמו "אחר" — כולל אלה של גובגט
+  "גובגט": "bg-indigo-100 text-indigo-700",
+  "אסקלציה": "bg-orange-100 text-orange-800",
+  "מסמכים": "bg-sky-100 text-sky-700",
+  "ליווי": "bg-emerald-100 text-emerald-700",
+  "אוטומציה": "bg-slate-100 text-slate-600",
+  "פרטיות": "bg-zinc-100 text-zinc-600",
 };
+
+// מסננים: היומן הוא משותף לגובגט ולרכזות, ולכן צריך אפשרות לראות רק צד אחד.
+const FILTERS = [
+  { key: "all", label: "הכל" },
+  { key: "bot", label: "גובגט" },
+  { key: "human", label: "רכזות" },
+] as const;
+type FilterKey = (typeof FILTERS)[number]["key"];
 
 function formatDateTime(iso: string): string {
   const d = new Date(iso);
@@ -47,6 +63,7 @@ export function LeadEventsSection({ leadId }: { leadId: string }) {
   const [editText, setEditText] = useState("");
   const [savingEdit, setSavingEdit] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [filter, setFilter] = useState<FilterKey>("all");
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -86,7 +103,14 @@ export function LeadEventsSection({ leadId }: { leadId: string }) {
         toast.success("האירוע נרשם ביומן");
         // מוסיפים אופטימית ומרעננים ברקע
         setTimeline((prev) => [
-          { ...data.event, kind: "event", text: data.event.event_text },
+          {
+            ...data.event,
+            kind: "event",
+            text: data.event.event_text,
+            author: data.event.created_by ?? "מערכת",
+            actor: "human",
+            editable: true,
+          },
           ...prev,
         ]);
         load();
@@ -160,9 +184,33 @@ export function LeadEventsSection({ leadId }: { leadId: string }) {
     }
   }
 
+  const botCount = timeline.filter((e) => e.actor === "bot").length;
+  const shown = filter === "all" ? timeline : timeline.filter((e) => e.actor === filter);
+
   return (
     <div>
-      <h3 className="text-sm font-bold text-gray-900 mb-2">יומן אירועים</h3>
+      <div className="flex items-center gap-2 mb-2">
+        <h3 className="text-sm font-bold text-gray-900">יומן אירועים</h3>
+        {botCount > 0 && (
+          <div className="flex gap-1 mr-auto">
+            {FILTERS.map((f) => (
+              <button
+                key={f.key}
+                type="button"
+                onClick={() => setFilter(f.key)}
+                className={`px-2 py-0.5 rounded-full text-[10px] font-semibold transition-colors ${
+                  filter === f.key
+                    ? "bg-gray-800 text-white"
+                    : "bg-white border border-gray-200 text-gray-500 hover:border-gray-400"
+                }`}
+              >
+                {f.label}
+                {f.key === "bot" && ` (${botCount})`}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
 
       {tableMissing && (
         <div className="mb-3 p-2.5 rounded-lg bg-amber-50 border border-amber-200 text-xs text-amber-800">
@@ -210,15 +258,21 @@ export function LeadEventsSection({ leadId }: { leadId: string }) {
       {/* ציר זמן */}
       {loading ? (
         <div className="text-xs text-gray-400 py-3 text-center">טוען יומן...</div>
-      ) : timeline.length === 0 ? (
-        <div className="text-xs text-gray-400 py-3 text-center">אין אירועים עדיין</div>
+      ) : shown.length === 0 ? (
+        <div className="text-xs text-gray-400 py-3 text-center">
+          {timeline.length === 0 ? "אין אירועים עדיין" : "אין אירועים בסינון הזה"}
+        </div>
       ) : (
         <div className="space-y-2 max-h-72 overflow-y-auto pl-1">
-          {timeline.map((ev) => (
+          {shown.map((ev) => (
             <div
               key={`${ev.kind}-${ev.id}`}
               className={`p-2.5 rounded-lg border text-xs ${
-                ev.kind === "status" ? "bg-slate-50/60 border-slate-100" : "bg-white border-gray-200"
+                ev.actor === "bot"
+                  ? "bg-indigo-50/60 border-indigo-100 border-r-2 border-r-indigo-400"
+                  : ev.kind === "status"
+                    ? "bg-slate-50/60 border-slate-100"
+                    : "bg-white border-gray-200"
               }`}
             >
               <div className="flex items-center gap-2 mb-1">
@@ -278,7 +332,9 @@ export function LeadEventsSection({ leadId }: { leadId: string }) {
                 <div className={ev.kind === "status" ? "text-gray-500" : "text-gray-800"}>{ev.text}</div>
               )}
 
-              <div className="text-[10px] text-gray-400 mt-1">מאת: {ev.created_by}</div>
+              <div className="text-[10px] text-gray-400 mt-1">
+                מאת: {ev.actor === "bot" ? "🤖 גובגט" : ev.author}
+              </div>
             </div>
           ))}
         </div>
