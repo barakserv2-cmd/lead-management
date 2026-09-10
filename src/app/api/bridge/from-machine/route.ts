@@ -3,6 +3,7 @@ import { getSupabaseAdmin } from "@/lib/api-auth";
 import { normalizePhone } from "@/lib/phone";
 import { isValidStatus, validateTransition, STATUS_LABELS, type LeadStatusValue } from "@/lib/stateMachine";
 import { GUBGET_SOURCE } from "@/lib/constants";
+import { closureFor } from "@/lib/israelHolidays";
 
 /**
  * POST /api/bridge/from-machine — the autonomous machine ("גובגט") reports
@@ -124,7 +125,15 @@ export async function POST(req: NextRequest) {
   //    candidate backwards, and keeps גובגט from reopening a human's closure.
   let statusChanged = false;
   let statusBlocked: string | null = null;
-  const validInterviewAt = !!(body.interviewAt && INTERVIEW_AT_RE.test(body.interviewAt));
+  // המשרד סגור בחג. גובגט כבר לא מציע מועד כזה, אבל השער נמצא גם כאן: רשימת
+  // החלונות שלו יכולה להיות ישנה, והוא רץ בפריסה נפרדת. תאריך חג נדחה בשקט —
+  // הליד עצמו נשמר, רק בלי מועד ראיון.
+  const interviewClosure = body.interviewAt ? closureFor(body.interviewAt.slice(0, 10)) : null;
+  const validInterviewAt = !!(
+    body.interviewAt &&
+    INTERVIEW_AT_RE.test(body.interviewAt) &&
+    !interviewClosure?.closed
+  );
   const screeningScore =
     typeof body.screeningScore === "number" && body.screeningScore >= 0 && body.screeningScore <= 100
       ? Math.round(body.screeningScore)

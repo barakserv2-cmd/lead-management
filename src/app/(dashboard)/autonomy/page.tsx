@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getAuthedUser, getSupabaseAdmin } from "@/lib/api-auth";
 
@@ -34,6 +35,26 @@ export default async function AutonomyPage() {
       .order("created_at", { ascending: true });
     if (data) msgs.push(...data);
   }
+  // Quality was a hardcoded "manual" row that could never turn green, so the
+  // page could never show a proven L4. The real signal already exists: the
+  // reports recruiters file on /feedback against the machine. An unhandled
+  // machine report is an open quality defect, so it holds the metric red until
+  // someone closes it — recruiters get a button that actually moves the score.
+  const [{ count: openMachineReports }, { count: weekMachineReports }] = await Promise.all([
+    db
+      .from("recruiter_feedback")
+      .select("*", { count: "exact", head: true })
+      .eq("category", "machine")
+      .neq("status", "handled"),
+    db
+      .from("recruiter_feedback")
+      .select("*", { count: "exact", head: true })
+      .eq("category", "machine")
+      .gte("created_at", since),
+  ]);
+  const openReports = openMachineReports ?? 0;
+  const weekReports = weekMachineReports ?? 0;
+
   const firstAsst = new Map<string, number>();
   const firstRec = new Map<string, number>();
   for (const m of msgs) {
@@ -65,12 +86,23 @@ export default async function AutonomyPage() {
   respMins.sort((x, y) => x - y);
   const medResp = respMins.length ? respMins[Math.floor(respMins.length / 2)] : null;
 
-  const metrics = [
+  const metrics: { label: string; value: string; target: string; ok: boolean; hint: string; href?: string }[] = [
     { label: "גובגט עונה ראשונה", value: `${pctFirst}%`, target: "≥ 80%", ok: pctFirst >= 80, hint: `${gubgetFirst} מתוך ${contacted} שנוצר בהם קשר` },
     { label: "שיחה מקצה-לקצה בלי מגע אנושי", value: `${pctEndToEnd}%`, target: "≥ 70%", ok: pctEndToEnd >= 70, hint: `${endToEnd} מתוך ${gubgetTouched} שגובגט טיפלה` },
     { label: "שיעור הסלמה", value: `${escRate}%`, target: "< 25%", ok: gubgetTouched > 0 && escRate < 25, hint: `${escalated} הסלמות מתוך ${gubgetTouched}` },
     { label: "זמן תגובה חציוני", value: medResp === null ? "—" : `${medResp.toFixed(1)} דק'`, target: "< 2 דק'", ok: medResp !== null && medResp < 2, hint: `${respMins.length} שיחות נמדדו` },
-    { label: "אישור איכות מהרכזות", value: "ידני", target: "✓", ok: false, hint: "מסומן ידנית לאחר בדיקת תמי/חושן" },
+    {
+      label: "איכות לפי דיווחי הרכזות",
+      value: openReports ? `${openReports} פתוחים` : "✓",
+      target: "0 פתוחים",
+      ok: openReports === 0,
+      hint: openReports
+        ? `${openReports} דיווחים על המכונה מחכים לטיפול`
+        : weekReports
+          ? `${weekReports} דיווחים על המכונה השבוע — כולם טופלו`
+          : "אין דיווחים פתוחים על המכונה",
+      href: "/feedback",
+    },
   ];
 
   const met = metrics.filter((m) => m.ok).length;
@@ -93,21 +125,33 @@ export default async function AutonomyPage() {
       </div>
 
       <div className="space-y-3">
-        {metrics.map((m) => (
-          <div key={m.label} className={`bg-white border rounded-xl p-4 flex items-center gap-4 ${m.ok ? "border-green-300" : "border-gray-200"}`}>
-            <div className={`w-9 h-9 rounded-full flex items-center justify-center text-lg flex-shrink-0 ${m.ok ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-400"}`}>
-              {m.ok ? "✓" : "○"}
+        {metrics.map((m) => {
+          const card = (
+            <>
+              <div className={`w-9 h-9 rounded-full flex items-center justify-center text-lg flex-shrink-0 ${m.ok ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-400"}`}>
+                {m.ok ? "✓" : "○"}
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="text-sm font-semibold text-[#0E2233]">{m.label}</div>
+                <div className="text-xs text-gray-500 mt-0.5">{m.hint}</div>
+              </div>
+              <div className="text-left flex-shrink-0">
+                <div className={`text-xl font-bold ${m.ok ? "text-green-600" : "text-[#0E2233]"}`}>{m.value}</div>
+                <div className="text-[11px] text-gray-400">יעד {m.target}</div>
+              </div>
+            </>
+          );
+          const cls = `bg-white border rounded-xl p-4 flex items-center gap-4 ${m.ok ? "border-green-300" : "border-gray-200"}`;
+          return m.href ? (
+            <Link key={m.label} href={m.href} className={`${cls} hover:border-[#0875E1] transition-colors`}>
+              {card}
+            </Link>
+          ) : (
+            <div key={m.label} className={cls}>
+              {card}
             </div>
-            <div className="flex-1 min-w-0">
-              <div className="text-sm font-semibold text-[#0E2233]">{m.label}</div>
-              <div className="text-xs text-gray-500 mt-0.5">{m.hint}</div>
-            </div>
-            <div className="text-left flex-shrink-0">
-              <div className={`text-xl font-bold ${m.ok ? "text-green-600" : "text-[#0E2233]"}`}>{m.value}</div>
-              <div className="text-[11px] text-gray-400">יעד {m.target}</div>
-            </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
 
       <p className="text-xs text-gray-400 text-center pt-2 border-t border-gray-100">

@@ -8,6 +8,7 @@
 // ואף פעם לא Asia/Jerusalem על ערך שנקרא מהדאטאבייס.
 
 import { randomBytes } from "crypto";
+import { closureFor, HALF_DAY_LAST_MINUTE } from "./israelHolidays";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 /** זמן מינימלי מראש להזמנה (דקות) — ראיון טלפוני יכול להיקבע גם לעוד שעה. */
@@ -122,6 +123,10 @@ export async function listOpenSlots(
   for (let offset = 0; offset <= BOOKING_DAYS_AHEAD && slots.length < MAX_SLOTS_RETURNED; offset++) {
     if (daysWithSlots >= MAX_DAYS_WITH_SLOTS) break;
     const dateStr = addDays(now.dateStr, offset);
+    // חג — לא מציעים כלום. ערב חג — רק עד הצהריים.
+    const closure = closureFor(dateStr);
+    if (closure.closed) continue;
+    const dayLastMinute = closure.halfDay ? HALF_DAY_LAST_MINUTE : Infinity;
     const wd = weekdayOf(dateStr);
     const dayWindows = (windows as AvailabilityWindow[])
       .filter((w) => w.weekday === wd)
@@ -135,6 +140,7 @@ export async function listOpenSlots(
         m += w.slot_minutes
       ) {
         if (offset === 0 && m < now.minutes + MIN_LEAD_MINUTES) continue;
+        if (m >= dayLastMinute) continue;
         const iso = slotIso(dateStr, m);
         if (!taken.has(iso)) slots.push(iso);
       }
