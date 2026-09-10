@@ -172,6 +172,28 @@ export default async function LeadsPage({
     newCountQuery,
   ]);
   const newCount = newLeadsCount ?? 0;
+
+  // כמה מהתור כבר קיבלו הודעה מגובגט וממתינים לתשובה. ליד יורד מהתור רק
+  // כששינו לו סטטוס, וגובגט משנה סטטוס רק כשמועמד עונה — ולכן הודעה שיצאה
+  // ולא נענתה לא מזיזה את המספר. בלי השורה הזו זה נראה כאילו כלום לא קורה.
+  let awaitingReply = 0;
+  if (isQueue) {
+    const { data: queued } = await supabase
+      .from("leads")
+      .select("id")
+      .eq("status", LeadStatus.NEW_LEAD)
+      .limit(1000);
+    const ids = (queued ?? []).map((l) => l.id as string);
+    if (ids.length) {
+      const { data: touched } = await getSupabaseAdmin()
+        .from("messages")
+        .select("lead_id")
+        .in("lead_id", ids)
+        .eq("role", "assistant")
+        .limit(5000);
+      awaitingReply = new Set((touched ?? []).map((m) => m.lead_id as string)).size;
+    }
+  }
   const myId = session?.user?.id ?? "00000000-0000-0000-0000-000000000000";
   const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
   const ownershipFilter = `assigned_to.is.null,assigned_at.lt.${cutoff},assigned_to.eq.${myId}`;
@@ -343,6 +365,14 @@ export default async function LeadsPage({
       {isQueue && (
         <p className="text-sm text-gray-500 -mt-2 mb-4">
           כל ליד חדש שנכנס מופיע כאן למעלה. טיפלת? שנה סטטוס והוא יורד מהרשימה. כתום/אדום = ממתין יותר מדי.
+          {awaitingReply > 0 && (
+            <>
+              {" "}
+              <span className="text-indigo-700 font-medium">
+                🤖 {awaitingReply} מתוכם כבר קיבלו הודעה מגובגט וממתינים לתשובה — הם ירדו מהרשימה רק כשיענו.
+              </span>
+            </>
+          )}
         </p>
       )}
       <Suspense fallback={null}>
