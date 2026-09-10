@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
+import { useNoteDraft } from "@/lib/useNoteDraft";
 
 // ההערות החופשיות של הליד. עד עכשיו הן הוצגו בכרטיס לקריאה בלבד — אפשר היה
 // לראות מה נכתב אבל לא לתקן שגיאה או להוסיף מידע. עריכה במקום, בלי לצאת
@@ -19,16 +20,24 @@ export function LeadNotesEditor({
   const router = useRouter();
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [draft, setDraft] = useState(notes ?? "");
-  const [draftFollowup, setDraftFollowup] = useState(followupNotes ?? "");
   // מה שנשמר בפועל, כדי שהתצוגה תתעדכן מיד ולא רק אחרי refresh
   const [savedNotes, setSavedNotes] = useState(notes ?? "");
   const [savedFollowup, setSavedFollowup] = useState(followupNotes ?? "");
+  // הטקסט המוקלד שורד סגירה של החלונית — ראה useNoteDraft
+  const notesDraft = useNoteDraft(`${leadId}:notes`, savedNotes);
+  const followupDraft = useNoteDraft(`${leadId}:followup`, savedFollowup);
+  const draft = notesDraft.value;
+  const draftFollowup = followupDraft.value;
 
   function startEdit() {
-    setDraft(savedNotes);
-    setDraftFollowup(savedFollowup);
     setEditing(true);
+  }
+
+  function cancelEdit() {
+    if ((notesDraft.dirty || followupDraft.dirty) && !confirm("יש טקסט שלא נשמר. לבטל אותו?")) return;
+    notesDraft.discard();
+    followupDraft.discard();
+    setEditing(false);
   }
 
   async function save() {
@@ -46,6 +55,8 @@ export function LeadNotesEditor({
       }
       setSavedNotes(draft);
       setSavedFollowup(draftFollowup);
+      notesDraft.commit();
+      followupDraft.commit();
       setEditing(false);
       toast.success("ההערות נשמרו");
       router.refresh();
@@ -73,11 +84,16 @@ export function LeadNotesEditor({
 
       {editing ? (
         <div className="bg-white rounded-lg border p-3 space-y-3">
+          {(notesDraft.restored || followupDraft.restored) && (
+            <p className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded-md px-2 py-1.5">
+              שוחזר טקסט שלא הספקת לשמור. לחצי &quot;שמור&quot; כדי לשמור אותו, או &quot;ביטול&quot; כדי למחוק.
+            </p>
+          )}
           <div>
             <label className="text-xs text-gray-500 block mb-1">הערות</label>
             <textarea
               value={draft}
-              onChange={(e) => setDraft(e.target.value)}
+              onChange={(e) => notesDraft.setValue(e.target.value)}
               rows={4}
               autoFocus
               className="w-full px-2.5 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-transparent"
@@ -87,7 +103,7 @@ export function LeadNotesEditor({
             <label className="text-xs text-gray-500 block mb-1">הערות מעקב</label>
             <textarea
               value={draftFollowup}
-              onChange={(e) => setDraftFollowup(e.target.value)}
+              onChange={(e) => followupDraft.setValue(e.target.value)}
               rows={3}
               className="w-full px-2.5 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-transparent"
             />
@@ -103,7 +119,7 @@ export function LeadNotesEditor({
             </button>
             <button
               type="button"
-              onClick={() => setEditing(false)}
+              onClick={cancelEdit}
               disabled={saving}
               className="px-3 py-1.5 rounded-lg bg-gray-100 text-gray-700 text-sm hover:bg-gray-200"
             >

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/api-auth";
 import { normalizePhone } from "@/lib/phone";
 import { isValidStatus, validateTransition, STATUS_LABELS, type LeadStatusValue } from "@/lib/stateMachine";
+import { GUBGET_SOURCE } from "@/lib/constants";
 
 /**
  * POST /api/bridge/from-machine — the autonomous machine ("גובגט") reports
@@ -81,7 +82,7 @@ export async function POST(req: NextRequest) {
       .insert({
         name: body.name ?? "",
         phone,
-        source: body.source ?? "גובגט",
+        source: body.source ?? GUBGET_SOURCE,
         status: "NEW_LEAD",
         handled_by: GUBGET_EMAIL,
       })

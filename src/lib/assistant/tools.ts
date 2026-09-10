@@ -9,7 +9,7 @@ import { betaZodTool } from "@anthropic-ai/sdk/helpers/beta/zod";
 import { z } from "zod";
 import { createClient } from "@supabase/supabase-js";
 import { STATUS_LABELS, LeadStatus, ALL_STATUSES, type LeadStatusValue } from "@/lib/stateMachine";
-import { LEAD_SOURCES } from "@/lib/constants";
+import { ALL_LEAD_SOURCES } from "@/lib/constants";
 
 function admin() {
   return createClient(
@@ -167,7 +167,7 @@ export const assistantTools = [
     inputSchema: z.object({
       statuses: z.array(z.enum(ALL_STATUSES as [LeadStatusValue, ...LeadStatusValue[]])).optional().describe("סטטוסים לסינון. ריק = הפייפליין הפעיל (לא כולל נדחה/לא התקבל/אבד קשר/לא מתאים/התחיל לעבוד)."),
       job_title_query: z.string().optional().describe("מילת חיפוש בתפקיד המבוקש של המועמד"),
-      source: z.enum(LEAD_SOURCES as unknown as [string, ...string[]]).optional().describe("גורם גיוס"),
+      source: z.enum(ALL_LEAD_SOURCES as unknown as [string, ...string[]]).optional().describe("גורם גיוס"),
       name_or_phone: z.string().optional().describe("חיפוש חופשי בשם או טלפון"),
       stale_days: z.number().int().min(1).max(90).optional().describe("רק לידים שלא עודכנו X ימים (לזיהוי תקועים)"),
       only_needs_attention: z.boolean().optional(),
@@ -408,7 +408,7 @@ export const assistantTools = [
       "יוצר קישור להורדת קובץ CSV (נפתח באקסל) של לידים לפי סינון — סטטוסים, גורם גיוס, טווח תאריכים. השתמש כשהמגייסת מבקשת 'להוציא דוח', 'לייצא לאקסל', 'רשימה של...'. החזר למגייסת את הקישור.",
     inputSchema: z.object({
       statuses: z.array(z.enum(ALL_STATUSES as [LeadStatusValue, ...LeadStatusValue[]])).optional(),
-      source: z.enum(LEAD_SOURCES as unknown as [string, ...string[]]).optional(),
+      source: z.enum(ALL_LEAD_SOURCES as unknown as [string, ...string[]]).optional(),
       from_date: z.string().optional().describe("YYYY-MM-DD"),
       to_date: z.string().optional().describe("YYYY-MM-DD"),
       job_title_query: z.string().optional(),

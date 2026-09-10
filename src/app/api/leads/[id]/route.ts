@@ -35,9 +35,13 @@ const EDITABLE_FIELDS = new Set([
 ]);
 
 const DATE_FIELDS = new Set(["start_date", "arrival_date", "employment_end_date"]);
+// notes/followup_notes belong here: without them the audit diff carried no
+// record of a note being replaced, so "my note disappeared" could not be
+// answered from the log at all.
 const SNAPSHOT_COLUMNS =
   "name, phone, email, job_title, location, experience, age, screening_score, interview_date, " +
-  "interview_notes, hired_client, hired_position, rejection_reason, start_date, arrival_date, employment_end_date";
+  "interview_notes, hired_client, hired_position, rejection_reason, start_date, arrival_date, " +
+  "employment_end_date, notes, followup_notes";
 
 // קריאת השדות שהדיאלוגים צריכים כדי לפתוח עם הערך הקיים ולא לדרוס אותו
 // (למשל תאריך תחילת עבודה כשמעבירים ל"התחיל לעבוד").
@@ -82,6 +86,7 @@ export async function PATCH(
   }
 
   const updateData: Record<string, unknown> = {};
+  let blankedNote = false;
   for (const [key, value] of Object.entries(body)) {
     if (!EDITABLE_FIELDS.has(key)) continue;
     if (key === "age") {
@@ -130,6 +135,15 @@ export async function PATCH(
     } else if (key === "hired_client") {
       const s = String(value ?? "").trim();
       updateData.hired_client = s ? (await normalizeEmployerName(s)).normalized : null;
+    } else if (key === "notes" || key === "followup_notes") {
+      // Blanking a note has to be deliberate. This route used to turn an empty
+      // textarea straight into NULL with no journal copy, so a save from a card
+      // whose editor had opened stale erased what a recruiter had written and
+      // left no trace of it — which is how notes "disappeared" (three reports,
+      // 8–10 Sep). Emptying is now refused; text is only ever replaced by text.
+      const s = String(value ?? "").trim();
+      if (!s) { blankedNote = true; continue; }
+      updateData[key] = s;
     } else {
       const s = String(value ?? "").trim();
       updateData[key] = s || null;
@@ -143,7 +157,12 @@ export async function PATCH(
   }
 
   if (Object.keys(updateData).length === 0) {
-    return NextResponse.json({ error: "אין שדות לעדכון" }, { status: 400 });
+    return NextResponse.json(
+      blankedNote
+        ? { error: "לא ניתן לרוקן הערה קיימת מכאן — אפשר להחליף אותה בטקסט אחר" }
+        : { error: "אין שדות לעדכון" },
+      { status: 400 }
+    );
   }
 
   // snapshot before the write so the audit row carries a real from→to diff
@@ -178,6 +197,23 @@ export async function PATCH(
       request,
       meta: { via: "PATCH /api/leads/[id]" },
     });
+  }
+
+  // A note saved from the card sheet used to leave no copy anywhere, so the
+  // text existed in exactly one cell and the next save overwrote it. Mirror it
+  // into the journal like the notes route does — the journal is append-only,
+  // so an overwritten note is still readable there.
+  const noteText = typeof updateData.notes === "string" ? updateData.notes : null;
+  if (noteText && noteText !== (before as Record<string, unknown> | null)?.notes) {
+    await supabase
+      .from("lead_events")
+      .insert({
+        lead_id: leadId,
+        event_type: "הערה",
+        event_text: noteText.slice(0, 1000),
+        created_by: user.email,
+      })
+      .then(() => undefined, () => undefined);
   }
 
   return NextResponse.json({ lead: data });

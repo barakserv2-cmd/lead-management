@@ -26,7 +26,40 @@ export const LEAD_SOURCES = [
   "אחר",
 ] as const;
 
-export type LeadSource = (typeof LEAD_SOURCES)[number];
+/**
+ * גורם הגיוס שהמכונה (גובגט) כותבת על כל ליד שהיא יוצרת, דרך
+ * /api/bridge/from-machine. מיוצא כקבוע כדי שלא יהיה מחרוזת חופשית בשני צדדים.
+ */
+export const GUBGET_SOURCE = "גובגט";
+
+/**
+ * גורמי גיוס שנכתבים על ידי קוד ולא נבחרים ביד — הגשר של המכונה, ייבוא
+ * אקסל, והוובהוק של וואטסאפ. הם במכוון לא נמצאים ב-LEAD_SOURCES, כי הרשימה
+ * הזאת היא בורר הידני של הרכזות ואסור שיופיעו בה ערכים שאיש לא בוחר.
+ * דוחות וסינונים צריכים לאחד את שתי הרשימות דרך ALL_LEAD_SOURCES.
+ */
+export const MACHINE_LEAD_SOURCES = [
+  GUBGET_SOURCE,
+  "ייבוא Excel",
+  "אקסטרות",
+  "וואטסאפ ישיר",
+  // ישן: נכתב על ידי זרימת סינון קודמת שכבר לא רצה, אבל יש לידים עם הערך.
+  "whatsapp_screening",
+] as const;
+
+/** כל גורם גיוס ידוע — ידני + נכתב-מכונה. לסינון ולדוחות, לא לבורר. */
+export const ALL_LEAD_SOURCES = [...LEAD_SOURCES, ...MACHINE_LEAD_SOURCES] as const;
+
+export type ManualLeadSource = (typeof LEAD_SOURCES)[number];
+export type MachineLeadSource = (typeof MACHINE_LEAD_SOURCES)[number];
+
+/**
+ * עמודת source היא טקסט חופשי בפועל: מלבד הרשימות שלמעלה יש בה גם תיוג
+ * ברמת הקמפיין ("פייסבוק - BARAK TLV CASHIERS"), שנוצר לפי כלל ב-gmail.ts.
+ * לכן הטיפוס פתוח: התוספת של string שומרת על ההשלמה האוטומטית של
+ * הערכים הידועים, בלי לשקר שהם הערכים היחידים.
+ */
+export type LeadSource = ManualLeadSource | MachineLeadSource | (string & {});
 
 // Sub-statuses keyed by main status — scalable for future statuses
 // Triggering "אין מענה 3" auto-transitions the lead to LOST_CONTACT

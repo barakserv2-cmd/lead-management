@@ -55,7 +55,8 @@ export function LeadNotesDialog({
           <DialogHeader>
             <DialogTitle>הערות והיסטוריה — {leadName}</DialogTitle>
             <DialogDescription>
-              כל מה שנכתב על המועמד: הערות, שיחות, שינויי סטטוס. ההערה נשמרת גם בכרטיס הליד.
+              כל מה שנכתב על המועמד: הערות, שיחות, שינויי סטטוס. מה שנכתב כאן נשמר ביומן
+              האירועים ונשאר לתמיד — לא בשדה &quot;הערות&quot; שבכרטיס.
             </DialogDescription>
           </DialogHeader>
           {open && <LeadEventsSection leadId={leadId} />}

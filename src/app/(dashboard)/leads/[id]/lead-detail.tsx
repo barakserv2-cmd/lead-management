@@ -57,6 +57,7 @@ import { BookingLinkButton } from "./booking-link-button";
 import { LeadEventsSection } from "../lead-events-section";
 import { LeadDocumentsSection } from "../lead-documents-section";
 import { GubgetSummary, type GubgetSnapshot } from "./gubget-summary";
+import { useNoteDraft } from "@/lib/useNoteDraft";
 
 // ── Helpers ──────────────────────────────────────────────────
 
@@ -296,7 +297,9 @@ export function LeadDetail({
   const [displayEmail, setDisplayEmail] = useState(lead.email);
   const [displayJobTitle, setDisplayJobTitle] = useState(lead.job_title);
 
-  const [notes, setNotes] = useState(lead.notes ?? "");
+  const [savedNotes, setSavedNotes] = useState(lead.notes ?? "");
+  const notesDraft = useNoteDraft(`${lead.id}:notes`, savedNotes);
+  const notes = notesDraft.value;
   const [savingNotes, setSavingNotes] = useState(false);
 
   const prefs = (lead.preferences ?? {}) as Record<string, string>;
@@ -430,7 +433,8 @@ export function LeadDetail({
     const result = await saveLeadNotes(lead.id, notes);
     setSavingNotes(false);
     if (result.error) { toast.error("שגיאה בשמירה"); return; }
-    if (result.notes !== undefined) setNotes(result.notes); // re-sync to what's stored
+    if (result.notes !== undefined) setSavedNotes(result.notes); // re-sync to what's stored
+    notesDraft.commit();
     toast.success(result.skipped === "empty_ignored" ? "הערות ריקות לא נשמרו — הקיימות נשמרו" : "הערות נשמרו!");
   }
 
@@ -791,7 +795,7 @@ export function LeadDetail({
                 <TabsContent value="notes" className="mt-3 space-y-3">
                   <Textarea
                     value={notes}
-                    onChange={(e) => setNotes(e.target.value)}
+                    onChange={(e) => notesDraft.setValue(e.target.value)}
                     rows={7}
                     className="resize-none text-sm"
                     placeholder="הערות כלליות על המועמד..."

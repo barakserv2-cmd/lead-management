@@ -1,3 +1,4 @@
+import { GUBGET_SOURCE } from "@/lib/constants";
 import type { Lead } from "@/types/leads";
 
 // כותרת "מה גובגט יודע ומה הלאה" בכרטיס המועמד.
@@ -55,10 +56,8 @@ export function buildGubgetSnapshot(
   lead: Lead,
   notes: { event_text: string; created_at: string }[]
 ): GubgetSnapshot {
-  // גובגט writes source: "גובגט", which is not in the LEAD_SOURCES union that
-  // types the column (that list is the recruiters' manual picker).
   const involved =
-    (lead.source as string) === "גובגט" ||
+    lead.source === GUBGET_SOURCE ||
     lead.handled_by === GUBGET_EMAIL ||
     lead.screening_score !== null ||
     notes.length > 0;

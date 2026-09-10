@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import type { TimelineEvent } from "@/app/api/leads/[id]/events/route";
+import { useNoteDraft } from "@/lib/useNoteDraft";
 
 // יומן אירועים למועמד: תיעוד של כל מה שקרה עם העובד — שיחות, אזהרות,
 // תיאומים, תלונות — ממוזג עם שינויי הסטטוס האוטומטיים. כל רשומה מציגה מי
@@ -56,7 +57,8 @@ export function LeadEventsSection({ leadId }: { leadId: string }) {
   const [timeline, setTimeline] = useState<TimelineEvent[]>([]);
   const [loading, setLoading] = useState(true);
   const [tableMissing, setTableMissing] = useState(false);
-  const [text, setText] = useState("");
+  const draft = useNoteDraft(`${leadId}:journal`, "");
+  const text = draft.value;
   const [eventType, setEventType] = useState<string>("שיחה");
   const [saving, setSaving] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -99,7 +101,7 @@ export function LeadEventsSection({ leadId }: { leadId: string }) {
       if (!res.ok) {
         toast.error(data.error ?? "שגיאה בשמירת האירוע");
       } else {
-        setText("");
+        draft.commit();
         toast.success("האירוע נרשם ביומן");
         // מוסיפים אופטימית ומרעננים ברקע
         setTimeline((prev) => [
@@ -238,7 +240,7 @@ export function LeadEventsSection({ leadId }: { leadId: string }) {
         </div>
         <textarea
           value={text}
-          onChange={(e) => setText(e.target.value)}
+          onChange={(e) => draft.setValue(e.target.value)}
           placeholder="מה קרה? לדוגמה: העובד לא הגיע למשמרת, סוכם עם המלון על החלפה..."
           rows={2}
           className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-transparent resize-none bg-white"
