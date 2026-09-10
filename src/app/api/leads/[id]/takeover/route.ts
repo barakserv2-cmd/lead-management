@@ -19,8 +19,15 @@ export async function POST(_req: NextRequest, ctx: { params: Promise<{ id: strin
 
   const { id } = await ctx.params;
   const admin = getSupabaseAdmin();
-  const { data: lead } = await admin.from("leads").select("id, phone").eq("id", id).maybeSingle();
+  const { data: lead } = await admin.from("leads").select("id, phone, handled_by").eq("id", id).maybeSingle();
   if (!lead) return NextResponse.json({ error: "הליד לא נמצא" }, { status: 404 });
+
+  // taking a candidate off another recruiter is explicit and must be visible
+  const prevOwner = (lead.handled_by as string | null)?.trim() || null;
+  const takenFrom =
+    prevOwner && prevOwner !== "gubget@eilatjobs.com" && prevOwner.toLowerCase() !== (user.email ?? "").toLowerCase()
+      ? prevOwner
+      : null;
 
   const { error } = await admin
     .from("leads")
@@ -43,7 +50,9 @@ export async function POST(_req: NextRequest, ctx: { params: Promise<{ id: strin
     .insert({
       lead_id: id,
       event_type: "אסקלציה",
-      event_text: "רכזת לקחה שליטה מהצ'אט — גובגט מוקפאת",
+      event_text: takenFrom
+        ? `רכזת לקחה שליטה מהצ'אט — הליד עבר מ${takenFrom.split("@")[0]} ל${(user.email ?? "").split("@")[0]}; גובגט מוקפאת`
+        : "רכזת לקחה שליטה מהצ'אט — גובגט מוקפאת",
       created_by: user.email ?? "רכזת",
     })
     .then(() => undefined, () => undefined);

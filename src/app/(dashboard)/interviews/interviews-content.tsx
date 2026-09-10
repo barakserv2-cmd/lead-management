@@ -82,6 +82,22 @@ function normPhone(p: string): string {
   return digits;
 }
 
+/**
+ * An interview that already has its final outcome is done work — it leaves the
+ * board unless the recruiter asks to see handled ones. INTERVIEW_BOOKED,
+ * POSTPONED_ARRIVAL and ARRIVED stay: they still need something from a human.
+ */
+const HANDLED_STATUSES = new Set<string>([
+  LeadStatus.NO_SHOW,
+  LeadStatus.CANCELLED_ARRIVAL,
+  LeadStatus.HIRED,
+  LeadStatus.STARTED,
+  LeadStatus.NOT_ACCEPTED,
+  LeadStatus.REJECTED,
+  LeadStatus.LOST_CONTACT,
+  LeadStatus.NOT_SUITABLE,
+]);
+
 // The only statuses selectable from the interviews board.
 const INTERVIEW_STATUSES: LeadStatusValue[] = [
   LeadStatus.INTERVIEW_BOOKED,
@@ -128,6 +144,10 @@ export function InterviewsContent({
   const [recruiter, setRecruiter] = useState("");
   const [type, setType] = useState("");
   const [status, setStatus] = useState("");
+  // תמי, דיווח 09-09: "ברגע שאני משנה מישהו שנמצא בראיונות אני רוצה שהוא יצא
+  // משם כי אין לו למה להיות שם סתם". הלוח הוא תור עבודה: ראיון שכבר קיבל
+  // תוצאה סופית יורד ממנו, וניתן להחזיר אותו לתצוגה בלחיצה.
+  const [showHandled, setShowHandled] = useState(false);
 
   const today = todayKey();
   const [reportDate, setReportDate] = useState(today);
@@ -152,6 +172,9 @@ export function InterviewsContent({
       if (range === "upcoming" && key < today) return false;
       if (range === "past" && key >= today) return false;
       }
+      // handled interviews leave the work queue (unless explicitly shown, or
+      // the recruiter filtered to that exact status)
+      if (!showHandled && !status && HANDLED_STATUSES.has(r.status)) return false;
       if (role && r.job_title !== role) return false;
       if (client && r.client !== client) return false;
       if (recruiter && r.recruiter !== recruiter) return false;
@@ -164,7 +187,13 @@ export function InterviewsContent({
       }
       return true;
     });
-  }, [rows, range, q, role, client, recruiter, type, status, today, customRange]);
+  }, [rows, range, q, role, client, recruiter, type, status, today, customRange, showHandled]);
+
+  // how many finished interviews are currently hidden from the queue
+  const handledHidden = useMemo(
+    () => (showHandled || status ? 0 : rows.filter((r) => HANDLED_STATUSES.has(r.status)).length),
+    [rows, showHandled, status]
+  );
 
   const groups = useMemo(() => {
     const map = new Map<string, InterviewRow[]>();
@@ -370,6 +399,20 @@ export function InterviewsContent({
             <option key={s} value={s}>{STATUS_LABELS[s]}</option>
           ))}
         </select>
+        {(handledHidden > 0 || showHandled) && !status && (
+          <button
+            type="button"
+            onClick={() => setShowHandled((v) => !v)}
+            className={`text-sm rounded-lg px-3 py-2 border transition-colors ${
+              showHandled
+                ? "border-slate-400 bg-slate-100 text-slate-800"
+                : "border-slate-300 bg-white text-slate-600 hover:border-slate-400"
+            }`}
+            title="ראיונות שכבר קיבלו תוצאה סופית יורדים מהתור"
+          >
+            {showHandled ? "הסתר שטופלו" : `הצג גם שטופלו (${handledHidden})`}
+          </button>
+        )}
         {hasFilters && (
           <button type="button" onClick={clearAll} className="text-sm text-slate-500 hover:text-slate-800 px-2">
             נקה

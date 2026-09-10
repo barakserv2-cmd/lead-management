@@ -40,8 +40,12 @@ export interface ChangeStatusInput {
     followupNotes?: string;
     screeningScore?: number;
     humanApproval?: boolean;
+    /** explicit "קח שליטה" — the only way ownership moves off another recruiter */
+    claimOwnership?: boolean;
   };
 }
+
+const GUBGET_EMAIL = "gubget@eilatjobs.com";
 
 export interface ChangeStatusResult {
   success: boolean;
@@ -61,7 +65,7 @@ export async function changeLeadStatus(input: ChangeStatusInput): Promise<Change
   // 2. Fetch current lead data
   const { data: lead, error: fetchError } = await supabase
     .from("leads")
-    .select("status, screening_score, human_approval, interview_date, phone")
+    .select("status, screening_score, human_approval, interview_date, phone, handled_by")
     .eq("id", leadId)
     .single();
 
@@ -183,11 +187,24 @@ export async function changeLeadStatus(input: ChangeStatusInput): Promise<Change
   // 5b. Attribute handling to the recruiter who moved the lead — real user
   // emails only (skip automated "system"/"ai-recruiter"/"user"). Powers the
   // "לידים של היום" board that splits today's leads by recruiter.
+  //
+  // Ownership is NOT stolen by touching someone else's candidate. Tami:
+  // "אני רוצה לשנות לחושן משהו בתוך מועמד ולא רוצה שהוא יעבור על שמי".
+  // A lead that another recruiter already owns keeps its owner; the action is
+  // still attributed in lead_status_history.changed_by. Ownership moves only
+  // when the lead is unowned / owned by גובגט, or on an explicit takeover
+  // (extra.claimOwnership, set by the "קח שליטה" routes).
   if (userId && userId.includes("@")) {
-    updateData.handled_by = userId;
-    updateData.handled_at = new Date().toISOString();
-    // מעבר סטטוס ידני בא אחרי שיחה — נחשב מגע אחרון עם המועמד
-    updateData.last_contact_at = updateData.handled_at;
+    const currentOwner = (lead.handled_by as string | null)?.trim() || null;
+    const ownedByAnotherRecruiter =
+      !!currentOwner && currentOwner !== GUBGET_EMAIL && currentOwner.toLowerCase() !== userId.toLowerCase();
+    if (!ownedByAnotherRecruiter || extra?.claimOwnership) {
+      updateData.handled_by = userId;
+      updateData.handled_at = new Date().toISOString();
+    }
+    // מעבר סטטוס ידני בא אחרי שיחה — נחשב מגע אחרון עם המועמד, גם כשהבעלות
+    // נשארת אצל רכזת אחרת
+    updateData.last_contact_at = new Date().toISOString();
   }
 
   // 6. Update the leads table

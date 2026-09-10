@@ -41,6 +41,9 @@ export const SENT_TO_INTERVIEW = "נשלח לראיון";
 
 export const SUB_STATUSES: Record<string, string[]> = {
   CONTACTED: ["אין מענה 1", "אין מענה 2", NO_ANSWER_3, "מעקב"],
+  // תמי, דיווח 09-09: "בראיונות להוסיף: אין מענה". ניסיון חיוג שלא נענה לא
+  // סוגר את הראיון — הוא נשאר פתוח בלוח, רק מסומן שניסינו.
+  INTERVIEW_BOOKED: ["אין מענה 1", "אין מענה 2", "אושר טלפונית", "מעקב"],
   ARRIVED: [SENT_TO_INTERVIEW],
   NOT_SUITABLE: [
     "הסיר מועמדות",
