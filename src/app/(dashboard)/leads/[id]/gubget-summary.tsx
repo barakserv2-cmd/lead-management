@@ -23,10 +23,37 @@ export interface GubgetSnapshot {
 
 const GUBGET_EMAIL = "gubget@eilatjobs.com";
 
-/** מרכיב את התמונה מתוך שורת הליד + ההערה האחרונה של גובגט ביומן. */
+/**
+ * מאחד את ההערות של גובגט לתמונה אחת.
+ *
+ * גובגט לא כותב סיכום אחד — הוא כותב רשומה נפרדת לכל פרט שהוא מברר
+ * ("זמינות: ...", אחר כך "עיר: ...", וכן הלאה), ולכן ההערה האחרונה לבדה היא
+ * שבריר ולא תמונה. כאן מאחדים אותן לפי תווית, כשהערך החדש גובר על הישן —
+ * בדיוק מה שרכזת הייתה עושה בראש.
+ */
+export function mergeGubgetNotes(notes: { event_text: string }[]): string | null {
+  const facts = new Map<string, string>();
+  const loose: string[] = [];
+  // מהישן לחדש, כדי שהחדש ידרוס
+  for (const n of [...notes].reverse()) {
+    const body = n.event_text.replace(/^📝\s*גובגט:\s*/, "").trim();
+    for (const part of body.split(" · ")) {
+      const idx = part.indexOf(":");
+      const label = idx > 0 ? part.slice(0, idx).trim() : "";
+      const value = (idx > 0 ? part.slice(idx + 1) : part).trim();
+      if (!value) continue;
+      if (label) facts.set(label, value);
+      else if (!loose.includes(value)) loose.push(value);
+    }
+  }
+  const merged = [...[...facts].map(([k, v]) => `${k}: ${v}`), ...loose];
+  return merged.length ? merged.join(" · ") : null;
+}
+
+/** מרכיב את התמונה מתוך שורת הליד + ההערות של גובגט ביומן (החדשה ראשונה). */
 export function buildGubgetSnapshot(
   lead: Lead,
-  latestNote: { event_text: string; created_at: string } | null
+  notes: { event_text: string; created_at: string }[]
 ): GubgetSnapshot {
   // גובגט writes source: "גובגט", which is not in the LEAD_SOURCES union that
   // types the column (that list is the recruiters' manual picker).
@@ -34,14 +61,13 @@ export function buildGubgetSnapshot(
     (lead.source as string) === "גובגט" ||
     lead.handled_by === GUBGET_EMAIL ||
     lead.screening_score !== null ||
-    latestNote !== null;
+    notes.length > 0;
 
   return {
     involved,
     score: lead.screening_score ?? null,
-    // ההערה נשמרת עם קידומת "📝 גובגט:" — היא מיותרת כאן, הכותרת כבר אומרת את זה
-    learned: latestNote ? latestNote.event_text.replace(/^📝\s*גובגט:\s*/, "").trim() : null,
-    learnedAt: latestNote?.created_at ?? null,
+    learned: mergeGubgetNotes(notes),
+    learnedAt: notes[0]?.created_at ?? null,
     interviewAt: lead.interview_date ?? null,
     interviewType: lead.interview_type ?? null,
     paused: !!lead.bot_paused,

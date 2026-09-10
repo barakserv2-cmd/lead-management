@@ -36,18 +36,18 @@ export default async function LeadDetailPage({
     recruiterName = profile?.name ?? null;
   }
 
-  // ההערה האחרונה שגובגט כתב ביומן — ממנה בנויה שורת "מה גובגט יודע".
+  // ההערות שגובגט כתב ביומן — מהן נבנית שורת "מה גובגט יודע". הוא כותב רשומה
+  // לכל פרט בנפרד, ולכן צריך את האחרונות ולא רק את האחרונה.
   // lead_events נקרא דרך לקוח המשתמש (יש policy ל-authenticated).
-  const { data: gubgetNote } = await supabase
+  const { data: gubgetNotes } = await supabase
     .from("lead_events")
     .select("event_text, created_at")
     .eq("lead_id", id)
     .eq("event_type", "גובגט")
     .order("created_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
+    .limit(30);
 
-  const machine = buildGubgetSnapshot(lead as Lead, gubgetNote ?? null);
+  const machine = buildGubgetSnapshot(lead as Lead, gubgetNotes ?? []);
 
   // תיעוד צפייה ברשומה (תקנה 10) — נכתב אחרי שהתגובה נשלחה, לא מעכב רינדור
   after(() =>
