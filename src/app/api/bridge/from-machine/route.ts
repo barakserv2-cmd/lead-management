@@ -4,6 +4,7 @@ import { normalizePhone } from "@/lib/phone";
 import { isValidStatus, validateTransition, STATUS_LABELS, type LeadStatusValue } from "@/lib/stateMachine";
 import { GUBGET_SOURCE } from "@/lib/constants";
 import { closureFor } from "@/lib/israelHolidays";
+import { ensureClosuresLoaded } from "@/lib/closures";
 
 /**
  * POST /api/bridge/from-machine — the autonomous machine ("גובגט") reports
@@ -128,6 +129,7 @@ export async function POST(req: NextRequest) {
   // המשרד סגור בחג. גובגט כבר לא מציע מועד כזה, אבל השער נמצא גם כאן: רשימת
   // החלונות שלו יכולה להיות ישנה, והוא רץ בפריסה נפרדת. תאריך חג נדחה בשקט —
   // הליד עצמו נשמר, רק בלי מועד ראיון.
+  if (body.interviewAt) await ensureClosuresLoaded();
   const interviewClosure = body.interviewAt ? closureFor(body.interviewAt.slice(0, 10)) : null;
   const validInterviewAt = !!(
     body.interviewAt &&

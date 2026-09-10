@@ -1,4 +1,5 @@
 import { validateInterviewLocal } from "@/lib/interviewTime";
+import { ensureClosuresLoaded } from "@/lib/closures";
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { diffFields, logAudit } from "@/lib/audit";
@@ -122,6 +123,7 @@ export async function PATCH(
         if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(s) || Number.isNaN(new Date(s).getTime())) {
           return NextResponse.json({ error: "תאריך ראיון לא תקין" }, { status: 400 });
         }
+        await ensureClosuresLoaded();
         const err = validateInterviewLocal(s);
         if (err) return NextResponse.json({ error: err }, { status: 400 });
       }

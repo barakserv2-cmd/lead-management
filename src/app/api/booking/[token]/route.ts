@@ -4,6 +4,7 @@ import { formatSlot, INTERVIEW_TYPE_LABELS, listOpenSlots } from "@/lib/booking"
 import { changeLeadStatus } from "@/lib/actions/changeLeadStatus";
 import { LeadStatus } from "@/lib/stateMachine";
 import { resolveSender, sendWhatsAppMessage } from "@/lib/whatsappService";
+import { ensureClosuresLoaded } from "@/lib/closures";
 
 // ── הדף הציבורי של תיאום הראיון (ללא התחברות, טוקן בלבד) ────
 //   GET    → מצב הטוקן + החלונות הפנויים
@@ -57,6 +58,7 @@ export async function GET(
     .maybeSingle();
   const firstName = (lead?.name ?? "").trim().split(/\s+/)[0] || "";
 
+  await ensureClosuresLoaded();
   const slots = await listOpenSlots(admin, row.recruiter_email);
 
   return NextResponse.json({
@@ -91,6 +93,7 @@ export async function POST(
 
   // המועד חייב להיות אחד מהחלונות המוצעים כרגע (זמינות + עתיד + לא תפוס).
   // המרוץ האחרון — שני מועמדים על אותו חלון — נתפס באינדקס הייחודי ב-RPC.
+  await ensureClosuresLoaded();
   const slots = await listOpenSlots(admin, row.recruiter_email);
   if (!slots.includes(startsAt)) {
     return NextResponse.json(
@@ -107,6 +110,7 @@ export async function POST(
   const result = rpc as { ok: boolean; error?: string; rebooked?: boolean };
   if (!result.ok) {
     if (result.error === "slot_taken") {
+      await ensureClosuresLoaded();
       const fresh = await listOpenSlots(admin, row.recruiter_email);
       return NextResponse.json(
         { error: "המועד הזה בדיוק נתפס — בחר/י מועד אחר", slots: fresh },

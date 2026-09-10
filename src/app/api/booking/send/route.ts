@@ -3,6 +3,7 @@ import { getAuthedUser, getSupabaseAdmin } from "@/lib/api-auth";
 import { resolveSender, sendWhatsAppMessage } from "@/lib/whatsappService";
 import { appBaseUrl, listOpenSlots, newBookingToken } from "@/lib/booking";
 import { logAudit } from "@/lib/audit";
+import { ensureClosuresLoaded } from "@/lib/closures";
 
 // ── שליחת לינק תיאום ראיון עצמי למועמד ─────────────────────
 // POST { leadId, interviewType? } — יוצר טוקן (ומבטל קודמים של אותו
@@ -36,6 +37,7 @@ export async function POST(request: NextRequest) {
   if (!lead.phone) return NextResponse.json({ error: "לליד אין מספר טלפון" }, { status: 400 });
 
   // בלי חלונות זמינות אין מה להציע — מפנים את הרכזת להגדיר קודם.
+  await ensureClosuresLoaded();
   const slots = await listOpenSlots(admin, user.email);
   if (slots.length === 0) {
     return NextResponse.json(

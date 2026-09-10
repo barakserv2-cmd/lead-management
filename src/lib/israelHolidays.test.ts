@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { closureFor, isBookableMinute, isClosedDay, closuresBetween } from "./israelHolidays";
+import {
+  closureFor,
+  isBookableMinute,
+  isClosedDay,
+  closuresBetween,
+  setManualClosures,
+} from "./israelHolidays";
 
 /**
  * גובגט קבע ראיון טלפוני לאנסטסיה רפאלוב ביום ראשון 13/09/2026 בשעה 12:30 —
@@ -52,5 +58,30 @@ describe("closureFor", () => {
       "2026-09-26",
       "2026-10-03",
     ]);
+  });
+});
+
+/**
+ * סגירה ידנית — יום שאי אפשר לגזור מהלוח העברי (יום העצמאות, יום גישור).
+ * היא גוברת על החישוב, ואם v1 לא זמין החגים ממשיכים לחסום בלעדיה.
+ */
+describe("סגירות ידניות", () => {
+  it("סוגרת יום עבודה רגיל", () => {
+    expect(isClosedDay("2026-09-14")).toBe(false);
+    setManualClosures([{ date: "2026-09-14", name: "יום גישור", halfDay: false }]);
+    expect(isClosedDay("2026-09-14")).toBe(true);
+    expect(closureFor("2026-09-14").name).toBe("יום גישור");
+  });
+
+  it("יום קצר ידני חוסם רק את אחר הצהריים", () => {
+    setManualClosures([{ date: "2026-09-15", name: "חצי יום", halfDay: true }]);
+    expect(isBookableMinute("2026-09-15", 9 * 60)).toBe(true);
+    expect(isBookableMinute("2026-09-15", 15 * 60)).toBe(false);
+  });
+
+  it("רשימה ריקה לא פותחת את החגים", () => {
+    setManualClosures([]);
+    expect(isClosedDay("2026-09-13")).toBe(true);
+    expect(isClosedDay("2026-09-14")).toBe(false);
   });
 });

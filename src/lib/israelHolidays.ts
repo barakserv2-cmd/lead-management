@@ -74,8 +74,45 @@ export interface ClosureInfo {
 
 const OPEN: ClosureInfo = { closed: false, halfDay: false, name: null };
 
+// ── ימי סגירה ידניים ─────────────────────────────────────────
+//
+// מה שאי אפשר לגזור מהלוח העברי: יום העצמאות, יום הזיכרון, יום גישור,
+// סגירה של החברה. נשמר בטבלה office_closures ונטען לכאן. הקובץ הזה נשאר
+// בלי תלות בדאטהבייס בכוונה — הוא רץ גם בגובגט, שקורא את הרשימה דרך הגשר.
+
+export interface ManualClosure {
+  date: string; // YYYY-MM-DD
+  name: string;
+  halfDay: boolean;
+}
+
+let manual = new Map<string, ClosureInfo>();
+let manualLoadedAt = 0;
+
+/** מזין את הרשימה הידנית. נקרא מהשכבה שיודעת לקרוא אותה מהמקור. */
+export function setManualClosures(rows: ManualClosure[], now = Date.now()): void {
+  manual = new Map(
+    rows.map((r) => [r.date, { closed: !r.halfDay, halfDay: r.halfDay, name: r.name }])
+  );
+  manualLoadedAt = now;
+}
+
+/** האם הרשימה הידנית ישנה מדי ויש לרענן. */
+export function manualClosuresStale(ttlMs = 60_000, now = Date.now()): boolean {
+  return now - manualLoadedAt > ttlMs;
+}
+
+/** מה שנטען כרגע — לבדיקות ולתצוגה. */
+export function manualClosureCount(): number {
+  return manual.size;
+}
+
 /** מה מצב המשרד בתאריך נתון (YYYY-MM-DD בשעון קיר). */
 export function closureFor(dateStr: string): ClosureInfo {
+  // סגירה ידנית גוברת: היא הוזנה במפורש על ידי אדם עבור התאריך הזה
+  const override = manual.get(dateStr);
+  if (override) return override;
+
   const { day, month } = hebrewDate(dateStr);
   const closedName = CLOSED[month]?.[day];
   if (closedName) return { closed: true, halfDay: false, name: closedName };
