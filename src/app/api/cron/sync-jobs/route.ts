@@ -38,12 +38,16 @@ export async function GET(req: NextRequest) {
     // which is why גובגט never told candidates what a job actually requires
     // (תמי in the survey: דיוק המשרות 1/5, "ללא הסבר מה תנאי המשרה או היקף
     // והדרישות"). Send both, requirements first.
+    // A placeholder like "-" or "—" is not a requirement; it read as one in the
+    // first pass and reached candidates as a literal dash.
+    const meaningful = (s: string) => s.length > 0 && /[\p{L}\p{N}]/u.test(s);
     const reqList = Array.isArray(j.requirements)
-      ? (j.requirements as unknown[]).map((r) => String(r).trim()).filter(Boolean)
-      : typeof j.requirements === "string" && j.requirements.trim()
+      ? (j.requirements as unknown[]).map((r) => String(r).trim()).filter(meaningful)
+      : typeof j.requirements === "string" && meaningful(j.requirements.trim())
         ? [j.requirements.trim()]
         : [];
-    const details = [reqList.join(" · "), (j.notes ?? "").trim()].filter(Boolean).join(" · ");
+    const notes = (j.notes ?? "").trim();
+    const details = [reqList.join(" · "), meaningful(notes) ? notes : ""].filter(Boolean).join(" · ");
     return {
       external_ref: j.id,
       title: j.title,
