@@ -206,6 +206,19 @@ async function handleFetchEmails(req: NextRequest) {
             );
             summary.duplicates++;
             summary.details.push(`Duplicate (phone ${phone}): ${name}`);
+            // פנייה חוזרת (ועדת נפח הלידים 12.09, החלטה 1): המועמד פנה
+            // שוב — מתועד על הליד הקיים במקום להיבלע. מיילים של לידים
+            // נשארים לא-נקראים ונסרקים שוב ושוב, לכן occurrence_key לפי
+            // מזהה המייל מבטיח ספירה של פעם אחת בלבד.
+            const { error: repeatErr } = await supabase.rpc("record_repeat_inquiry", {
+              p_lead_id: existingByPhone[0].id,
+              p_channel: detectSource(email.from, email.subject, email.body),
+              p_detail: email.subject?.slice(0, 200) || null,
+              p_occurrence_key: `repeat:${email.id}`,
+            });
+            if (repeatErr) {
+              console.error(`[Gmail] record_repeat_inquiry failed:`, repeatErr.message);
+            }
             // Do NOT mark as read — lead emails must stay unread in the inbox.
             // Dedup is by original_email_id, so re-scanning is safe.
             continue;

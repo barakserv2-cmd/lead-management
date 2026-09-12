@@ -28,6 +28,17 @@ export async function POST(request: NextRequest) {
     if (phone) {
       const existing = await findLeadByPhone(supabase, phone);
       if (existing) {
+        // פנייה חוזרת (ועדת נפח הלידים 12.09, החלטה 1): מועמד קיים
+        // ששלח טופס חדש מתועד על הליד — לא נבלע בשקט בדדופ.
+        await supabase
+          .rpc("record_repeat_inquiry", {
+            p_lead_id: existing.id,
+            p_channel: source || "אחר",
+            p_detail: role ? `תפקיד מבוקש: ${role}` : null,
+          })
+          .then(({ error: e }) => {
+            if (e) console.error("[leads/create] record_repeat_inquiry failed:", e.message);
+          });
         return NextResponse.json(
           {
             success: false,
@@ -55,6 +66,18 @@ export async function POST(request: NextRequest) {
     if (insertError) {
       if (isPhoneUniqueViolation(insertError)) {
         const existing = await findLeadByPhone(supabase, phone);
+        if (existing) {
+          // אותו תיעוד גם במסלול המרוץ (שני טפסים באותה שנייה)
+          await supabase
+            .rpc("record_repeat_inquiry", {
+              p_lead_id: existing.id,
+              p_channel: source || "אחר",
+              p_detail: role ? `תפקיד מבוקש: ${role}` : null,
+            })
+            .then(({ error: e }) => {
+              if (e) console.error("[leads/create] record_repeat_inquiry failed:", e.message);
+            });
+        }
         return NextResponse.json(
           {
             success: false,

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient as createServerClient } from "@supabase/supabase-js";
 import { businessAccount, sendWhatsAppMessage } from "@/lib/whatsappService";
 import { runPostPlacementCare } from "@/lib/postPlacement";
+import { runIntakeMonitor } from "@/lib/intakeMonitor";
 
 // Vercel cron pings this URL every hour at :30 (see vercel.json).
 // Guarded by CRON_SECRET so it can't be hit anonymously from outside.
@@ -295,6 +296,26 @@ async function runPlacementCare(admin: ReturnType<typeof getAdmin>): Promise<Run
   return summary;
 }
 
+// ── Rule 5: ניטור בריאות ערוצי לידים (ועדת נפח הלידים, החלטה 3) ──
+// ערוץ שהיה פעיל ב-14 יום ונדם 3+ ימים → וואטסאפ לסער. פעם ביום ב-09:00.
+async function runChannelHealth(admin: ReturnType<typeof getAdmin>): Promise<RunSummary> {
+  const summary: RunSummary = {
+    rule: "channel_health",
+    attempted: 0,
+    succeeded: 0,
+    failed: 0,
+    details: [],
+  };
+  const monitor = await runIntakeMonitor(admin);
+  summary.attempted = monitor.channels;
+  summary.succeeded = monitor.alerts;
+  summary.details = monitor.details;
+  if (monitor.purged > 0) {
+    summary.details.push(`נוקו ${monitor.purged} פניות ללא ליד ישנות (90+ יום)`);
+  }
+  return summary;
+}
+
 // ── Orchestrator ────────────────────────────────────────────
 async function runDailyCron() {
   const admin = getAdmin();
@@ -303,6 +324,7 @@ async function runDailyCron() {
     runStaleClaimCleanup(admin),
     runWeeklyDigest(admin),
     runPlacementCare(admin),
+    runChannelHealth(admin),
   ]);
   return { ok: true, ran_at: new Date().toISOString(), rules: results };
 }

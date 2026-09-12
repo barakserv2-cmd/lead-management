@@ -171,8 +171,30 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // No lead found — ignore
+    // אין ליד — לא יוצרים אחד (ההוראה של סער על המספר של מלי בתוקף),
+    // אבל הפנייה כבר לא נעלמת בשקט: נרשמת ב"פניות ללא ליד" (הגדרות)
+    // לצפייה בלבד. נציג/ת לקוח מסומנים בנפרד כדי לא להתבלבל עם מועמדים.
+    // (ועדת נפח הלידים 12.09, החלטה 2 — דלף מדידה, לא פיצ'ר.)
     if (!lead) {
+      if (isIncoming) {
+        try {
+          const [{ data: byPhone }, { data: byContact }] = await Promise.all([
+            supabase.from("clients").select("name").in("phone", phoneVariants).limit(1),
+            supabase.from("clients").select("name").contains("contact_phones", [phone]).limit(1),
+          ]);
+          const clientMatch = byPhone?.[0] ?? byContact?.[0];
+          await supabase.rpc("record_unmatched_inbound", {
+            p_phone: phone,
+            p_sender_name: body.senderData?.senderName ?? null,
+            p_instance_id: String(body.instanceData?.idInstance ?? ""),
+            p_message: messageText.slice(0, 500),
+            p_is_client: Boolean(clientMatch),
+            p_client_name: clientMatch?.name ?? null,
+          });
+        } catch (e) {
+          console.error("[WhatsApp Webhook] unmatched_inbound record failed:", e);
+        }
+      }
       return NextResponse.json({ ok: true });
     }
 
