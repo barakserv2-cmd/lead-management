@@ -16,6 +16,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { resolveSender, businessAccount, sendWhatsAppMessage } from "@/lib/whatsappService";
 import { isQuietHoursNow } from "@/lib/sendGate";
 import { israelNow } from "@/lib/booking";
+import { sendBookingLinkToLead } from "@/lib/bookingSend";
 import { LeadStatus } from "@/lib/stateMachine";
 
 interface Rule {
@@ -23,7 +24,7 @@ interface Rule {
   name: string;
   trigger_type: "status_age" | "flag_open" | "after_interview";
   params: Record<string, unknown>;
-  action_type: "message_candidate" | "raise_flag" | "notify_recruiter" | "notify_admin";
+  action_type: "message_candidate" | "raise_flag" | "notify_recruiter" | "notify_admin" | "send_booking_link";
   template: string | null;
 }
 
@@ -179,6 +180,28 @@ async function executeAction(
     return { ok: true, detail: "נשלחה הודעה למועמד/ת" };
   }
 
+  if (rule.action_type === "send_booking_link") {
+    // הודעת פתיחה מהתבנית + קישור תיאום עצמי אמיתי (החלטת ועדה #6).
+    if (!lead.phone) return { ok: false, detail: "אין טלפון" };
+    const intro = fillTemplate(template, lead);
+    const sender = (await resolveSender(lead.handled_by)) ?? businessAccount();
+    const res = await sendWhatsAppMessage(lead.phone, intro, sender, { automated: true });
+    if (!res.success) return { ok: false, detail: res.error ?? "שליחה נכשלה" };
+    await db.from("messages").insert({
+      lead_id: lead.id,
+      role: "recruiter",
+      content: intro,
+      sent_by: "מערכת",
+      via_instance: sender.instanceId,
+    });
+    const linkRes = await sendBookingLinkToLead(lead.id, {
+      account: sender,
+      createdBy: "מנוע החוקים",
+    });
+    if (!linkRes.success) return { ok: false, detail: `הפתיח נשלח אך הלינק נכשל: ${linkRes.error}` };
+    return { ok: true, detail: "נשלחו פתיח + לינק תיאום עצמי" };
+  }
+
   if (rule.action_type === "raise_flag") {
     await db
       .from("leads")
@@ -266,12 +289,12 @@ export async function runAutomationRules(db: SupabaseClient): Promise<EngineSumm
       }
 
       // חוק ברזל: הודעת מועמד אחת ביום פר ליד, מכל החוקים יחד
-      if (rule.action_type === "message_candidate") {
+      if (rule.action_type === "message_candidate" || rule.action_type === "send_booking_link") {
         const { count } = await db
           .from("automation_runs")
           .select("id", { count: "exact", head: true })
           .eq("lead_id", lead.id)
-          .eq("action_type", "message_candidate")
+          .in("action_type", ["message_candidate", "send_booking_link"])
           .eq("success", true)
           .gte("created_at", new Date(`${todayKey}T00:00:00+03:00`).toISOString());
         if ((count ?? 0) > 0) {

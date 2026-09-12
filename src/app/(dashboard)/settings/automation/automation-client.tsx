@@ -21,6 +21,7 @@ const ACTION_LABELS: Record<string, string> = {
   raise_flag: "הרמת דגל",
   notify_recruiter: "תזכורת לרכזת",
   notify_admin: "התראה לסער",
+  send_booking_link: "פתיח + לינק תיאום עצמי",
 };
 
 function fmt(iso: string | null): string {
