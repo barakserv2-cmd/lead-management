@@ -13,6 +13,8 @@
 import { createClient as createServerClient } from "@supabase/supabase-js";
 import { checkSendGate } from "@/lib/sendGate";
 
+export type WhatsAppProvider = "greenapi" | "cloud";
+
 export interface WhatsAppAccount {
   instanceId: string;
   token: string;
@@ -22,6 +24,14 @@ export interface WhatsAppAccount {
   phone?: string | null;
   /** הודעה נכנסת ממספר לא מוכר יוצרת ליד חדש (המספר של מלי) */
   captureUnknown?: boolean;
+  /** greenapi = הלקוח הלא רשמי; cloud = הערוץ הרשמי של מטא */
+  provider?: WhatsAppProvider;
+  /** cloud בלבד: מזהה המספר אצל מטא (לא המספר עצמו) */
+  phoneNumberId?: string | null;
+  /** cloud בלבד: בסיס API של ספק, ריק = מטא ישירות */
+  apiBase?: string | null;
+  /** cloud בלבד: שם משתנה הסביבה שמחזיק את הטוקן */
+  tokenEnv?: string | null;
 }
 
 function adminClient() {
@@ -49,7 +59,15 @@ interface AccountRow {
   label: string | null;
   is_active: boolean;
   capture_unknown?: boolean;
+  provider?: string | null;
+  phone_number_id?: string | null;
+  api_base?: string | null;
+  token_env?: string | null;
 }
+
+/** העמודות של חשבון — במקום אחד, כדי ששאילתה לא תשכח שדה של ספק. */
+const ACCOUNT_COLUMNS =
+  "user_email, instance_id, api_token, phone, label, is_active, capture_unknown, provider, phone_number_id, api_base, token_env";
 
 function rowToAccount(r: AccountRow): WhatsAppAccount {
   return {
@@ -59,6 +77,10 @@ function rowToAccount(r: AccountRow): WhatsAppAccount {
     label: r.label,
     phone: r.phone,
     captureUnknown: r.capture_unknown === true,
+    provider: r.provider === "cloud" ? "cloud" : "greenapi",
+    phoneNumberId: r.phone_number_id ?? null,
+    apiBase: r.api_base ?? null,
+    tokenEnv: r.token_env ?? null,
   };
 }
 
@@ -69,7 +91,7 @@ export async function getAccountForEmail(
   if (!email) return null;
   const { data } = await adminClient()
     .from("whatsapp_accounts")
-    .select("user_email, instance_id, api_token, phone, label, is_active, capture_unknown")
+    .select(ACCOUNT_COLUMNS)
     .eq("user_email", email.toLowerCase())
     .eq("is_active", true)
     .maybeSingle();
@@ -86,7 +108,7 @@ export async function getAccountByInstance(
   // DB first — the env (default) instance may itself be linked to a recruiter.
   const { data } = await adminClient()
     .from("whatsapp_accounts")
-    .select("user_email, instance_id, api_token, phone, label, is_active, capture_unknown")
+    .select(ACCOUNT_COLUMNS)
     .eq("instance_id", id)
     .maybeSingle();
   return data ? rowToAccount(data as AccountRow) : biz;
@@ -110,7 +132,7 @@ export async function getDocDelegateAccount(
   if (!email) return null;
   const { data } = await adminClient()
     .from("whatsapp_accounts")
-    .select("user_email, instance_id, api_token, phone, label, is_active, capture_unknown")
+    .select(ACCOUNT_COLUMNS)
     .contains("doc_delegates", JSON.stringify([email.toLowerCase()]))
     .eq("is_active", true)
     .limit(1)
@@ -161,6 +183,108 @@ function apiUrl(account: WhatsAppAccount, method: string): string {
   return `https://api.green-api.com/waInstance${account.instanceId}/${method}/${account.token}`;
 }
 
+// ── הערוץ הרשמי של מטא (coexistence) ────────────────────────
+//
+// בערוץ הרשמי מותר טקסט חופשי רק בתוך 24 שעות מההודעה האחרונה של
+// המועמד/ת. מחוץ לחלון מטא דוחה את ההודעה, ורק תבנית מאושרת עוברת.
+//
+// לרכזת יש דרך עוקפת שאין לבוט: האפליקציה בטלפון שלה. מטא קובעת
+// במפורש שהודעה שנשלחת מ-WhatsApp Business אינה כפופה לחלון — ולכן
+// כשהחלון סגור התשובה הנכונה היא לומר לה בדיוק את זה, ולא להיכשל
+// בשקט או להמציא תבנית.
+
+export const SERVICE_WINDOW_HOURS = 24;
+
+/** מתי המועמד/ת כתבו לאחרונה — או null אם מעולם לא, או שהבדיקה נכשלה. */
+export async function lastInboundAt(phone: string): Promise<string | null> {
+  const digits = phone.replace(/\D/g, "").replace(/^972/, "0").slice(-10);
+  if (!digits) return null;
+  const db = adminClient();
+  const { data: lead } = await db
+    .from("leads")
+    .select("id")
+    .eq("phone", digits)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (!lead) return null;
+  const { data: msg } = await db
+    .from("messages")
+    .select("created_at")
+    .eq("lead_id", lead.id)
+    .eq("role", "user")
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  return (msg?.created_at as string) ?? null;
+}
+
+export function isWithinServiceWindow(
+  last: string | null,
+  now: Date = new Date()
+): boolean {
+  if (!last) return false;
+  const ms = now.getTime() - new Date(last).getTime();
+  return ms >= 0 && ms < SERVICE_WINDOW_HOURS * 3_600_000;
+}
+
+function cloudUrl(account: WhatsAppAccount): string {
+  // ספק (360dialog וכד') חושף API תואם בכתובת משלו; ריק = מטא ישירות
+  const base = (account.apiBase ?? "").trim() || "https://graph.facebook.com/v21.0";
+  return `${base.replace(/\/+$/, "")}/${account.phoneNumberId}/messages`;
+}
+
+async function sendViaCloud(
+  phone: string,
+  message: string,
+  account: WhatsAppAccount
+): Promise<SendResult> {
+  const token = (process.env[account.tokenEnv ?? ""] ?? "").trim();
+  if (!token) {
+    return { success: false, error: `חסר טוקן בסביבה (${account.tokenEnv ?? "—"})` };
+  }
+  if (!account.phoneNumberId) {
+    return { success: false, error: "לחשבון הרשמי חסר Phone Number ID" };
+  }
+
+  if (!isWithinServiceWindow(await lastInboundAt(phone))) {
+    return {
+      success: false,
+      error:
+        "חלון 24 השעות סגור — המועמד/ת לא כתבו ביממה האחרונה. " +
+        "אפשר לכתוב להם מאפליקציית WhatsApp Business בטלפון (שם אין מגבלה), " +
+        "וההודעה תופיע כאן אוטומטית.",
+    };
+  }
+
+  // מטא מצפה למספר בפורמט בינלאומי בלי + ובלי סיומת
+  const to = phone.replace(/\D/g, "").replace(/^0/, "972");
+
+  try {
+    const res = await fetch(cloudUrl(account), {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({
+        messaging_product: "whatsapp",
+        recipient_type: "individual",
+        to,
+        type: "text",
+        text: { body: message, preview_url: false },
+      }),
+    });
+    const body = await res.json();
+    if (res.ok) {
+      return { success: true, idMessage: body?.messages?.[0]?.id };
+    }
+    return { success: false, error: body?.error?.message ?? JSON.stringify(body) };
+  } catch (err) {
+    return { success: false, error: err instanceof Error ? err.message : String(err) };
+  }
+}
+
 /**
  * Send a WhatsApp message via Green API from the given account
  * (defaults to the business number).
@@ -179,6 +303,12 @@ export async function sendWhatsAppMessage(
     if (!gate.allowed) {
       return { success: false, error: gate.error, blocked: gate.reason };
     }
+  }
+
+  // נקודת הפיצול בין הספקים. כל 18 מסלולי השליחה במערכת עוברים כאן,
+  // ולכן די בהחלפת ה-provider בשורת החשבון כדי שרכזת תעבור לערוץ הרשמי.
+  if (account.provider === "cloud") {
+    return sendViaCloud(phone, message, account);
   }
 
   const chatId = formatChatId(phone);
@@ -214,6 +344,10 @@ export async function checkWhatsappExists(
   phone: string,
   account: WhatsAppAccount = businessAccount()
 ): Promise<boolean | null> {
+  // הערוץ הרשמי לא חושף בדיקה כזו — מטא לא מאפשרת לברר אם מספר קיים
+  // בוואטסאפ בלי לשלוח אליו. null = "לא יודע", וזו התשובה הכנה.
+  if (account.provider === "cloud") return null;
+
   const digits = formatChatId(phone).replace(/@c\.us$/, "");
   try {
     const res = await fetch(apiUrl(account, "checkWhatsapp"), {
@@ -246,6 +380,11 @@ export type InstanceState =
 export async function getInstanceState(
   account: WhatsAppAccount
 ): Promise<InstanceState> {
+  // בערוץ הרשמי אין "מכשיר מחובר" שאפשר לנתק — המספר רשום אצל מטא
+  // וזמין כל עוד החשבון תקין. מסך ההגדרות מציג אותו כמחובר במקום
+  // לזרוק שגיאה של GreenAPI על חשבון שאינו שלו.
+  if (account.provider === "cloud") return "authorized";
+
   const res = await fetch(apiUrl(account, "getStateInstance"), {
     cache: "no-store",
   });
