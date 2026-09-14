@@ -32,7 +32,11 @@ export interface WhatsAppAccount {
   apiBase?: string | null;
   /** cloud בלבד: שם משתנה הסביבה שמחזיק את הטוקן */
   tokenEnv?: string | null;
+  /** cloud בלבד: bearer = מטא ישירות; d360 = 360dialog */
+  authStyle?: CloudAuthStyle;
 }
+
+export type CloudAuthStyle = "bearer" | "d360";
 
 function adminClient() {
   return createServerClient(
@@ -63,11 +67,12 @@ interface AccountRow {
   phone_number_id?: string | null;
   api_base?: string | null;
   token_env?: string | null;
+  auth_style?: string | null;
 }
 
 /** העמודות של חשבון — במקום אחד, כדי ששאילתה לא תשכח שדה של ספק. */
 const ACCOUNT_COLUMNS =
-  "user_email, instance_id, api_token, phone, label, is_active, capture_unknown, provider, phone_number_id, api_base, token_env";
+  "user_email, instance_id, api_token, phone, label, is_active, capture_unknown, provider, phone_number_id, api_base, token_env, auth_style";
 
 function rowToAccount(r: AccountRow): WhatsAppAccount {
   return {
@@ -81,6 +86,7 @@ function rowToAccount(r: AccountRow): WhatsAppAccount {
     phoneNumberId: r.phone_number_id ?? null,
     apiBase: r.api_base ?? null,
     tokenEnv: r.token_env ?? null,
+    authStyle: r.auth_style === "d360" ? "d360" : "bearer",
   };
 }
 
@@ -228,10 +234,27 @@ export function isWithinServiceWindow(
   return ms >= 0 && ms < SERVICE_WINDOW_HOURS * 3_600_000;
 }
 
-function cloudUrl(account: WhatsAppAccount): string {
-  // ספק (360dialog וכד') חושף API תואם בכתובת משלו; ריק = מטא ישירות
-  const base = (account.apiBase ?? "").trim() || "https://graph.facebook.com/v21.0";
-  return `${base.replace(/\/+$/, "")}/${account.phoneNumberId}/messages`;
+/**
+ * שני ספקים, שני מבנים. מטא מזהה את המספר בנתיב ומאמתת ב-Bearer;
+ * 360dialog מזהה אותו לפי מפתח ה-API ולכן הנתיב הוא /messages בלבד,
+ * והאימות בכותרת ייעודית. גוף הבקשה זהה בשניהם.
+ */
+export function cloudRequest(
+  account: WhatsAppAccount,
+  token: string
+): { url: string; headers: Record<string, string> } {
+  const d360 = account.authStyle === "d360";
+  const base =
+    (account.apiBase ?? "").trim() ||
+    (d360 ? "https://waba-v2.360dialog.io" : "https://graph.facebook.com/v21.0");
+  const root = base.replace(/\/+$/, "");
+  return {
+    url: d360 ? `${root}/messages` : `${root}/${account.phoneNumberId}/messages`,
+    headers: {
+      "Content-Type": "application/json",
+      ...(d360 ? { "D360-API-KEY": token } : { Authorization: `Bearer ${token}` }),
+    },
+  };
 }
 
 async function sendViaCloud(
@@ -243,7 +266,8 @@ async function sendViaCloud(
   if (!token) {
     return { success: false, error: `חסר טוקן בסביבה (${account.tokenEnv ?? "—"})` };
   }
-  if (!account.phoneNumberId) {
+  // בחיבור ישיר למטא המזהה הוא חלק מהנתיב; אצל ספק הוא מיותר
+  if (account.authStyle !== "d360" && !account.phoneNumberId) {
     return { success: false, error: "לחשבון הרשמי חסר Phone Number ID" };
   }
 
@@ -260,13 +284,12 @@ async function sendViaCloud(
   // מטא מצפה למספר בפורמט בינלאומי בלי + ובלי סיומת
   const to = phone.replace(/\D/g, "").replace(/^0/, "972");
 
+  const req = cloudRequest(account, token);
+
   try {
-    const res = await fetch(cloudUrl(account), {
+    const res = await fetch(req.url, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`,
-      },
+      headers: req.headers,
       body: JSON.stringify({
         messaging_product: "whatsapp",
         recipient_type: "individual",

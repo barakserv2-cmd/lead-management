@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { isWithinServiceWindow, SERVICE_WINDOW_HOURS } from "./whatsappService";
+import {
+  cloudRequest,
+  isWithinServiceWindow,
+  SERVICE_WINDOW_HOURS,
+} from "./whatsappService";
 
 /**
  * חלון 24 השעות של מטא. ב-GreenAPI רכזת יכלה לכתוב למי שרצתה ומתי
@@ -30,5 +34,40 @@ describe("isWithinServiceWindow", () => {
   it("חותמת עתידית לא פותחת את החלון", () => {
     // שעון מוטה או רשומה פגומה לא יהפכו שיחה סגורה לפתוחה
     expect(isWithinServiceWindow(hoursAgo(-2), NOW)).toBe(false);
+  });
+});
+
+/**
+ * שני הספקים נראים אחרת לגמרי, ואת זה גיליתי רק אחרי שכתבתי את
+ * המתאם לפי מטא: 360dialog מזהים את המספר לפי מפתח ה-API, ולכן אין
+ * מזהה בנתיב והאימות בכותרת משלהם. כתובת שגויה מחזירה 401 שקט.
+ */
+describe("cloudRequest", () => {
+  it("מטא: מזהה המספר בנתיב, אימות ב-Bearer", () => {
+    const r = cloudRequest(
+      { instanceId: "", token: "", provider: "cloud", authStyle: "bearer", phoneNumberId: "265027330024798" },
+      "TOKEN"
+    );
+    expect(r.url).toBe("https://graph.facebook.com/v21.0/265027330024798/messages");
+    expect(r.headers.Authorization).toBe("Bearer TOKEN");
+    expect(r.headers["D360-API-KEY"]).toBeUndefined();
+  });
+
+  it("360dialog: נתיב /messages בלבד, אימות בכותרת שלהם", () => {
+    const r = cloudRequest(
+      { instanceId: "", token: "", provider: "cloud", authStyle: "d360" },
+      "KEY"
+    );
+    expect(r.url).toBe("https://waba-v2.360dialog.io/messages");
+    expect(r.headers["D360-API-KEY"]).toBe("KEY");
+    expect(r.headers.Authorization).toBeUndefined();
+  });
+
+  it("כתובת בסיס מפורשת גוברת, בלי לוכסן כפול", () => {
+    const r = cloudRequest(
+      { instanceId: "", token: "", provider: "cloud", authStyle: "d360", apiBase: "https://example.test/" },
+      "KEY"
+    );
+    expect(r.url).toBe("https://example.test/messages");
   });
 });
