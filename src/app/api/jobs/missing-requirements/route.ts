@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAuthedUser, getSupabaseAdmin } from "@/lib/api-auth";
+import { checkJobWording, wordingErrorMessage } from "@/lib/jobWording";
 
 // המשרות שגובגט לא יכול לתאר, ומילוי מהיר שלהן.
 //
@@ -61,6 +62,13 @@ export async function PATCH(req: NextRequest) {
   if (!body.id) return NextResponse.json({ error: "חסר מזהה משרה" }, { status: 400 });
   if (!filled(text)) {
     return NextResponse.json({ error: "צריך לכתוב דרישה אמיתית, לא מקף" }, { status: 400 });
+  }
+
+  // מה שנכתב כאן גובגט מקריא למועמדים כלשונו. שלוש משרות כבר שידרו ככה
+  // דרישות אסורות בחוק שוויון ההזדמנויות בעבודה.
+  const problem = checkJobWording(text);
+  if (problem) {
+    return NextResponse.json({ error: wordingErrorMessage(problem) }, { status: 400 });
   }
 
   // נשמר כמערך — זה מה שסנכרון המשרות לגובגט מצפה לו
