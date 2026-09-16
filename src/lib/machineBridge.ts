@@ -36,6 +36,37 @@ export async function forwardReplyToMachine(
  * success so the caller can surface a failure (unlike the fire-and-forget
  * reply forward, the recruiter needs to know if the release didn't land).
  */
+/**
+ * שם שרכזת תיקנה בכרטיס — מעבירים אותו לבוט.
+ *
+ * 15.09: ליד מגוגל נכנס בשם "נדב שפירא" עם מספר שהתברר כשייך לעסק גינון,
+ * והבוט פנה בשם הזה. רכזת בררה, מצאה שהמספר של נוי שושן ותיקנה את הכרטיס
+ * — אבל הבוט המשיך להחזיק את השם הישן, כי הקליטה שלו לא דורסת שם קיים.
+ * בשיחה חיה זה היה אומר שהבוט ממשיך לפנות בשם השגוי גם אחרי התיקון.
+ *
+ * best-effort: כשל כאן לא נוגע בשמירה עצמה.
+ */
+export async function pushNameToMachine(
+  phone: string | null | undefined,
+  name: string | null | undefined
+): Promise<void> {
+  const url = process.env.MACHINE_INGEST_URL;
+  const key = process.env.MACHINE_INGEST_KEY;
+  if (!url || !key || !phone || !name?.trim()) return;
+  try {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 5000);
+    await fetch(`${url}/api/v1/candidate-name`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "x-ingest-key": key },
+      body: JSON.stringify({ phone, name: name.trim() }),
+      signal: controller.signal,
+    }).finally(() => clearTimeout(timer));
+  } catch (e) {
+    console.error("[MachineBridge] name push failed:", (e as Error).message);
+  }
+}
+
 export async function setMachineConversationMode(
   phone: string | null | undefined,
   mode: "bot" | "human"

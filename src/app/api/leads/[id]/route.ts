@@ -6,6 +6,7 @@ import { diffFields, logAudit } from "@/lib/audit";
 import { normalizePhone } from "@/lib/phone";
 import { findLeadByPhone, duplicatePhonePayload, isPhoneUniqueViolation } from "@/lib/leadPhoneGuard";
 import { normalizeEmployerName } from "@/lib/employerNormalization";
+import { pushNameToMachine } from "@/lib/machineBridge";
 
 // עדכון פרטי מועמד מחלון העריכה הצף. fetch+API ולא server action —
 // הדפוס הקבוע בפרויקט (Next 16 מפיל טפסים דרך server actions).
@@ -187,6 +188,14 @@ export async function PATCH(
       if (existing) return NextResponse.json(duplicatePhonePayload(existing), { status: 409 });
     }
     return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+
+  // שם שתוקן בכרטיס חייב להגיע גם לבוט — אחרת הוא ממשיך לפנות למועמד/ת
+  // בשם הישן (ראו pushNameToMachine). הטלפון החדש אם שונה, אחרת הקיים.
+  if (typeof updateData.name === "string") {
+    const row = data as unknown as Record<string, unknown>;
+    const phone = (typeof updateData.phone === "string" ? updateData.phone : row.phone) as string | null;
+    void pushNameToMachine(phone, updateData.name);
   }
 
   const changes = diffFields(before as Record<string, unknown> | null, updateData);
