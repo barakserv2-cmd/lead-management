@@ -177,11 +177,24 @@ export async function getAccountByWebhookToken(
   return data ? rowToAccount(data as AccountRow) : null;
 }
 
-/** Sender for the signed-in recruiter: their own number, else the business one. */
+/**
+ * המספר שממנו שולח/ת מי שאין לו/ה מספר משלו (בפועל: אדמין).
+ *
+ * 16.09: businessAccount() הצביע על המספר של חושן, שנמחק מ-GreenAPI
+ * ב-14.09 — כל הודעה ידנית של סער נכשלה. סער העביר את ברירת המחדל
+ * למספר של תמי (הערוץ הרשמי). ההגדרה היא אימייל של חשבון מחובר, כדי
+ * שהחלפה עתידית לא תדרוש קוד. חשבון לא פעיל → חזרה למספר העסקי.
+ */
+export async function defaultSenderAccount(): Promise<WhatsAppAccount> {
+  const email = (process.env.DEFAULT_SENDER_EMAIL ?? "").trim();
+  return (email ? await getAccountForEmail(email) : null) ?? businessAccount();
+}
+
+/** Sender for the signed-in recruiter: their own number, else the default one. */
 export async function resolveSender(
   email: string | null | undefined
 ): Promise<WhatsAppAccount> {
-  return (await getAccountForEmail(email)) ?? businessAccount();
+  return (await getAccountForEmail(email)) ?? (await defaultSenderAccount());
 }
 
 /**
@@ -233,6 +246,8 @@ export interface SendResult {
   error?: string;
   /** השליחה נחסמה בשער (opt-out / שעות שקט) — לא כשל טכני */
   blocked?: "do_not_contact" | "quiet_hours";
+  /** ערוץ רשמי: המועמד/ת לא כתבו למספר הזה ב-24 השעות האחרונות */
+  windowClosed?: boolean;
 }
 
 export interface SendOptions {
@@ -258,8 +273,14 @@ function apiUrl(account: WhatsAppAccount, method: string): string {
 
 export const SERVICE_WINDOW_HOURS = 24;
 
-/** מתי המועמד/ת כתבו לאחרונה — או null אם מעולם לא, או שהבדיקה נכשלה. */
-export async function lastInboundAt(phone: string): Promise<string | null> {
+/**
+ * מתי המועמד/ת כתבו לאחרונה — או null אם מעולם לא, או שהבדיקה נכשלה.
+ *
+ * instanceId: החלון של מטא נפתח לכל מספר עסקי בנפרד. מועמד שענה לבוט
+ * (050-700-8171) לא פתח חלון אצל תמי — בלי הסינון V1 היה מאשר את
+ * השליחה ומטא הייתה מכשילה אותה אחר כך.
+ */
+export async function lastInboundAt(phone: string, instanceId?: string): Promise<string | null> {
   const digits = phone.replace(/\D/g, "").replace(/^972/, "0").slice(-10);
   if (!digits) return null;
   const db = adminClient();
@@ -271,11 +292,13 @@ export async function lastInboundAt(phone: string): Promise<string | null> {
     .limit(1)
     .maybeSingle();
   if (!lead) return null;
-  const { data: msg } = await db
+  let query = db
     .from("messages")
     .select("created_at")
     .eq("lead_id", lead.id)
-    .eq("role", "user")
+    .eq("role", "user");
+  if (instanceId) query = query.eq("via_instance", instanceId);
+  const { data: msg } = await query
     .order("created_at", { ascending: false })
     .limit(1)
     .maybeSingle();
@@ -374,11 +397,12 @@ async function sendViaCloud(
     return { success: false, error: "לחשבון הרשמי חסר Phone Number ID" };
   }
 
-  if (!isWithinServiceWindow(await lastInboundAt(phone))) {
+  if (!isWithinServiceWindow(await lastInboundAt(phone, account.instanceId))) {
     return {
       success: false,
+      windowClosed: true,
       error:
-        "חלון 24 השעות סגור — המועמד/ת לא כתבו ביממה האחרונה. " +
+        "חלון 24 השעות סגור — המועמד/ת לא כתבו למספר הזה ביממה האחרונה. " +
         "אפשר לכתוב להם מאפליקציית WhatsApp Business בטלפון (שם אין מגבלה), " +
         "וההודעה תופיע כאן אוטומטית.",
     };

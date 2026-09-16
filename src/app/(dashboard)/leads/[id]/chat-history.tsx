@@ -14,6 +14,36 @@ interface Message {
   created_at: string;
   /** recruiter email that sent it (manual / from their phone) */
   sent_by?: string | null;
+  /** מה הספק דיווח: נשלחה / נמסרה / נקראה / נכשלה. null = לא ידוע */
+  delivery_status?: "sent" | "delivered" | "read" | "failed" | null;
+  delivery_error?: string | null;
+}
+
+const DELIVERY_LABEL: Record<"sent" | "delivered" | "read", string> = {
+  sent: "נשלחה",
+  delivered: "נמסרה למועמד/ת",
+  read: "נקראה",
+};
+
+/**
+ * וי אחד = נשלחה, שני וי = נמסרה, שני וי כחולים = נקראה — כמו בוואטסאפ.
+ * בלי סטטוס לא מציירים כלום: הודעה ישנה או הודעה שנכתבה מהטלפון, ועדיף
+ * "לא ידוע" על פני וי שאף אחד לא אימת.
+ */
+function DeliveryTicks({ status }: { status: Message["delivery_status"] }) {
+  if (!status || status === "failed") return null;
+  const double = status !== "sent";
+  const color = status === "read" ? "text-sky-300" : "text-cyan-100/80";
+  return (
+    <span className={`inline-flex ${color}`} title={DELIVERY_LABEL[status]} aria-label={DELIVERY_LABEL[status]}>
+      <svg width={double ? 16 : 11} height="11" viewBox={double ? "0 0 16 11" : "0 0 11 11"} fill="none" aria-hidden="true">
+        <path d="M1 6l3 3 6-7" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+        {double && (
+          <path d="M6 6l3 3 6-7" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+        )}
+      </svg>
+    </span>
+  );
 }
 
 interface SenderInfo {
@@ -21,6 +51,8 @@ interface SenderInfo {
   state?: string;
   phone?: string | null;
   label?: string | null;
+  /** כשאין מספר משלך: המספר שההודעות יוצאות ממנו */
+  defaultSender?: { label: string | null; phone: string | null } | null;
 }
 
 function senderShort(email: string): string {
@@ -174,6 +206,23 @@ export function ChatHistory({
 
     // לא שולחים כל עוד הבוט עדיין פעיל בשיחה — עדיף שההודעה לא תצא
     // מאשר שהמועמד יקבל תשובה מהבוט ומהרכזת באותו רגע.
+    // קודם בודקים שההודעה בכלל יכולה לצאת (חלון 24 שעות בערוץ הרשמי) —
+    // אחרת הבוט נעצר והמועמד נשאר בלי אף אחד.
+    if (botManaged) {
+      const pre = await fetch("/api/whatsapp/send-manual", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ leadId, check: true }),
+      })
+        .then((r) => r.json())
+        .catch(() => null);
+      if (pre && pre.success === false) {
+        setError(pre.error ?? "אי אפשר לשלוח מכאן כרגע");
+        setInputText(text);
+        setSending(false);
+        return;
+      }
+    }
     if (botManaged && !(await takeOver())) {
       setError("לא הצלחתי לעצור את הבוט בשיחה הזו — ההודעה לא נשלחה. נסי שוב.");
       setInputText(text);
@@ -224,6 +273,17 @@ export function ChatHistory({
                     <p className="whitespace-pre-wrap" dir="rtl">
                       {msg.content}
                     </p>
+                    {/* כישלון מסירה: הרכזת צריכה לראות גם שזה נכשל וגם מה לעשות */}
+                    {outgoing && msg.delivery_status === "failed" && (
+                      <div
+                        className="mt-2 rounded-md bg-red-50 px-2 py-1 text-[11px] leading-snug text-red-700"
+                        dir="rtl"
+                        role="status"
+                      >
+                        <span className="font-semibold">⚠ לא נמסרה.</span>{" "}
+                        {msg.delivery_error ?? "הספק דיווח שההודעה לא הגיעה למועמד/ת."}
+                      </div>
+                    )}
                     <div
                       className={`flex items-center gap-1.5 mt-1 ${
                         outgoing ? "text-cyan-200" : "text-gray-400"
@@ -233,6 +293,7 @@ export function ChatHistory({
                       <span className="text-[10px]">
                         {formatTime(msg.created_at)}
                       </span>
+                      {outgoing && <DeliveryTicks status={msg.delivery_status} />}
                       {msg.role === "assistant" && (
                         <span className="text-[9px] opacity-70">AI</span>
                       )}
@@ -310,7 +371,19 @@ export function ChatHistory({
             )
           ) : (
             <span>
-              שולח ממספר ברירת המחדל של המערכת ·{" "}
+              {sender.defaultSender ? (
+                <>
+                  שולח מהמספר של {sender.defaultSender.label ?? "ברירת המחדל"}
+                  {sender.defaultSender.phone && (
+                    <span className="font-mono ms-1" dir="ltr">
+                      {sender.defaultSender.phone.replace(/^972/, "0")}
+                    </span>
+                  )}
+                </>
+              ) : (
+                "שולח ממספר ברירת המחדל של המערכת"
+              )}{" "}
+              ·{" "}
               <Link href="/settings/whatsapp" className="hover:underline">
                 חבר את המספר שלך
               </Link>

@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { phoneFromChatId, getAccountByInstance } from "@/lib/whatsappService";
 import { handleInboundMessage } from "@/lib/whatsappInbound";
+import { applyDeliveryStatus, mapGreenApiStatus } from "@/lib/deliveryStatus";
+import { getSupabaseAdmin } from "@/lib/api-auth";
 
 /**
  * Webhook של GreenAPI — הערוץ הלא רשמי.
@@ -31,6 +33,19 @@ export async function POST(req: NextRequest) {
     }
 
     const body = await req.json();
+
+    // עדכון מסירה של הודעה שיצאה מ-V1 (נמסרה / נקראה / נכשלה / לא בוואטסאפ).
+    // ההגדרה outgoingWebhook פעילה במספר של מלי, כך שהעדכונים הגיעו לכאן כל
+    // הזמן ונזרקו. כישלון מסמן את הליד "דורש טיפול".
+    if (body.typeWebhook === "outgoingMessageStatus") {
+      const mapped = mapGreenApiStatus(body.status, body.description);
+      if (mapped && typeof body.idMessage === "string") {
+        await applyDeliveryStatus(getSupabaseAdmin(), body.idMessage, mapped.status, mapped.error, {
+          flagLead: true,
+        });
+      }
+      return NextResponse.json({ ok: true });
+    }
 
     // incomingMessageReceived — a candidate wrote to us.
     // outgoingMessageReceived — a recruiter wrote to a candidate straight from

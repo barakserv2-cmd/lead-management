@@ -5,6 +5,7 @@ import { isValidStatus, validateTransition, STATUS_LABELS, type LeadStatusValue 
 import { GUBGET_SOURCE } from "@/lib/constants";
 import { closureFor } from "@/lib/israelHolidays";
 import { ensureClosuresLoaded } from "@/lib/closures";
+import { applyDeliveryStatus } from "@/lib/deliveryStatus";
 
 /**
  * POST /api/bridge/from-machine — the autonomous machine ("גובגט") reports
@@ -18,7 +19,8 @@ import { ensureClosuresLoaded } from "@/lib/closures";
 
 const GUBGET_EMAIL = "gubget@eilatjobs.com";
 
-type InMsg = { role?: string; content?: string; created_at?: string };
+type InMsg = { role?: string; content?: string; created_at?: string; provider_msg_id?: string };
+type InStatus = { provider_msg_id?: string; status?: string; error?: string | null };
 type Body = {
   phone?: string;
   name?: string;
@@ -35,6 +37,8 @@ type Body = {
   // 0-100 overall screening score from גובגט's verdict — required by the
   // state machine for an automated move to FIT_FOR_INTERVIEW.
   screeningScore?: number;
+  // עדכוני מסירה (נמסרה / נקראה / נכשלה) להודעות שגובגט שלח
+  statuses?: InStatus[];
 };
 
 // accept exactly the naive wall-clock shape v1 stores (YYYY-MM-DDTHH:mm[:ss])
@@ -57,6 +61,23 @@ export async function POST(req: NextRequest) {
   if (!phone) return NextResponse.json({ error: "invalid_phone" }, { status: 400 });
 
   const db = getSupabaseAdmin();
+
+  // 0. עדכוני מסירה — לפני כל נגיעה בליד. השלב הבא יוצר ליד לכל מספר לא
+  //    מוכר, ועדכון "נמסרה" לבדו לא אמור ליצור ליד. בקשה שיש בה רק עדכונים
+  //    מסתיימת כאן. בלי סימון ליד: על כישלון גובגט שולח אסקלציה משלו.
+  let statusesApplied = 0;
+  for (const st of body.statuses ?? []) {
+    const s = st.status;
+    if (!st.provider_msg_id || !(s === "sent" || s === "delivered" || s === "read" || s === "failed")) continue;
+    const r = await applyDeliveryStatus(db, st.provider_msg_id, s, st.error ?? null, { flagLead: false });
+    statusesApplied += r.updated;
+  }
+  const onlyStatuses =
+    (body.statuses?.length ?? 0) > 0 &&
+    !body.messages?.length && !body.status && !body.escalation && !body.note && !body.interviewAt && !body.name;
+  if (onlyStatuses) {
+    return NextResponse.json({ ok: true, statusesApplied });
+  }
 
   // 1. Upsert the lead by phone
   const { data: existing } = await db
@@ -103,18 +124,26 @@ export async function POST(req: NextRequest) {
     const content = (m.content ?? "").trim();
     if (!content) continue;
     const role = m.role === "user" ? "user" : "assistant";
+    const providerMsgId = typeof m.provider_msg_id === "string" && m.provider_msg_id.trim() ? m.provider_msg_id.trim() : null;
     const { data: dupe } = await db
       .from("messages")
-      .select("id")
+      .select("id, provider_msg_id")
       .eq("lead_id", leadId)
       .eq("content", content)
       .limit(1)
       .maybeSingle();
-    if (dupe) continue;
+    if (dupe) {
+      // אותה הודעה נשלחה שוב מגובגט — אם הפעם יש מזהה, מחברים אותו
+      if (providerMsgId && !dupe.provider_msg_id) {
+        await db.from("messages").update({ provider_msg_id: providerMsgId, delivery_status: "sent" }).eq("id", dupe.id);
+      }
+      continue;
+    }
     await db.from("messages").insert({
       lead_id: leadId,
       role,
       content,
+      ...(providerMsgId && role === "assistant" ? { provider_msg_id: providerMsgId, delivery_status: "sent" } : {}),
       ...(m.created_at && !isNaN(Date.parse(m.created_at)) ? { created_at: new Date(m.created_at).toISOString() } : {}),
     });
     appended++;

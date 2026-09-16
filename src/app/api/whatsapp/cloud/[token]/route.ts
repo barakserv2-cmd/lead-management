@@ -7,6 +7,8 @@ import {
   type WhatsAppAccount,
 } from "@/lib/whatsappService";
 import { handleInboundMessage } from "@/lib/whatsappInbound";
+import { applyDeliveryStatus, describeMetaError } from "@/lib/deliveryStatus";
+import { getSupabaseAdmin } from "@/lib/api-auth";
 
 /**
  * Webhook של הערוץ הרשמי של מטא (WhatsApp Business Platform).
@@ -34,6 +36,13 @@ interface CloudMessage {
     button_reply?: { title?: string };
     list_reply?: { title?: string };
   };
+}
+
+/** עדכון מסירה של מטא: נשלחה / נמסרה / נקראה / נכשלה, לפי מזהה ההודעה. */
+interface CloudStatus {
+  id?: string;
+  status?: string;
+  errors?: Array<{ code?: number; title?: string; message?: string; error_data?: { details?: string } }>;
 }
 
 /** אימות הרשמה: מטא שולחת GET פעם אחת כשמחברים את ה-webhook. */
@@ -153,7 +162,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ token: str
           messages?: CloudMessage[];
           message_echoes?: CloudMessage[];
           contacts?: Array<{ profile?: { name?: string }; wa_id?: string }>;
-          statuses?: unknown[];
+          statuses?: CloudStatus[];
         };
       }>;
     }>;
@@ -169,6 +178,26 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ token: str
   for (const entry of payload.entry ?? []) {
     for (const change of entry.changes ?? []) {
       const value = change.value ?? {};
+
+      // עדכוני מסירה להודעות שרכזת שלחה מ-V1. עד 16.09 אושרו ונזרקו, ולכן
+      // אף אחד לא ידע אם מועמד קיבל הודעה. כישלון מסמן את הליד "דורש טיפול".
+      for (const st of value.statuses ?? []) {
+        const s = st.status;
+        if (!st.id || !(s === "sent" || s === "delivered" || s === "read" || s === "failed")) continue;
+        try {
+          const r = await applyDeliveryStatus(
+            getSupabaseAdmin(),
+            st.id,
+            s,
+            s === "failed" ? describeMetaError(st.errors) : null,
+            { flagLead: true }
+          );
+          actions.push(r.updated ? `status:${s}` : `status_nomatch:${s}`);
+        } catch (e) {
+          console.error("[Cloud Webhook] status update failed:", e);
+          actions.push("status_error");
+        }
+      }
 
       // הודעות של המועמד/ת. ב-messages השדה from הוא המועמד/ת.
       for (const msg of value.messages ?? []) {

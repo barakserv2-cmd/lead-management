@@ -3,6 +3,7 @@ import { createClient as createServerClient } from "@supabase/supabase-js";
 import { createClient as createCookieClient } from "@/lib/supabase/server";
 import {
   configureInstanceWebhook,
+  defaultSenderAccount,
   getInstancePhone,
   getInstanceQr,
   getInstanceState,
@@ -74,7 +75,14 @@ export async function GET(req: NextRequest) {
   if (!email) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const row = await loadRow(email);
-  if (!row) return NextResponse.json({ connected: false });
+  if (!row) {
+    // מי שאין לו מספר שולח/ת ממספר ברירת המחדל — מראים ממי בדיוק
+    const def = await defaultSenderAccount();
+    return NextResponse.json({
+      connected: false,
+      defaultSender: def.userEmail ? { label: def.label ?? null, phone: def.phone ?? null } : null,
+    });
+  }
 
   const account: WhatsAppAccount = { instanceId: row.instance_id, token: row.api_token };
   let state = "unknown";
