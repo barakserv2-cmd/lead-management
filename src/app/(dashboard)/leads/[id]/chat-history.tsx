@@ -3,7 +3,6 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import Link from "next/link";
 import { ReminderDialog } from "./reminder-dialog";
-import { sendMessage } from "@/lib/actions/sendMessage";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { LeadStatus, type LeadStatusValue } from "@/lib/stateMachine";
@@ -65,20 +64,27 @@ export function ChatHistory({
       .catch(() => {});
   }, []);
 
-  // When a recruiter has taken over (needs_human_attention), the box sends for
-  // real and the bot backs off — even though the lead is still "בסינון".
+  // ליד "בסינון" מנוהל ע"י גובגט. עד 16.09 התיבה כאן סימלצה מועמד: הטקסט
+  // הלך למודל כאילו המועמד כתב, והתשובה נשמרה בצ'אט בלי שנשלחה לאיש —
+  // ונראתה בדיוק כמו שיחה אמיתית של גובגט. סער בדק "שיחה" שלמה כך בלי
+  // שדבר הגיע לטלפון. עכשיו התיבה תמיד שולחת באמת, ושליחה בליד שהבוט
+  // מנהל מעבירה קודם את השיחה לרכזת — אחרת שניים מדברים עם אותו מועמד.
   const [humanTakeover, setHumanTakeover] = useState(false);
   const [takingOver, setTakingOver] = useState(false);
-  const isScreening = leadStatus === LeadStatus.SCREENING_IN_PROGRESS && !humanTakeover;
+  const botManaged = leadStatus === LeadStatus.SCREENING_IN_PROGRESS && !humanTakeover;
 
   // Determines if a message is outgoing (from our side: AI or recruiter)
   const isOutgoing = (role: string) => role === "assistant" || role === "recruiter";
 
-  async function takeOver() {
+  /** מעביר את השיחה לרכזת ועוצר את גובגט. true = הצליח. */
+  async function takeOver(): Promise<boolean> {
     setTakingOver(true);
     try {
       const res = await fetch(`/api/leads/${leadId}/takeover`, { method: "POST" });
       if (res.ok) setHumanTakeover(true);
+      return res.ok;
+    } catch {
+      return false;
     } finally {
       setTakingOver(false);
     }
@@ -121,26 +127,6 @@ export function ChatHistory({
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
   }, [messages]);
-
-  // AI screening flow (existing)
-  async function handleScreeningSend(text: string) {
-    const tempUserMsg: Message = {
-      id: "temp-user-" + Date.now(),
-      role: "user",
-      content: text,
-      created_at: new Date().toISOString(),
-    };
-    setMessages((prev) => [...prev, tempUserMsg]);
-
-    const result = await sendMessage(leadId, text);
-
-    if (result.success) {
-      await fetchMessages();
-    } else {
-      setError(result.error ?? "שגיאה בשליחת ההודעה");
-      setMessages((prev) => prev.filter((m) => m.id !== tempUserMsg.id));
-    }
-  }
 
   // Manual recruiter send (new)
   async function handleManualSend(text: string) {
@@ -186,11 +172,15 @@ export function ChatHistory({
     setSending(true);
     setInputText("");
 
-    if (isScreening) {
-      await handleScreeningSend(text);
-    } else {
-      await handleManualSend(text);
+    // לא שולחים כל עוד הבוט עדיין פעיל בשיחה — עדיף שההודעה לא תצא
+    // מאשר שהמועמד יקבל תשובה מהבוט ומהרכזת באותו רגע.
+    if (botManaged && !(await takeOver())) {
+      setError("לא הצלחתי לעצור את הבוט בשיחה הזו — ההודעה לא נשלחה. נסי שוב.");
+      setInputText(text);
+      setSending(false);
+      return;
     }
+    await handleManualSend(text);
 
     setSending(false);
   }
@@ -212,9 +202,7 @@ export function ChatHistory({
       >
         {messages.length === 0 ? (
           <div className="flex items-center justify-center h-full text-sm text-gray-400">
-            {isScreening
-              ? "אין הודעות עדיין. שלח הודעה כדי להתחיל סינון."
-              : "אין הודעות עדיין. שלח הודעה למועמד/ת."}
+            אין הודעות עדיין. שלח הודעה למועמד/ת.
           </div>
         ) : (
           messages
@@ -290,7 +278,8 @@ export function ChatHistory({
       )}
 
       {/* Which number the recruiter's messages go out from */}
-      {canSend && !isScreening && sender && (
+      {/* ההודעה תמיד יוצאת באמת — אז תמיד מראים מאיזה מספר */}
+      {canSend && sender && (
         <div className="px-4 pt-2 text-[10px] text-gray-400 flex items-center gap-1.5">
           <span className="ms-auto order-last">
             <ReminderDialog leadId={leadId} leadName={leadName} interviewDate={interviewDate} />
@@ -330,11 +319,10 @@ export function ChatHistory({
         </div>
       )}
 
-      {/* Take-over bar: in screening the box only SIMULATES the candidate.
-          A recruiter who wants to message for real takes over here. */}
-      {canSend && isScreening && (
+      {/* הבוט מנהל את השיחה. רכזת יכולה להיכנס בכל רגע — בכתיבה או בכפתור. */}
+      {canSend && botManaged && (
         <div className="flex items-center justify-between gap-2 px-4 py-2 bg-amber-50 border-t border-amber-100 text-xs text-amber-800">
-          <span>הבוט מנהל את הסינון — התיבה מסמלצת מועמד. כדי לכתוב למועמד/ת באמת:</span>
+          <span>הבוט מנהל את השיחה הזו. הודעה שתשלחי תעבור למועמד/ת בוואטסאפ ותעצור את הבוט.</span>
           <Button onClick={takeOver} disabled={takingOver} size="sm" variant="outline" className="h-7 px-3 text-xs flex-shrink-0">
             {takingOver ? "..." : "קח שליטה"}
           </Button>
@@ -344,11 +332,6 @@ export function ChatHistory({
       {/* Input area */}
       {canSend && (
       <div className="flex gap-2 pt-3 px-4 pb-3 border-t border-gray-100">
-        {isScreening && (
-          <span className="self-center text-[9px] text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded font-medium flex-shrink-0">
-            AI
-          </span>
-        )}
         <Input
           value={inputText}
           onChange={(e) => setInputText(e.target.value)}
@@ -358,7 +341,7 @@ export function ChatHistory({
               handleSend();
             }
           }}
-          placeholder={isScreening ? "סמלץ הודעת מועמד..." : "כתוב הודעה למועמד/ת..."}
+          placeholder={botManaged ? "כתיבה כאן תעצור את הבוט ותשלח למועמד/ת..." : "כתוב הודעה למועמד/ת..."}
           disabled={sending}
           dir="rtl"
           className="flex-1"
