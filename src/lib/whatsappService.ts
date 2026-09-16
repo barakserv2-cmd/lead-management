@@ -60,6 +60,35 @@ export function businessAccount(): WhatsAppAccount {
   };
 }
 
+/**
+ * המספר הרשמי שממנו יוצאות תזכורות אוטומטיות — מהסביבה, לא מהטבלה.
+ *
+ * 16.09: businessAccount() הצביע על המספר של חושן, שנמחק מ-GreenAPI
+ * ב-14.09. מאותו יום 0 מתוך 20 תזכורות ראיון הגיעו, בשקט, ושיעור
+ * האי-הגעה קפץ מ-20% ל-55%. תזכורות יוצאות מחוץ לחלון 24 השעות, ולכן
+ * בערוץ הרשמי רק תבנית מאושרת עוברת.
+ *
+ * לא שורה ב-whatsapp_accounts בכוונה: שורה שם משתתפת בניתוב הודעות
+ * נכנסות ובהרשאות צפייה, ומספר תזכורות אינו של אף רכז/ת. תשובות של
+ * מועמדים מגיעות לגובגט, שמעביר כל הודעה נכנסת ל-V1 לפני שהוא מחליט
+ * לשתוק (R-206) — והליד נשאר של הרכז/ת שלו.
+ *
+ * null = לא מוגדר, והקורא נשאר עם ההתנהגות הקודמת.
+ */
+export function officialReminderAccount(): WhatsAppAccount | null {
+  const id = (process.env.REMINDER_PHONE_NUMBER_ID ?? "").trim();
+  if (!id) return null;
+  return {
+    instanceId: `cloud:${id}`,
+    token: "",
+    label: "מספר רשמי — תזכורות",
+    provider: "cloud",
+    phoneNumberId: id,
+    tokenEnv: (process.env.REMINDER_TOKEN_ENV ?? "WHATSAPP_CLOUD_TOKEN_MAIN").trim(),
+    authStyle: "bearer",
+  };
+}
+
 interface AccountRow {
   user_email: string;
   instance_id: string;
@@ -370,6 +399,87 @@ async function sendViaCloud(
         to,
         type: "text",
         text: { body: message, preview_url: false },
+      }),
+    });
+    const body = await res.json();
+    if (res.ok) {
+      return { success: true, idMessage: body?.messages?.[0]?.id };
+    }
+    return { success: false, error: body?.error?.message ?? JSON.stringify(body) };
+  } catch (err) {
+    return { success: false, error: err instanceof Error ? err.message : String(err) };
+  }
+}
+
+export interface TemplateMessage {
+  /** שם התבנית כפי שאושרה אצל מטא */
+  name: string;
+  language: string;
+  /** פרמטרים לגוף, לפי הסדר {{1}}, {{2}}… */
+  params: string[];
+}
+
+/**
+ * הודעה יזומה מחוץ לחלון 24 השעות — בערוץ הרשמי רק תבנית מאושרת עוברת.
+ *
+ * פרמטר ריק נדחה כאן ולא אצל מטא: מטא דוחה אותו ממילא, אבל בשגיאה כללית
+ * שקשה לקשר לסיבה. עדיף שהכשל יגיד בדיוק מה חסר.
+ */
+export async function sendWhatsAppTemplate(
+  phone: string,
+  template: TemplateMessage,
+  account: WhatsAppAccount,
+  opts: SendOptions = {}
+): Promise<SendResult> {
+  if (!opts.skipGate) {
+    const gate = await checkSendGate(phone, { automated: opts.automated === true });
+    if (!gate.allowed) {
+      return { success: false, error: gate.error, blocked: gate.reason };
+    }
+  }
+
+  // ל-GreenAPI אין תבניות — שם אין חלון, ושולחים טקסט רגיל.
+  if (account.provider !== "cloud") {
+    return { success: false, error: "תבניות קיימות רק בערוץ הרשמי" };
+  }
+  if (template.params.some((p) => !p || !p.trim())) {
+    return { success: false, error: `פרמטר ריק בתבנית ${template.name}` };
+  }
+
+  const token = (process.env[account.tokenEnv ?? ""] ?? "").trim();
+  if (!token) {
+    return { success: false, error: `חסר טוקן בסביבה (${account.tokenEnv ?? "—"})` };
+  }
+  if (account.authStyle !== "d360" && !account.phoneNumberId) {
+    return { success: false, error: "לחשבון הרשמי חסר Phone Number ID" };
+  }
+
+  const to = phone.replace(/\D/g, "").replace(/^0/, "972");
+  const req = cloudRequest(account, token);
+
+  try {
+    const res = await fetch(req.url, {
+      method: "POST",
+      headers: req.headers,
+      body: JSON.stringify({
+        messaging_product: "whatsapp",
+        recipient_type: "individual",
+        to,
+        type: "template",
+        template: {
+          name: template.name,
+          language: { code: template.language },
+          ...(template.params.length
+            ? {
+                components: [
+                  {
+                    type: "body",
+                    parameters: template.params.map((text) => ({ type: "text", text })),
+                  },
+                ],
+              }
+            : {}),
+        },
       }),
     });
     const body = await res.json();
