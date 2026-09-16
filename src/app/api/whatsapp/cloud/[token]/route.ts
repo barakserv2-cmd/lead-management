@@ -1,0 +1,208 @@
+import { NextRequest, NextResponse } from "next/server";
+import {
+  getAccountByWebhookToken,
+  phoneFromChatId,
+  verifyBearerSecret,
+  verifyMetaSignature,
+  type WhatsAppAccount,
+} from "@/lib/whatsappService";
+import { handleInboundMessage } from "@/lib/whatsappInbound";
+
+/**
+ * Webhook של הערוץ הרשמי של מטא (WhatsApp Business Platform).
+ *
+ * שתי שכבות, ולכל אחת תפקיד אחר:
+ *  1. הטוקן בכתובת — מנתב. מטא לא שולחת מזהה חשבון שאפשר לסמוך עליו
+ *     לניתוב, ולכן הכתובת עצמה אומרת של מי המספר.
+ *  2. חתימת X-Hub-Signature-256 — מאבטחת. זו הבדיקה היחידה שאי אפשר
+ *     לזייף. בלי META_APP_SECRET מוגדר כל בקשה נדחית: webhook פתוח
+ *     הוא בדיוק מה שנסגר כאן בדיעבד ב-00088.
+ *
+ * הפענוח כאן הוא של מבנה מטא בלבד; הטיפול בהודעה משותף עם GreenAPI
+ * ויושב ב-whatsappInbound.
+ */
+
+interface CloudMessage {
+  from?: string;
+  to?: string;
+  type?: string;
+  text?: { body?: string };
+  button?: { text?: string };
+  interactive?: {
+    button_reply?: { title?: string };
+    list_reply?: { title?: string };
+  };
+}
+
+/** אימות הרשמה: מטא שולחת GET פעם אחת כשמחברים את ה-webhook. */
+export async function GET(req: NextRequest, ctx: { params: Promise<{ token: string }> }) {
+  const { token } = await ctx.params;
+  const params = req.nextUrl.searchParams;
+
+  const account = await getAccountByWebhookToken(token);
+  if (
+    !account ||
+    params.get("hub.mode") !== "subscribe" ||
+    params.get("hub.verify_token") !== token
+  ) {
+    return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  }
+
+  // מטא מצפה לגוף טקסט גולמי עם ה-challenge, לא JSON
+  return new NextResponse(params.get("hub.challenge") ?? "", {
+    status: 200,
+    headers: { "Content-Type": "text/plain" },
+  });
+}
+
+/**
+ * טקסט מכל סוג הודעה שמטא שולחת; null = אין מה להעביר הלאה.
+ *
+ * מדיה לא נשמרת עדיין (הורדה מהערוץ הרשמי דורשת בקשה מאומתת בשני
+ * שלבים). היא לא נבלעת בשקט: נרשם טקסט מפורש, כדי שהרכז/ת תראה
+ * בשיחה שהגיע קובץ — בדיוק כמו היום ב-GreenAPI, שגם הוא מתעלם ממדיה.
+ */
+export function extractText(msg: CloudMessage): string | null {
+  switch (msg.type) {
+    case "text":
+      return msg.text?.body?.trim() || null;
+    case "button":
+      return msg.button?.text?.trim() || null;
+    case "interactive":
+      return (
+        msg.interactive?.button_reply?.title?.trim() ||
+        msg.interactive?.list_reply?.title?.trim() ||
+        null
+      );
+    case "audio":
+    case "voice":
+      return "[הודעה קולית התקבלה — לא נשמרה]";
+    case "image":
+    case "document":
+    case "video":
+    case "sticker":
+      return "[קובץ התקבל — לא נשמר]";
+    default:
+      return null;
+  }
+}
+
+/**
+ * שני מקורות, שתי דרכי אימות — וזה לא פרט טכני אלא הבדל אמיתי בחוזק.
+ *
+ * בחיבור ישיר למטא מגיעה חתימת HMAC על גוף הבקשה: אי אפשר לזייף בקשה
+ * בלי ה-App Secret, גם אם הכתובת דלפה.
+ *
+ * דרך ספק אין חתימה כזו — הספק מקבל ממטא ושולח הלאה משרתיו — ולכן
+ * נשאר רק סוד משותף בכותרת. בשני המקרים היעדר סוד מוגדר = דחייה.
+ */
+function authorize(req: NextRequest, account: WhatsAppAccount, raw: string): boolean {
+  if (account.authStyle === "d360") {
+    const ok = verifyBearerSecret(req.headers.get("authorization"), account.webhookSecret);
+    if (!ok) console.warn("[Cloud Webhook] rejected: bad or missing webhook secret");
+    return ok;
+  }
+  const appSecret = (process.env.META_APP_SECRET ?? "").trim();
+  const ok = verifyMetaSignature(raw, req.headers.get("x-hub-signature-256"), appSecret);
+  if (!ok) console.warn("[Cloud Webhook] rejected: bad or missing signature");
+  return ok;
+}
+
+export async function POST(req: NextRequest, ctx: { params: Promise<{ token: string }> }) {
+  const { token } = await ctx.params;
+
+  const account = await getAccountByWebhookToken(token);
+  if (!account) {
+    console.warn("[Cloud Webhook] rejected: unknown webhook token");
+    return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  }
+
+  // הגוף נקרא כטקסט גולמי — החתימה מחושבת על הבתים המקוריים, ולכן
+  // req.json() כאן היה שובר את האימות.
+  const raw = await req.text();
+  if (!authorize(req, account, raw)) {
+    return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  }
+
+  let payload: {
+    entry?: Array<{
+      changes?: Array<{
+        field?: string;
+        value?: {
+          messages?: CloudMessage[];
+          message_echoes?: CloudMessage[];
+          contacts?: Array<{ profile?: { name?: string }; wa_id?: string }>;
+          statuses?: unknown[];
+        };
+      }>;
+    }>;
+  };
+  try {
+    payload = JSON.parse(raw);
+  } catch {
+    return NextResponse.json({ error: "bad_request" }, { status: 400 });
+  }
+
+  const actions: string[] = [];
+
+  for (const entry of payload.entry ?? []) {
+    for (const change of entry.changes ?? []) {
+      const value = change.value ?? {};
+
+      // הודעות של המועמד/ת. ב-messages השדה from הוא המועמד/ת.
+      for (const msg of value.messages ?? []) {
+        const phone = phoneFromChatId(msg.from ?? "");
+        const text = extractText(msg);
+        if (!phone || !text) {
+          actions.push(`ignored:${msg.type ?? "unknown"}`);
+          continue;
+        }
+        const senderName =
+          value.contacts?.find((c) => c.wa_id === msg.from)?.profile?.name ?? null;
+        try {
+          const res = await handleInboundMessage(account, {
+            phone,
+            text,
+            senderName,
+            direction: "in",
+          });
+          actions.push(String(res.optOut ? "optOut" : res.bot ? "bot" : "in"));
+        } catch (e) {
+          console.error("[Cloud Webhook] inbound processing failed:", e);
+          actions.push("error");
+        }
+      }
+
+      // Coexistence: הרכז/ת כתבו מהאפליקציה בטלפון, ומטא משקפת את זה
+      // אלינו. כאן הכיוון הפוך — from הוא המספר שלנו ו-to הוא המועמד/ת,
+      // ולכן הניתוב הוא לפי to. זה התחליף המדויק ל-outgoingMessageReceived
+      // של GreenAPI.
+      //
+      // לא אומת מול echo אמיתי — אין עדיין מספר Coexistence לבדוק עליו.
+      // המבנה נכתב לפי התיעוד של מטא, וסוגי revoke/edit מדולגים במכוון.
+      for (const msg of value.message_echoes ?? []) {
+        const phone = phoneFromChatId(msg.to ?? "");
+        const text = extractText(msg);
+        if (!phone || !text) {
+          actions.push(`ignored_echo:${msg.type ?? "unknown"}`);
+          continue;
+        }
+        try {
+          await handleInboundMessage(account, {
+            phone,
+            text,
+            senderName: null,
+            direction: "out",
+          });
+          actions.push("echo");
+        } catch (e) {
+          console.error("[Cloud Webhook] echo processing failed:", e);
+          actions.push("error");
+        }
+      }
+    }
+  }
+
+  // תמיד 200: שגיאה מצדנו לא צריכה לגרום למטא לשלוח את ההודעה שוב ושוב
+  return NextResponse.json({ ok: true, actions });
+}

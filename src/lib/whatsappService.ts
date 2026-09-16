@@ -10,6 +10,7 @@
 //      and bulk sends from the CRM go out from the signed-in recruiter's
 //      number when one is linked.
 
+import { createHmac, timingSafeEqual } from "crypto";
 import { createClient as createServerClient } from "@supabase/supabase-js";
 import { checkSendGate } from "@/lib/sendGate";
 
@@ -34,6 +35,10 @@ export interface WhatsAppAccount {
   tokenEnv?: string | null;
   /** cloud בלבד: bearer = מטא ישירות; d360 = 360dialog */
   authStyle?: CloudAuthStyle;
+  /** מזהה את החשבון בכתובת ה-webhook הנכנס */
+  webhookToken?: string | null;
+  /** סוד לאימות webhook נכנס מספק, בכותרת. לא בשימוש בחיבור ישיר למטא */
+  webhookSecret?: string | null;
 }
 
 export type CloudAuthStyle = "bearer" | "d360";
@@ -68,11 +73,13 @@ interface AccountRow {
   api_base?: string | null;
   token_env?: string | null;
   auth_style?: string | null;
+  webhook_token?: string | null;
+  webhook_secret?: string | null;
 }
 
 /** העמודות של חשבון — במקום אחד, כדי ששאילתה לא תשכח שדה של ספק. */
 const ACCOUNT_COLUMNS =
-  "user_email, instance_id, api_token, phone, label, is_active, capture_unknown, provider, phone_number_id, api_base, token_env, auth_style";
+  "user_email, instance_id, api_token, phone, label, is_active, capture_unknown, provider, phone_number_id, api_base, token_env, auth_style, webhook_token, webhook_secret";
 
 function rowToAccount(r: AccountRow): WhatsAppAccount {
   return {
@@ -87,6 +94,8 @@ function rowToAccount(r: AccountRow): WhatsAppAccount {
     apiBase: r.api_base ?? null,
     tokenEnv: r.token_env ?? null,
     authStyle: r.auth_style === "d360" ? "d360" : "bearer",
+    webhookToken: r.webhook_token ?? null,
+    webhookSecret: r.webhook_secret ?? null,
   };
 }
 
@@ -118,6 +127,25 @@ export async function getAccountByInstance(
     .eq("instance_id", id)
     .maybeSingle();
   return data ? rowToAccount(data as AccountRow) : biz;
+}
+
+/**
+ * החשבון שכתובת ה-webhook הזו שייכת לו. null = טוקן לא מוכר, והבקשה
+ * נדחית — אין נפילה חזרה למספר העסקי, כי ניחוש כאן משייך הודעה של
+ * מועמד/ת לרכז/ת הלא נכון/ה.
+ */
+export async function getAccountByWebhookToken(
+  token: string | null | undefined
+): Promise<WhatsAppAccount | null> {
+  const t = (token ?? "").trim();
+  if (!t) return null;
+  const { data } = await adminClient()
+    .from("whatsapp_accounts")
+    .select(ACCOUNT_COLUMNS)
+    .eq("webhook_token", t)
+    .eq("is_active", true)
+    .maybeSingle();
+  return data ? rowToAccount(data as AccountRow) : null;
 }
 
 /** Sender for the signed-in recruiter: their own number, else the business one. */
@@ -255,6 +283,52 @@ export function cloudRequest(
       ...(d360 ? { "D360-API-KEY": token } : { Authorization: `Bearer ${token}` }),
     },
   };
+}
+
+/**
+ * מטא חותמת כל בקשה ב-HMAC-SHA256 על גוף הבקשה עם App Secret של
+ * האפליקציה. זו שכבת האבטחה היחידה שאי אפשר לזייף — הטוקן שבכתובת
+ * רק מנתב. בלי App Secret מוגדר מחזירים false ולא "אולי זו מטא":
+ * webhook פתוח הוא בדיוק מה שנסגר כאן בדיעבד ב-00088.
+ *
+ * ההשוואה ב-timingSafeEqual ולא ב-===, כדי לא לדלוף את החתימה
+ * הנכונה בהפרשי זמן.
+ */
+export function verifyMetaSignature(
+  rawBody: string,
+  signatureHeader: string | null,
+  appSecret: string
+): boolean {
+  if (!signatureHeader || !appSecret) return false;
+  const expected = signatureHeader.startsWith("sha256=")
+    ? signatureHeader.slice(7)
+    : signatureHeader;
+  const digest = createHmac("sha256", appSecret).update(rawBody, "utf8").digest("hex");
+  const a = Buffer.from(digest, "utf8");
+  const b = Buffer.from(expected, "utf8");
+  if (a.length !== b.length) return false;
+  return timingSafeEqual(a, b);
+}
+
+/**
+ * אימות webhook שמגיע מספק ולא ממטא. אין חתימה על הגוף — הספק מקבל
+ * את ההודעה ממטא ושולח אותה הלאה מהשרתים שלו — ולכן כל מה שיש הוא
+ * סוד משותף שקבענו על ה-webhook אצלו, בכותרת Authorization.
+ *
+ * חלש יותר מחתימה: מי שמחזיק בסוד יכול להמציא הודעה. לכן הסוד לעולם
+ * לא בכתובת אלא בכותרת בלבד, וסוד ריק נדחה ולא "עובר כי אין מה לבדוק".
+ */
+export function verifyBearerSecret(
+  header: string | null,
+  secret: string | null | undefined
+): boolean {
+  const expected = (secret ?? "").trim();
+  if (!expected || !header) return false;
+  const got = header.startsWith("Bearer ") ? header.slice(7).trim() : header.trim();
+  const a = Buffer.from(got, "utf8");
+  const b = Buffer.from(expected, "utf8");
+  if (a.length !== b.length) return false;
+  return timingSafeEqual(a, b);
 }
 
 async function sendViaCloud(
