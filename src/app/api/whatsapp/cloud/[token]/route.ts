@@ -25,6 +25,8 @@ import { handleInboundMessage } from "@/lib/whatsappInbound";
 interface CloudMessage {
   from?: string;
   to?: string;
+  /** שניות מאז 1970 — מתי ההודעה נשלחה במקור, לא מתי הגיעה אלינו */
+  timestamp?: string;
   type?: string;
   text?: { body?: string };
   button?: { text?: string };
@@ -108,6 +110,25 @@ function authorize(req: NextRequest, account: WhatsAppAccount, raw: string): boo
   return ok;
 }
 
+/**
+ * הודעה ישנה = היסטוריה, לא תנועה חיה.
+ *
+ * 16.09, דקות אחרי חיבור המספר של תמי: מטא העבירה את הקבצים של 14 הימים
+ * האחרונים (סנכרון Coexistence) כאירועי messages ו-message_echoes רגילים.
+ * 157 שורות "[קובץ התקבל]" נוספו ל-44 שיחות עם השעה של היום — ובלבלו את
+ * חלון 24 השעות, שחשב שמועמדים כתבו עכשיו.
+ *
+ * הודעה חיה מגיעה תוך שניות, והיסטוריה נושאת את שעת השליחה המקורית,
+ * ולכן גבול של 15 דקות מפריד ביניהן. אין חותמת זמן — מתייחסים כחיה.
+ */
+export const MAX_MESSAGE_AGE_SECONDS = 15 * 60;
+
+export function isStale(msg: CloudMessage, nowMs: number = Date.now()): boolean {
+  const ts = Number(msg.timestamp);
+  if (!Number.isFinite(ts) || ts <= 0) return false;
+  return nowMs / 1000 - ts > MAX_MESSAGE_AGE_SECONDS;
+}
+
 export async function POST(req: NextRequest, ctx: { params: Promise<{ token: string }> }) {
   const { token } = await ctx.params;
 
@@ -151,6 +172,10 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ token: str
 
       // הודעות של המועמד/ת. ב-messages השדה from הוא המועמד/ת.
       for (const msg of value.messages ?? []) {
+        if (isStale(msg)) {
+          actions.push(`stale:${msg.type ?? "unknown"}`);
+          continue;
+        }
         const phone = phoneFromChatId(msg.from ?? "");
         const text = extractText(msg);
         if (!phone || !text) {
@@ -181,6 +206,10 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ token: str
       // לא אומת מול echo אמיתי — אין עדיין מספר Coexistence לבדוק עליו.
       // המבנה נכתב לפי התיעוד של מטא, וסוגי revoke/edit מדולגים במכוון.
       for (const msg of value.message_echoes ?? []) {
+        if (isStale(msg)) {
+          actions.push(`stale_echo:${msg.type ?? "unknown"}`);
+          continue;
+        }
         const phone = phoneFromChatId(msg.to ?? "");
         const text = extractText(msg);
         if (!phone || !text) {
@@ -201,6 +230,11 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ token: str
         }
       }
     }
+  }
+
+  // שורה אחת ביומן לכל בקשה — בלי זה אי אפשר לדעת מה נכנס ומה דולג
+  if (actions.length) {
+    console.log(`[Cloud Webhook] ${account.label ?? account.instanceId}: ${actions.join(",")}`);
   }
 
   // תמיד 200: שגיאה מצדנו לא צריכה לגרום למטא לשלוח את ההודעה שוב ושוב

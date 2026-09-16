@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { createHmac } from "crypto";
 import { verifyBearerSecret, verifyMetaSignature, phoneFromChatId } from "./whatsappService";
-import { extractText } from "@/app/api/whatsapp/cloud/[token]/route";
+import { extractText, isStale } from "@/app/api/whatsapp/cloud/[token]/route";
 
 /**
  * הקליטה מהערוץ הרשמי. שני דברים נשברים כאן בשקט ולכן נבדקים:
@@ -114,5 +114,29 @@ describe("verifyBearerSecret", () => {
 
   it("דוחה אורך שגוי בלי לזרוק", () => {
     expect(verifyBearerSecret("Bearer x", SEC)).toBe(false);
+  });
+});
+
+describe("isStale — היסטוריה מול תנועה חיה", () => {
+  const NOW = Date.UTC(2026, 8, 16, 9, 30, 0);
+  const secsAgo = (s: number) => String(Math.floor(NOW / 1000) - s);
+
+  it("הודעה מלפני שניות היא חיה", () => {
+    expect(isStale({ timestamp: secsAgo(5) }, NOW)).toBe(false);
+  });
+
+  // 16.09: קבצים מ-14 הימים האחרונים הגיעו כאירועים רגילים אחרי החיבור
+  it("הודעה מלפני יום — היסטוריה, מדלגים", () => {
+    expect(isStale({ timestamp: secsAgo(86_400) }, NOW)).toBe(true);
+  });
+
+  it("הגבול: 15 דקות בדיוק עדיין חי, אחרי זה לא", () => {
+    expect(isStale({ timestamp: secsAgo(15 * 60) }, NOW)).toBe(false);
+    expect(isStale({ timestamp: secsAgo(15 * 60 + 1) }, NOW)).toBe(true);
+  });
+
+  it("בלי חותמת זמן — לא מנחשים, מתייחסים כחיה", () => {
+    expect(isStale({}, NOW)).toBe(false);
+    expect(isStale({ timestamp: "garbage" }, NOW)).toBe(false);
   });
 });
