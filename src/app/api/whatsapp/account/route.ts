@@ -6,6 +6,7 @@ import {
   defaultSenderAccount,
   getInstancePhone,
   getInstanceQr,
+  getAccountForEmail,
   getInstanceState,
   logoutInstance,
   type WhatsAppAccount,
@@ -84,7 +85,11 @@ export async function GET(req: NextRequest) {
     });
   }
 
-  const account: WhatsAppAccount = { instanceId: row.instance_id, token: row.api_token };
+  // החשבון המלא, כולל provider. 17.09: תמי ראתה "הוואטסאפ שלך מנותק" —
+  // החשבון נבנה בלי provider, ולכן המספר הרשמי שלה (360dialog) נבדק מול
+  // GreenAPI, והבדיקה נכשלה. בערוץ הרשמי getInstanceState מחזיר מחובר.
+  const account: WhatsAppAccount =
+    (await getAccountForEmail(email)) ?? { instanceId: row.instance_id, token: row.api_token };
   let state = "unknown";
   let qr: string | null = null;
   let phone = row.phone;
@@ -93,7 +98,7 @@ export async function GET(req: NextRequest) {
     if (state === "notAuthorized" && req.nextUrl.searchParams.get("qr") === "1") {
       qr = (await getInstanceQr(account)).qr;
     }
-    if (state === "authorized" && !phone) {
+    if (state === "authorized" && !phone && account.provider !== "cloud") {
       phone = await getInstancePhone(account);
     }
   } catch (err) {
