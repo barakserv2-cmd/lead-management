@@ -671,7 +671,19 @@ export async function getInstanceState(
   // בערוץ הרשמי אין "מכשיר מחובר" שאפשר לנתק — המספר רשום אצל מטא
   // וזמין כל עוד החשבון תקין. מסך ההגדרות מציג אותו כמחובר במקום
   // לזרוק שגיאה של GreenAPI על חשבון שאינו שלו.
-  if (account.provider === "cloud") return "authorized";
+  //
+  // 360dialog כן מדווחים אם מטא חסמה את המספר — BLOCKED הוא חסימה אמיתית.
+  // LIMITED (למשל שיחות קוליות לא מופעלות) לא עוצר הודעות.
+  if (account.provider === "cloud") {
+    if (account.authStyle !== "d360") return "authorized";
+    const token = (process.env[account.tokenEnv ?? ""] ?? "").trim();
+    if (!token) return "unknown";
+    const base = ((account.apiBase ?? "").trim() || "https://waba-v2.360dialog.io").replace(/\/+$/, "");
+    const res = await fetch(`${base}/health_status`, { headers: { "D360-API-KEY": token }, cache: "no-store" });
+    if (!res.ok) return "unknown";
+    const body = (await res.json()) as { health_status?: { can_send_message?: string } };
+    return body.health_status?.can_send_message === "BLOCKED" ? "blocked" : "authorized";
+  }
 
   const res = await fetch(apiUrl(account, "getStateInstance"), {
     cache: "no-store",
