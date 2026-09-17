@@ -517,6 +517,62 @@ export async function sendWhatsAppTemplate(
   }
 }
 
+/** תבנית מאושרת שרכזת יכולה לשלוח מתוך V1. */
+export interface ApprovedTemplate {
+  name: string;
+  language: string;
+  category: string;
+  /** גוף התבנית כפי שאושר, עם {{1}}, {{2}}… */
+  body: string;
+  paramCount: number;
+}
+
+/** כמה משתנים יש בגוף התבנית ({{1}}…{{n}}). */
+export function countTemplateParams(body: string): number {
+  const nums = [...body.matchAll(/\{\{(\d+)\}\}/g)].map((m) => Number(m[1]));
+  return nums.length ? Math.max(...nums) : 0;
+}
+
+/** הטקסט שהמועמד/ת יראו — נשמר בצ'אט כמו הודעה רגילה. */
+export function renderTemplateBody(body: string, params: string[]): string {
+  return body.replace(/\{\{(\d+)\}\}/g, (m, n) => params[Number(n) - 1] ?? m);
+}
+
+/**
+ * התבניות המאושרות של המספר השולח.
+ *
+ * 17.09: מחוץ לחלון 24 השעות רכזת לא יכלה לכתוב למועמד מתוך V1 בכלל —
+ * רק מהטלפון. תבנית מאושרת עוברת גם מחוץ לחלון. כרגע רק חשבונות
+ * 360dialog: בחיבור ישיר למטא הרשימה דורשת מזהה WABA שלא שמור אצלנו.
+ */
+export async function listApprovedTemplates(account: WhatsAppAccount): Promise<ApprovedTemplate[]> {
+  if (account.provider !== "cloud" || account.authStyle !== "d360") return [];
+  const token = (process.env[account.tokenEnv ?? ""] ?? "").trim();
+  if (!token) return [];
+  const base = ((account.apiBase ?? "").trim() || "https://waba-v2.360dialog.io").replace(/\/+$/, "");
+  const res = await fetch(`${base}/v1/configs/templates`, {
+    headers: { "D360-API-KEY": token },
+    cache: "no-store",
+  });
+  if (!res.ok) return [];
+  const data = (await res.json()) as {
+    waba_templates?: Array<{
+      name: string;
+      language: string;
+      status: string;
+      category: string;
+      components?: Array<{ type: string; text?: string }>;
+    }>;
+  };
+  return (data.waba_templates ?? [])
+    .filter((t) => t.status?.toLowerCase() === "approved")
+    .map((t) => {
+      const body = t.components?.find((c) => c.type?.toUpperCase() === "BODY")?.text ?? "";
+      return { name: t.name, language: t.language, category: t.category, body, paramCount: countTemplateParams(body) };
+    })
+    .filter((t) => t.body);
+}
+
 /**
  * Send a WhatsApp message via Green API from the given account
  * (defaults to the business number).

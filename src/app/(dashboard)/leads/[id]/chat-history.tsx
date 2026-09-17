@@ -19,6 +19,14 @@ interface Message {
   delivery_error?: string | null;
 }
 
+interface TemplateOption {
+  name: string;
+  language: string;
+  category: string;
+  body: string;
+  paramCount: number;
+}
+
 const DELIVERY_LABEL: Record<"sent" | "delivered" | "read", string> = {
   sent: "נשלחה",
   delivered: "נמסרה למועמד/ת",
@@ -160,6 +168,65 @@ export function ChatHistory({
     }
   }, [messages]);
 
+  // תבניות: הדרך לפנות למועמד מחוץ לחלון 24 השעות מתוך המערכת
+  const [templatesOpen, setTemplatesOpen] = useState(false);
+  const [templates, setTemplates] = useState<TemplateOption[] | null>(null);
+  const [templateName, setTemplateName] = useState("");
+  const [templateParams, setTemplateParams] = useState<string[]>([]);
+
+  async function openTemplates() {
+    setTemplatesOpen(true);
+    if (templates) return;
+    try {
+      const res = await fetch("/api/whatsapp/templates", { cache: "no-store" });
+      const data = await res.json();
+      setTemplates((data.templates as TemplateOption[]) ?? []);
+    } catch {
+      setTemplates([]);
+    }
+  }
+
+  function pickTemplate(name: string) {
+    setTemplateName(name);
+    const t = templates?.find((x) => x.name === name);
+    const firstName = leadName.trim().split(/\s+/)[0] ?? "";
+    // {{1}} כמעט תמיד השם — ממלאים מראש, והרכזת יכולה לשנות
+    setTemplateParams(Array.from({ length: t?.paramCount ?? 0 }, (_, i) => (i === 0 ? firstName : "")));
+  }
+
+  async function handleSendTemplate() {
+    const t = templates?.find((x) => x.name === templateName);
+    if (!t || sending) return;
+    if (templateParams.some((p) => !p.trim())) {
+      setError("צריך למלא את כל השדות בתבנית");
+      return;
+    }
+    setError(null);
+    setSending(true);
+    try {
+      if (botManaged && !(await takeOver())) {
+        setError("לא הצלחתי לעצור את הבוט בשיחה הזו — התבנית לא נשלחה. נסי שוב.");
+        return;
+      }
+      const res = await fetch("/api/whatsapp/send-template", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ leadId, name: t.name, params: templateParams }),
+      });
+      const result = await res.json();
+      if (!result.success) setError(result.error ?? "התבנית לא נשלחה");
+      else {
+        setTemplatesOpen(false);
+        setTemplateName("");
+      }
+      await fetchMessages();
+    } catch {
+      setError("שגיאה בשליחת התבנית");
+    } finally {
+      setSending(false);
+    }
+  }
+
   // Manual recruiter send (new)
   async function handleManualSend(text: string) {
     const tempMsg: Message = {
@@ -180,6 +247,10 @@ export function ChatHistory({
 
       if (!result.success) {
         setError(result.error ?? "שגיאה בשליחת ההודעה");
+        if (result.windowClosed) {
+          setInputText(text);
+          void openTemplates();
+        }
         // אם ההודעה כן נשמרה בצ'אט (רק הוואטסאפ נכשל) — משאירים את
         // הבועה; אחרת מסירים אותה.
         if (result.savedToChat) {
@@ -218,6 +289,7 @@ export function ChatHistory({
         .catch(() => null);
       if (pre && pre.success === false) {
         setError(pre.error ?? "אי אפשר לשלוח מכאן כרגע");
+        if (pre.windowClosed) void openTemplates();
         setInputText(text);
         setSending(false);
         return;
@@ -402,6 +474,68 @@ export function ChatHistory({
         </div>
       )}
 
+      {/* בחירת תבנית — עוברת גם כשהמועמד/ת לא כתבו ב-24 השעות האחרונות */}
+      {canSend && templatesOpen && (
+        <div className="px-4 pt-3 border-t border-gray-100 bg-cyan-50/40 text-sm" dir="rtl">
+          <div className="flex items-center justify-between mb-2">
+            <span className="font-medium text-gray-700">שליחת תבנית מאושרת</span>
+            <button type="button" onClick={() => setTemplatesOpen(false)} className="text-xs text-gray-500 hover:underline">
+              סגירה
+            </button>
+          </div>
+          {templates === null ? (
+            <p className="text-xs text-gray-500 pb-3">טוען תבניות...</p>
+          ) : templates.length === 0 ? (
+            <p className="text-xs text-gray-500 pb-3">
+              אין תבניות מאושרות למספר שממנו את שולחת. תבניות חדשות צריכות אישור של מטא — בקשי מסער.
+            </p>
+          ) : (
+            <div className="space-y-2 pb-3">
+              <select
+                value={templateName}
+                onChange={(e) => pickTemplate(e.target.value)}
+                className="w-full rounded-md border border-gray-200 bg-white px-2 py-1.5 text-sm"
+              >
+                <option value="">בחרי תבנית...</option>
+                {templates.map((t) => (
+                  <option key={t.name} value={t.name}>
+                    {t.body.slice(0, 60)}
+                    {t.body.length > 60 ? "…" : ""}
+                  </option>
+                ))}
+              </select>
+              {(() => {
+                const t = templates.find((x) => x.name === templateName);
+                if (!t) return null;
+                const preview = t.body.replace(/\{\{(\d+)\}\}/g, (m, n) => templateParams[Number(n) - 1]?.trim() || m);
+                return (
+                  <>
+                    {templateParams.map((p, i) => (
+                      <Input
+                        key={i}
+                        value={p}
+                        onChange={(e) =>
+                          setTemplateParams((prev) => prev.map((x, j) => (j === i ? e.target.value : x)))
+                        }
+                        placeholder={i === 0 ? "שם המועמד/ת" : `ערך ל-{{${i + 1}}}`}
+                        dir="rtl"
+                        className="h-8 text-sm"
+                      />
+                    ))}
+                    <p className="rounded-md bg-white border border-gray-100 p-2 text-xs text-gray-700 whitespace-pre-wrap">
+                      {preview}
+                    </p>
+                    <Button onClick={handleSendTemplate} disabled={sending} size="sm" className="w-full">
+                      {sending ? "..." : botManaged ? "שלח תבנית (יעצור את הבוט)" : "שלח תבנית"}
+                    </Button>
+                  </>
+                );
+              })()}
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Input area */}
       {canSend && (
       <div className="flex gap-2 pt-3 px-4 pb-3 border-t border-gray-100">
@@ -426,6 +560,16 @@ export function ChatHistory({
           className="px-4"
         >
           {sending ? "..." : "שלח"}
+        </Button>
+        <Button
+          onClick={() => (templatesOpen ? setTemplatesOpen(false) : openTemplates())}
+          disabled={sending}
+          size="sm"
+          variant="outline"
+          className="px-3"
+          title="תבנית מאושרת — עוברת גם אחרי 24 שעות"
+        >
+          תבנית
         </Button>
       </div>
       )}
