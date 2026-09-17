@@ -85,7 +85,8 @@ export function officialReminderAccount(): WhatsAppAccount | null {
     provider: "cloud",
     phoneNumberId: id,
     tokenEnv: (process.env.REMINDER_TOKEN_ENV ?? "WHATSAPP_CLOUD_TOKEN_MAIN").trim(),
-    authStyle: "bearer",
+    // d360 כשמספר הבוט עובר ל-360dialog (16.09, קו האשראי של Bird חסם תבניות)
+    authStyle: (process.env.REMINDER_AUTH_STYLE ?? "").trim() === "d360" ? "d360" : "bearer",
   };
 }
 
