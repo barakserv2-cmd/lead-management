@@ -70,6 +70,30 @@ export async function POST(req: NextRequest) {
     if (lead.phone && sender.provider === "cloud") {
       const last = await lastInboundAt(lead.phone, sender.instanceId);
       if (!isWithinServiceWindow(last)) {
+        // המועמד/ת מדברים עם הבוט והחלון שם פתוח? התשובה יוצאת ממספר הבוט,
+        // באותה שיחה (17.09 — תמי לקחה שליטה ונחסמה).
+        const { sendViaMachine } = await import("@/lib/machineBridge");
+        const probe = await sendViaMachine(lead.phone, "", { check: true });
+        if (probe.ok) {
+          if (check) return NextResponse.json({ success: true, via: "bot" });
+          const { data: row, error: rowErr } = await supabase
+            .from("messages")
+            .insert({ lead_id: leadId, role: "recruiter", content: message.trim(), sent_by: user.email ?? null })
+            .select("id")
+            .single();
+          if (rowErr) {
+            return NextResponse.json({ success: false, error: `שגיאה בשמירת ההודעה: ${rowErr.message}` }, { status: 500 });
+          }
+          const sent = await sendViaMachine(lead.phone, message.trim());
+          if (!sent.ok) {
+            await supabase.from("messages")
+              .update({ delivery_status: "failed", delivery_error: "לא הצלחתי להעביר את ההודעה למספר הבוט", delivery_updated_at: new Date().toISOString() })
+              .eq("id", row.id);
+            return NextResponse.json({ success: false, savedToChat: true, error: "ההודעה לא נשלחה — לא הצלחתי להעביר אותה למספר הבוט. נסי שוב." });
+          }
+          // מזהה ההודעה וסימני המסירה מגיעים מגובגט כשההודעה יוצאת בפועל
+          return NextResponse.json({ success: true, whatsappSent: true, via: "bot", sentFrom: "מספר הבוט 050-700-8171" });
+        }
         const from = sender.userEmail === user.email?.toLowerCase() ? "" : ` (${sender.label ?? "מספר ברירת המחדל"})`;
         return NextResponse.json({
           success: false,

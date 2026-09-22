@@ -31,6 +31,39 @@ export async function forwardReplyToMachine(
 }
 
 /**
+ * הודעת רכזת שיוצאת ממספר הבוט.
+ *
+ * 17.09: מועמדת כתבה לבוט, תמי לקחה שליטה — ו-V1 חסם כי חלון 24 השעות
+ * פתוח רק במספר שהמועמדת כתבה אליו. כשהמועמד/ת מדברים עם הבוט, התשובה
+ * של הרכזת יוצאת מאותו מספר ובאותה שיחה.
+ * check: רק בודק אם אפשר (לפני שהצ'אט עוצר את הבוט).
+ */
+export async function sendViaMachine(
+  phone: string,
+  content: string,
+  opts: { check?: boolean } = {}
+): Promise<{ ok: boolean; reason?: string }> {
+  const url = process.env.MACHINE_INGEST_URL;
+  const key = process.env.MACHINE_INGEST_KEY;
+  if (!url || !key || !phone) return { ok: false, reason: "not_configured" };
+  try {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 8000);
+    const res = await fetch(`${url}/api/v1/bridge/send`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "x-ingest-key": key },
+      body: JSON.stringify({ phone, content, check: opts.check === true }),
+      signal: controller.signal,
+    });
+    clearTimeout(timer);
+    if (!res.ok) return { ok: false, reason: `http_${res.status}` };
+    return (await res.json()) as { ok: boolean; reason?: string };
+  } catch (e) {
+    return { ok: false, reason: (e as Error).message };
+  }
+}
+
+/**
  * Tell Gubget whether it may keep talking to a candidate. "bot" releases it
  * back to autonomous handling; "human" keeps it frozen. Returns true on
  * success so the caller can surface a failure (unlike the fire-and-forget
