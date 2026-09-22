@@ -47,6 +47,12 @@ export interface ChangeStatusInput {
 
 const GUBGET_EMAIL = "gubget@eilatjobs.com";
 
+/** סטטוסים שבהם אין יותר מה לעשות עם המועמד — סוגרים גם את האסקלציות בגובגט */
+const LEAD_CLOSED_STATUSES = new Set<string>([
+  "REJECTED", "NOT_SUITABLE", "LOST_CONTACT", "NOT_ACCEPTED", "INVALID_PHONE",
+  "EMPLOYMENT_ENDED", "NO_SHOW", "CANCELLED_ARRIVAL", "HIRED", "STARTED",
+]);
+
 export interface ChangeStatusResult {
   success: boolean;
   error?: string;
@@ -221,7 +227,9 @@ export async function changeLeadStatus(input: ChangeStatusInput): Promise<Change
   // is already persisted above, and the machine re-checks it on every inbound
   // message, so a missed call here can't let the bot keep going.
   if (actor === "human" && lead.phone) {
-    setMachineConversationMode(lead.phone as string, "human").catch(() => undefined);
+    // סטטוס סופי סוגר גם את האסקלציות בגובגט (22.09 — הן נשארו פתוחות לנצח)
+    const closedStatus = LEAD_CLOSED_STATUSES.has(newStatus) ? newStatus : undefined;
+    setMachineConversationMode(lead.phone as string, "human", closedStatus).catch(() => undefined);
   }
 
   // 7. Log to status history

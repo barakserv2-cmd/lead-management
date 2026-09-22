@@ -102,7 +102,9 @@ export async function pushNameToMachine(
 
 export async function setMachineConversationMode(
   phone: string | null | undefined,
-  mode: "bot" | "human"
+  mode: "bot" | "human",
+  /** הליד נסגר ב-V1 — גובגט סוגר גם את האסקלציות הפתוחות שלו */
+  closedStatus?: string
 ): Promise<boolean> {
   const url = process.env.MACHINE_INGEST_URL;
   const key = process.env.MACHINE_INGEST_KEY;
@@ -113,7 +115,7 @@ export async function setMachineConversationMode(
     const res = await fetch(`${url}/api/v1/conversation-mode`, {
       method: "POST",
       headers: { "Content-Type": "application/json", "x-ingest-key": key },
-      body: JSON.stringify({ phone, mode }),
+      body: JSON.stringify({ phone, mode, ...(closedStatus ? { closedStatus } : {}) }),
       signal: controller.signal,
     }).finally(() => clearTimeout(timer));
     return res.ok;
