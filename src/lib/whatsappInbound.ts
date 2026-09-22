@@ -17,6 +17,7 @@ import { isOptOutMessage, OPT_OUT_CONFIRMATION } from "@/lib/sendGate";
 import { botModeForPhone } from "@/lib/botConfig";
 import { sendBookingLinkToLead } from "@/lib/bookingSend";
 import { analyzeWhatsappMessage, type WhatsAppNLU } from "@/lib/ai/parseWhatsappMessage";
+import { saveInboundMedia, mediaMessageText, type InboundMedia } from "@/lib/whatsappMedia";
 import {
   createLeadFromPublication,
   matchPublication,
@@ -37,6 +38,8 @@ export interface InboundMessage {
   senderName: string | null;
   /** in = המועמד/ת כתבו; out = הרכז/ת כתבו מהטלפון והשיחה משתקפת אלינו */
   direction: "in" | "out";
+  /** קובץ שהגיע בערוץ הרשמי — נשמר במסמכים של הליד, והטקסט מתעדכן בהתאם */
+  media?: InboundMedia;
 }
 
 type LeadRow = {
@@ -60,8 +63,9 @@ function phoneVariants(phone: string): string[] {
 
 export async function handleInboundMessage(
   account: WhatsAppAccount,
-  msg: InboundMessage
+  inbound: InboundMessage
 ): Promise<Record<string, unknown>> {
+  let msg = inbound;
   const isIncoming = msg.direction === "in";
   const supabase = getSupabase();
   const variants = phoneVariants(msg.phone);
@@ -170,6 +174,14 @@ export async function handleInboundMessage(
 
   if (publication) {
     await recordResponse(lead.id, publication);
+  }
+
+  // קובץ מהמועמד/ת נשמר במסמכים לפני שההודעה נרשמת, כדי שהשיחה תגיד
+  // אם הוא נשמר. קבצים שהרכזת שולחת מהטלפון (פלאייר למשרה, למשל) לא
+  // נשמרים — אותו קובץ היה מצטבר אצל עשרות מועמדים.
+  if (msg.media && isIncoming) {
+    const saved = await saveInboundMedia(account, lead.id, msg.media);
+    msg = { ...msg, text: mediaMessageText(msg.media, saved) };
   }
 
   // Recruiter replied from their phone app → mirror as a recruiter message.

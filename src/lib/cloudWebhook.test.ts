@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { createHmac } from "crypto";
 import { verifyBearerSecret, verifyMetaSignature, phoneFromChatId } from "./whatsappService";
-import { extractText, isStale } from "@/app/api/whatsapp/cloud/[token]/route";
+import { extractText, extractMedia, isStale } from "@/app/api/whatsapp/cloud/[token]/route";
+import { mediaMessageText } from "./whatsappMedia";
 
 /**
  * הקליטה מהערוץ הרשמי. שני דברים נשברים כאן בשקט ולכן נבדקים:
@@ -138,5 +139,33 @@ describe("isStale — היסטוריה מול תנועה חיה", () => {
   it("בלי חותמת זמן — לא מנחשים, מתייחסים כחיה", () => {
     expect(isStale({}, NOW)).toBe(false);
     expect(isStale({ timestamp: "garbage" }, NOW)).toBe(false);
+  });
+});
+
+describe("קבצים מהמועמד/ת", () => {
+  it("מחלץ הפניה לקובץ עם שם וכיתוב", () => {
+    expect(
+      extractMedia({
+        type: "document",
+        document: { id: "m1", mime_type: "application/pdf", filename: "cv.pdf", caption: "קורות חיים" },
+      })
+    ).toEqual({ id: "m1", kind: "document", mimeType: "application/pdf", filename: "cv.pdf", caption: "קורות חיים" });
+    expect(extractMedia({ type: "audio", audio: { id: "v1" } })?.kind).toBe("audio");
+  });
+
+  it("סטיקר, טקסט או קובץ בלי מזהה — אין מה להוריד", () => {
+    expect(extractMedia({ type: "sticker" })).toBeUndefined();
+    expect(extractMedia({ type: "text", text: { body: "היי" } })).toBeUndefined();
+    expect(extractMedia({ type: "image", image: {} })).toBeUndefined();
+  });
+
+  it("כיתוב של תמונה נשמר כטקסט", () => {
+    expect(extractText({ type: "image", image: { id: "x", caption: "זה אני" } })).toBe("זה אני");
+  });
+
+  it("הטקסט בשיחה אומר אם הקובץ נשמר, ושומר את הכיתוב", () => {
+    const m = { id: "m", kind: "document" as const, filename: "cv.pdf", caption: "מצרף" };
+    expect(mediaMessageText(m, true)).toBe("📎 מסמך (cv.pdf) — נשמר/ה במסמכים של המועמד/ת\nמצרף");
+    expect(mediaMessageText({ id: "m", kind: "image" }, false)).toContain("השמירה נכשלה");
   });
 });

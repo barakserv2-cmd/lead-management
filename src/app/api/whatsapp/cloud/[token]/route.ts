@@ -9,6 +9,7 @@ import {
 import { handleInboundMessage } from "@/lib/whatsappInbound";
 import { applyDeliveryStatus, describeMetaError } from "@/lib/deliveryStatus";
 import { getSupabaseAdmin } from "@/lib/api-auth";
+import type { InboundMedia } from "@/lib/whatsappMedia";
 
 /**
  * Webhook של הערוץ הרשמי של מטא (WhatsApp Business Platform).
@@ -36,6 +37,17 @@ interface CloudMessage {
     button_reply?: { title?: string };
     list_reply?: { title?: string };
   };
+  image?: CloudMediaRef;
+  document?: CloudMediaRef;
+  video?: CloudMediaRef;
+  audio?: CloudMediaRef;
+}
+
+interface CloudMediaRef {
+  id?: string;
+  mime_type?: string;
+  caption?: string;
+  filename?: string;
 }
 
 /** עדכון מסירה של מטא: נשלחה / נמסרה / נקראה / נכשלה, לפי מזהה ההודעה. */
@@ -69,9 +81,8 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ token: stri
 /**
  * טקסט מכל סוג הודעה שמטא שולחת; null = אין מה להעביר הלאה.
  *
- * מדיה לא נשמרת עדיין (הורדה מהערוץ הרשמי דורשת בקשה מאומתת בשני
- * שלבים). היא לא נבלעת בשקט: נרשם טקסט מפורש, כדי שהרכז/ת תראה
- * בשיחה שהגיע קובץ — בדיוק כמו היום ב-GreenAPI, שגם הוא מתעלם ממדיה.
+ * לקובץ זה הטקסט הזמני בלבד: כשיש ליד, whatsappInbound מוריד את הקובץ,
+ * שומר אותו במסמכים ומחליף את הטקסט ב"נשמר" או "השמירה נכשלה".
  */
 export function extractText(msg: CloudMessage): string | null {
   switch (msg.type) {
@@ -87,12 +98,13 @@ export function extractText(msg: CloudMessage): string | null {
       );
     case "audio":
     case "voice":
-      return "[הודעה קולית התקבלה — לא נשמרה]";
+      return "[הודעה קולית התקבלה]";
     case "image":
     case "document":
     case "video":
+      return msg[msg.type]?.caption?.trim() || "[קובץ התקבל]";
     case "sticker":
-      return "[קובץ התקבל — לא נשמר]";
+      return "[סטיקר]";
     default:
       return null;
   }
@@ -130,6 +142,23 @@ function authorize(req: NextRequest, account: WhatsAppAccount, raw: string): boo
  * הודעה חיה מגיעה תוך שניות, והיסטוריה נושאת את שעת השליחה המקורית,
  * ולכן גבול של 15 דקות מפריד ביניהן. אין חותמת זמן — מתייחסים כחיה.
  */
+/** הפניה לקובץ בהודעה (תמונה, מסמך, סרטון, קול); סטיקר לא נשמר */
+export function extractMedia(msg: CloudMessage): InboundMedia | undefined {
+  const kind =
+    msg.type === "image" || msg.type === "document" || msg.type === "video" || msg.type === "audio"
+      ? msg.type
+      : null;
+  const ref = kind ? msg[kind] : undefined;
+  if (!kind || !ref?.id) return undefined;
+  return {
+    id: ref.id,
+    kind,
+    mimeType: ref.mime_type ?? null,
+    filename: ref.filename ?? null,
+    caption: ref.caption ?? null,
+  };
+}
+
 export const MAX_MESSAGE_AGE_SECONDS = 15 * 60;
 
 export function isStale(msg: CloudMessage, nowMs: number = Date.now()): boolean {
@@ -219,6 +248,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ token: str
             text,
             senderName,
             direction: "in",
+            media: extractMedia(msg),
           });
           actions.push(String(res.optOut ? "optOut" : res.bot ? "bot" : "in"));
         } catch (e) {
