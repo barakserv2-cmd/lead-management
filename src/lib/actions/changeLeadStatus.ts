@@ -114,6 +114,14 @@ export async function changeLeadStatus(input: ChangeStatusInput): Promise<Change
   // recruiter explicitly hands the conversation back ("החזר לגובגט").
   if (actor === "human") updateData.bot_paused = true;
 
+  // ליד שנסגר יוצא מ"גובגט מחכה לך" — אין יותר על מה לחכות. 22.09: 3 לידים
+  // סגורים נשארו בתור המשותף שכל הרכזות רואות.
+  if (LEAD_CLOSED_STATUSES.has(newStatus)) {
+    updateData.needs_human_attention = false;
+    updateData.human_attention_reason = null;
+    updateData.human_attention_raised_at = null;
+  }
+
   // Status-specific field updates
   // "נדחה" ו"לא התקבל" חולקים את אותו שדה סיבה — שניהם סגירה של מועמד,
   // וההפרדה ביניהם היא בסטטוס עצמו.
