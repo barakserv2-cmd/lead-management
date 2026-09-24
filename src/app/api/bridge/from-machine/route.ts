@@ -6,6 +6,7 @@ import { GUBGET_SOURCE } from "@/lib/constants";
 import { closureFor } from "@/lib/israelHolidays";
 import { ensureClosuresLoaded } from "@/lib/closures";
 import { applyDeliveryStatus } from "@/lib/deliveryStatus";
+import type { SupabaseClient } from "@supabase/supabase-js";
 
 /**
  * POST /api/bridge/from-machine — the autonomous machine ("גובגט") reports
@@ -18,6 +19,32 @@ import { applyDeliveryStatus } from "@/lib/deliveryStatus";
  */
 
 const GUBGET_EMAIL = "gubget@eilatjobs.com";
+
+/**
+ * הרכזות שמקבלות מועמדים שגובגט העביר לאדם. רשימה בסביבה (מופרדת בפסיקים)
+ * כדי שאפשר יהיה להוסיף או להוריד רכזת בלי שינוי קוד.
+ */
+const ESCALATION_RECRUITERS = (process.env.ESCALATION_RECRUITERS ?? "tami@eilatjobs.com,hoshen@eilatjobs.com")
+  .split(",").map((e) => e.trim().toLowerCase()).filter(Boolean);
+
+/**
+ * מי מקבלת את המועמד הבא: זו שיש לה הכי מעט ממתינים פתוחים כרגע. כך החלוקה
+ * מתאזנת מעצמה גם כשרכזת אחת סוגרת מהר יותר או נעדרת יום.
+ */
+async function pickEscalationOwner(db: SupabaseClient): Promise<string | null> {
+  if (ESCALATION_RECRUITERS.length === 0) return null;
+  const { data } = await db
+    .from("leads")
+    .select("handled_by")
+    .eq("needs_human_attention", true)
+    .in("handled_by", ESCALATION_RECRUITERS);
+  const load = new Map(ESCALATION_RECRUITERS.map((e) => [e, 0]));
+  for (const row of data ?? []) {
+    const e = (row.handled_by as string | null)?.trim().toLowerCase();
+    if (e && load.has(e)) load.set(e, (load.get(e) ?? 0) + 1);
+  }
+  return [...load.entries()].sort((a, b) => a[1] - b[1])[0][0];
+}
 
 type InMsg = { role?: string; content?: string; created_at?: string; provider_msg_id?: string };
 type InStatus = { provider_msg_id?: string; status?: string; error?: string | null };
@@ -223,15 +250,24 @@ export async function POST(req: NextRequest) {
   //    (not just an admin phone) see they need to step in.
   let escalated = false;
   if (body.escalation && body.escalation.reason) {
-    const { error: attErr } = await db
-      .from("leads")
-      .update({
-        needs_human_attention: true,
-        human_attention_reason: body.escalation.reason,
-        human_attention_raised_at: new Date().toISOString(),
-        bot_paused: true, // Gubget froze itself on escalation — stays paused until a recruiter releases it
-      })
-      .eq("id", leadId);
+    const patch: Record<string, unknown> = {
+      needs_human_attention: true,
+      human_attention_reason: body.escalation.reason,
+      human_attention_raised_at: new Date().toISOString(),
+      bot_paused: true, // Gubget froze itself on escalation — stays paused until a recruiter releases it
+    };
+    // מועמד שמחכה לאדם מקבל רכזת בשם. עד 24.09 כל אלה נשארו על גובגט,
+    // וכל הרכזות ראו את אותה ערימה ב"היום שלי" — מה שהפך את "מישהי אחרת
+    // בטח מטפלת" לברירת מחדל, ולידים חיכו מיום חמישי עד שני.
+    const owner = (existing?.handled_by as string | null)?.trim().toLowerCase();
+    if (!owner || owner === GUBGET_EMAIL) {
+      const assignee = await pickEscalationOwner(db);
+      if (assignee) {
+        patch.handled_by = assignee;
+        patch.handled_at = new Date().toISOString();
+      }
+    }
+    const { error: attErr } = await db.from("leads").update(patch).eq("id", leadId);
     if (!attErr) escalated = true;
   }
 
