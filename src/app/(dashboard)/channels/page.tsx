@@ -49,7 +49,12 @@ export default async function ChannelsPage() {
   const totals = rows.reduce((t, r) => ({ leads: t.leads + r.leads, interview: t.interview + r.interview, hired: t.hired + r.hired }), { leads: 0, interview: 0, hired: 0 });
 
   const convClass = (p: number) => (p >= 8 ? "text-green-600" : p >= 4 ? "text-amber-600" : "text-red-500");
-  const respStr = (m: number | null) => (m === null ? "—" : m < 60 ? `${m.toFixed(0)} דק'` : `${(m / 60).toFixed(1)} ש'`);
+  // דקות / שעות / ימים במלים מלאות — "ש'" נקרא גם כשניות וגם כשעות.
+  const respStr = (m: number | null) =>
+    m === null ? "—"
+      : m < 60 ? `${m.toFixed(0)} דקות`
+      : m < 1440 ? `${(m / 60).toFixed(1)} שעות`
+      : `${(m / 1440).toFixed(1)} ימים`;
 
   return (
     <div dir="rtl" className="max-w-4xl mx-auto p-4 md:p-6 space-y-6">
