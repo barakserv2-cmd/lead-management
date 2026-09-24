@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { LeadNotesDialog } from "../leads/lead-notes-dialog";
+import { PhoneInterviewActions } from "./phone-interview-actions";
 import { InterviewMessageDialog } from "./interview-message-dialog";
 import { RescheduleDialog } from "./reschedule-dialog";
 import Link from "next/link";
@@ -556,6 +557,12 @@ export function InterviewsContent({
                             recruiter={r.recruiter}
                           />
                           <LeadNotesDialog leadId={r.id} leadName={r.name} size="xs" />
+                          {/* ראיון טלפוני שעוד לא נסגר — שלוש התשובות שסוגרות אותו */}
+                          {r.interview_type === "phone" &&
+                            (r.status === LeadStatus.INTERVIEW_BOOKED ||
+                              r.status === LeadStatus.POSTPONED_ARRIVAL) && (
+                              <PhoneInterviewActions leadId={r.id} leadName={r.name} />
+                            )}
                           </div>
                           <div className="w-36 shrink-0">
                             <StatusSelect
