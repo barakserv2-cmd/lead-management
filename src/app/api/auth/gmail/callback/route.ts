@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { google } from "googleapis";
 import { createClient } from "@supabase/supabase-js";
 import { createOAuth2Client } from "@/lib/gmail";
+import { getAuthedUser } from "@/lib/api-auth";
+import { verifyOAuthState } from "@/lib/oauthState";
 
 function getSupabase() {
   return createClient(
@@ -15,6 +17,20 @@ export async function GET(request: NextRequest) {
   const code = url.searchParams.get("code");
   const error = url.searchParams.get("error");
   const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+
+  // שתי בדיקות שלא היו כאן עד 24.09, ובלעדיהן זר יכול היה להחליף את
+  // טוקני הג'ימייל של הפרודקשן בשלו (ראו oauthState.ts):
+  //   1. מי שחוזר מגוגל חייב/ת להיות מחובר/ת אצלנו.
+  //   2. ה-state חייב להיות זה שאנחנו חתמנו, וטרי — אחרת זו אינה הזרימה שלנו.
+  const user = await getAuthedUser();
+  if (!user) {
+    return NextResponse.redirect(`${baseUrl}/login`);
+  }
+  if (!verifyOAuthState(url.searchParams.get("state"), user.email)) {
+    return NextResponse.redirect(
+      `${baseUrl}/settings?gmail_error=${encodeURIComponent("בקשת החיבור לא הגיעה מכאן או פג תוקפה — נסו שוב")}`
+    );
+  }
 
   if (error) {
     return NextResponse.redirect(

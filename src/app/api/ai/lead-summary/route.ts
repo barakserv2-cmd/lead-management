@@ -2,11 +2,18 @@ import { NextRequest, NextResponse } from "next/server";
 import OpenAI from "openai";
 import type { Lead } from "@/types/leads";
 import { STATUS_LABELS } from "@/lib/stateMachine";
+import { getAuthedUser } from "@/lib/api-auth";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 export async function POST(request: NextRequest) {
+  // סריקת אבטחה 24.09: הנתיב הזה רץ בלי שום אימות על OPENAI_API_KEY
+  // שלנו. בקשה אנונימית בפרודקשן החזירה 200 — כלומר מי שמצא את ה-URL
+  // שילם על חשבוננו. רק מגייס/ת מחובר/ת מפעיל/ה אותו.
+  const user = await getAuthedUser();
+  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
   try {
     const apiKey = process.env.OPENAI_API_KEY;
     if (!apiKey) {
