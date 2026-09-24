@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
-import { PRE_INTERVIEW_STATUSES } from "@/lib/stateMachine";
+import { LeadStatus } from "@/lib/stateMachine";
 import { sweepVerdict, type SweepLead } from "@/lib/staleLeadSweep";
 
 // הרשת השנייה מתחת ל-sync-new-leads: ליד שהחלון בן 3 הדקות פספס (גובגט
@@ -11,7 +11,10 @@ export const maxDuration = 60;
 
 const WINDOW_DAYS = 7;
 const MAX_PER_RUN = 40; // תקרה מכוונת: מכסה יומית ומוניטין המספר קודמים ל"לסגור את הפער היום"
-const OPEN = PRE_INTERVIEW_STATUSES as readonly string[];
+// לא כל המשפך שלפני הראיון — רק מה שאף אדם לא נגע בו. ב-v1 שיחת טלפון
+// אינה נרשמת כהודעה, אבל היא כן מזיזה סטטוס: "נוצר קשר" על ליד בלי הודעות
+// פירושו רכזת שהרימה טלפון, ופתיחה של גובגט שם היא קול שני באותה שיחה.
+const OPEN: readonly string[] = [LeadStatus.NEW_LEAD, LeadStatus.SCREENING_IN_PROGRESS];
 
 function getAdmin() {
   return createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!);

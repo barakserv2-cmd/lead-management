@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { sweepVerdict, OWNER_SILENT_HOURS, type SweepLead } from "./staleLeadSweep";
 
-const OPEN = ["NEW_LEAD", "CONTACTED", "SCREENING_IN_PROGRESS", "FIT_FOR_INTERVIEW"];
+const OPEN = ["NEW_LEAD", "SCREENING_IN_PROGRESS"];
 const NOW = new Date("2026-09-24T12:00:00Z");
 const hoursAgo = (h: number) => new Date(NOW.getTime() - h * 3600_000).toISOString();
 
@@ -48,6 +48,9 @@ describe("sweepVerdict", () => {
 
   it("סגור, DNC, בלי טלפון, או ליד של גובגט עצמו — לא נדחפים", () => {
     expect(sweepVerdict({ ...base, status: "REJECTED" }, OPEN, NOW).why).toBe("not_open");
+    // "נוצר קשר" בלי הודעות = רכזת שהרימה טלפון. v1 אינו מתעד שיחות.
+    expect(sweepVerdict({ ...base, status: "CONTACTED" }, OPEN, NOW).why).toBe("not_open");
+    expect(sweepVerdict({ ...base, status: "FIT_FOR_INTERVIEW" }, OPEN, NOW).why).toBe("not_open");
     expect(sweepVerdict({ ...base, do_not_contact: true }, OPEN, NOW).why).toBe("dnc");
     expect(sweepVerdict({ ...base, phone: null }, OPEN, NOW).why).toBe("no_phone");
     expect(sweepVerdict({ ...base, source: "גובגט" }, OPEN, NOW).why).toBe("own_lead");
