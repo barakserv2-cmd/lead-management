@@ -8,7 +8,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient as createSessionClient } from "@/lib/supabase/server";
 import { getSupabaseAdmin } from "@/lib/api-auth";
 import { buildInterviewsWorkbook, fmtReportDate } from "@/lib/reports/interviewsXlsx";
-import { INTERVIEW_REPORT_SELECT, leadToReportRow } from "@/lib/reports/interviewsReportRow";
+import { INTERVIEW_REPORT_SELECT, isInPersonInterview, leadToReportRow } from "@/lib/reports/interviewsReportRow";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -49,9 +49,9 @@ export async function GET(req: NextRequest) {
   if (e1 || e2) return NextResponse.json({ error: (e1 ?? e2)!.message }, { status: 500 });
 
   let rows = [
-    ...((byInterview ?? []) as Record<string, unknown>[]).map(leadToReportRow),
+    ...((byInterview ?? []) as Record<string, unknown>[]).filter(isInPersonInterview).map(leadToReportRow),
     // original-date rows: render the postpone on its FIRST-appointment day
-    ...((byPostponed ?? []) as Record<string, unknown>[]).map((l) =>
+    ...((byPostponed ?? []) as Record<string, unknown>[]).filter(isInPersonInterview).map((l) =>
       leadToReportRow({ ...l, interview_date: l.postponed_from_date, status: "POSTPONED_ARRIVAL" })
     ),
   ];

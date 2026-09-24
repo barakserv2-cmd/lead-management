@@ -7,6 +7,7 @@ import { closureFor } from "@/lib/israelHolidays";
 import { ensureClosuresLoaded } from "@/lib/closures";
 import { applyDeliveryStatus } from "@/lib/deliveryStatus";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { completeLeadReminders } from "@/lib/reminders";
 
 /**
  * POST /api/bridge/from-machine — the autonomous machine ("גובגט") reports
@@ -243,7 +244,11 @@ export async function POST(req: NextRequest) {
     const patch: Record<string, unknown> = { interview_date: body.interviewAt };
     if (body.interviewType) patch.interview_type = body.interviewType;
     const { error: ivErr } = await db.from("leads").update(patch).eq("id", leadId);
-    if (!ivErr) interviewSet = true;
+    if (!ivErr) {
+      interviewSet = true;
+      // הבוט קבע ראיון — תזכורת "להתקשר שוב" של הרכזת כבר מיותרת
+      await completeLeadReminders(db, leadId);
+    }
   }
 
   // 4. Human-attention flag — surfaces a red banner on the lead so recruiters

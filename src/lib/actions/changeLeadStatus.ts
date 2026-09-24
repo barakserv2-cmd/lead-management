@@ -13,6 +13,7 @@ import {
 import { normalizeEmployerName } from "@/lib/employerNormalization";
 import { logAudit } from "@/lib/audit";
 import { setMachineConversationMode } from "@/lib/machineBridge";
+import { completeLeadReminders, REMINDER_CLEARING_STATUSES } from "@/lib/reminders";
 
 function getSupabase() {
   return createServerClient(
@@ -238,6 +239,11 @@ export async function changeLeadStatus(input: ChangeStatusInput): Promise<Change
     // סטטוס סופי סוגר גם את האסקלציות בגובגט (22.09 — הן נשארו פתוחות לנצח)
     const closedStatus = LEAD_CLOSED_STATUSES.has(newStatus) ? newStatus : undefined;
     setMachineConversationMode(lead.phone as string, "human", closedStatus).catch(() => undefined);
+  }
+
+  // תזכורת "להתקשר שוב" שאין בה יותר צורך — ראיון נקבע או שהליד נסגר.
+  if (REMINDER_CLEARING_STATUSES.has(newStatus)) {
+    await completeLeadReminders(supabase, leadId);
   }
 
   // 7. Log to status history

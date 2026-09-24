@@ -5,7 +5,17 @@ import type { InterviewReportRow } from "./interviewsXlsx";
 const EXTRA_SOURCE = /אקסטר|excel/i;
 
 export const INTERVIEW_REPORT_SELECT =
-  "name, phone, interview_date, postponed_from_date, job_title, hired_position, hired_client, interview_notes, rejection_reason, start_date, status, source, preferences";
+  "name, phone, interview_date, interview_type, postponed_from_date, job_title, hired_position, hired_client, interview_notes, rejection_reason, start_date, status, source, preferences";
+
+/**
+ * דוח הראיונות הוא רשימת מי שמגיע למשרד באותו יום. מאז שגובגט קובע ראיונות
+ * טלפוניים (24.09) הם מילאו את הדוח, והרכזות ביקשו שיישארו בו רק פרונטליים.
+ * ראיון בלי סוג רשום הוא ראיון ישן שרכזת קבעה ידנית — פרונטלי בפועל.
+ */
+export function isInPersonInterview(l: Record<string, unknown>): boolean {
+  const t = (l.interview_type as string | null) ?? null;
+  return t === null || t === "in_person";
+}
 
 export function leadToReportRow(l: Record<string, unknown>): InterviewReportRow {
   const status = l.status as string;

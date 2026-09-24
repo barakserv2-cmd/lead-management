@@ -17,6 +17,8 @@ interface CallbackReminderDialogProps {
 
 // ברירת מחדל 10:00 — שעה שבה מתחילים להתקשר, לא השעה שבה סימנו את הסטטוס.
 const CALL_HOUR = 10;
+/** "היום בערב" — אחרי שהמשמרת נרגעת, לפני שהמועמד הולך לישון */
+const EVENING_HOUR = 18;
 
 function atCallHour(daysFromNow: number): Date {
   const d = new Date();
@@ -25,17 +27,32 @@ function atCallHour(daysFromNow: number): Date {
   return d;
 }
 
+/** מועד באותו יום: בעוד כמה שעות, או "הערב" (18:00) כשזה עוד לפני */
+function laterToday(hoursFromNow: number): Date {
+  const d = new Date();
+  if (hoursFromNow > 0) {
+    d.setHours(d.getHours() + hoursFromNow, 0, 0, 0);
+    return d;
+  }
+  const evening = new Date();
+  evening.setHours(EVENING_HOUR, 0, 0, 0);
+  return evening.getTime() > Date.now() ? evening : new Date(Date.now() + 2 * 3600_000);
+}
+
 function toLocalInput(d: Date): string {
   const pad = (n: number) => String(n).padStart(2, "0");
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
-const PRESETS: { label: string; days: number }[] = [
+// שעתיים והערב נמדדים בשעות — רכזת ששמה "מעקב" תוך כדי שיחה רוצה לחזור
+// לאותו מועמד היום, לא מחר (בקשת חושן, 23.09).
+const PRESETS: { label: string; days: number; hours?: number }[] = [
+  { label: "בעוד שעתיים", days: 0, hours: 2 },
+  { label: "היום בערב", days: 0, hours: 0 },
   { label: "מחר", days: 1 },
   { label: "בעוד 3 ימים", days: 3 },
   { label: "בעוד שבוע", days: 7 },
   { label: "בעוד שבועיים", days: 14 },
-  { label: "בעוד חודש", days: 30 },
 ];
 
 // נפתח מיד אחרי שסימנו "לא זמין במיידי" — המועמד רלוונטי, רק לא עכשיו,
@@ -54,9 +71,9 @@ export function CallbackReminderDialog({
   // "עכשיו" נלכד פעם אחת בפתיחה — קריאה ל-Date.now() בכל רינדור אינה טהורה
   const [openedAt] = useState(() => Date.now());
 
-  function pick(days: number) {
-    setPicked(days);
-    setWhen(toLocalInput(atCallHour(days)));
+  function pick(p: { days: number; hours?: number }) {
+    setPicked(p.days === 0 ? -(p.hours ?? 0) - 1 : p.days);
+    setWhen(toLocalInput(p.days === 0 ? laterToday(p.hours ?? 0) : atCallHour(p.days)));
   }
 
   const dueDate = new Date(when);
@@ -108,11 +125,11 @@ export function CallbackReminderDialog({
         <div className="flex flex-wrap gap-1.5 mb-4">
           {PRESETS.map((p) => (
             <button
-              key={p.days}
+              key={p.label}
               type="button"
-              onClick={() => pick(p.days)}
+              onClick={() => pick(p)}
               className={`text-xs px-2.5 py-1.5 rounded-full border transition-colors ${
-                picked === p.days
+                picked === (p.days === 0 ? -(p.hours ?? 0) - 1 : p.days)
                   ? "bg-amber-500 border-amber-500 text-white font-semibold"
                   : "bg-white border-gray-300 text-gray-600 hover:border-amber-400"
               }`}
