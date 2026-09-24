@@ -6,6 +6,13 @@ import { toast } from "sonner";
 import type { Lead } from "@/types/leads";
 import { validateInterviewLocal } from "@/lib/interviewTime";
 
+/** תוויות סוג ראיון. מוגדרות כאן ולא ב-lib/booking, שמושך node:crypto. */
+const INTERVIEW_TYPE_LABELS: Record<string, string> = {
+  phone: "ראיון טלפוני",
+  in_person: "ראיון פרונטלי",
+  video: "ראיון וידאו",
+};
+
 // "מידע גיוס" בכרטיס המלא — תצוגה + מצב עריכה inline.
 // שמירה דרך PATCH /api/leads/[id] (fetch+API, לא server action — הדפוס בפרויקט).
 
@@ -24,6 +31,7 @@ type Values = Pick<
   Lead,
   | "screening_score"
   | "interview_date"
+  | "interview_type"
   | "interview_notes"
   | "hired_client"
   | "hired_position"
@@ -65,6 +73,7 @@ function pick(lead: Lead): Values {
   return {
     screening_score: lead.screening_score,
     interview_date: lead.interview_date,
+    interview_type: lead.interview_type,
     interview_notes: lead.interview_notes,
     hired_client: lead.hired_client,
     hired_position: lead.hired_position,
@@ -214,6 +223,8 @@ export function RecruitmentInfoSection({ lead }: { lead: Lead }) {
           <>
             <Row label="ציון סינון" value={values.screening_score?.toString()} />
             <Row label="תאריך ראיון" value={formatDateTime(values.interview_date)} />
+            {/* טלפוני או פרונטלי — ההבדל בין "להתקשר" ל"מישהו מגיע למשרד" */}
+            <Row label="סוג ראיון" value={INTERVIEW_TYPE_LABELS[values.interview_type ?? ""]} />
             <Row label="הערות ראיון" value={values.interview_notes} />
             <Row label="לקוח" value={values.hired_client} />
             <Row label="תפקיד שהתקבל" value={values.hired_position} />

@@ -3,7 +3,14 @@
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import type { Lead } from "@/types/leads";
-import { STATUS_LABELS, type LeadStatusValue } from "@/lib/stateMachine";
+import { STATUS_LABELS, LeadStatus, type LeadStatusValue } from "@/lib/stateMachine";
+
+/** תווית קצרה לסוג הראיון, לשורה בטבלה */
+const INTERVIEW_TYPE_SHORT: Record<string, string> = {
+  phone: "טלפוני",
+  in_person: "פרונטלי",
+  video: "וידאו",
+};
 import { StatusSelect } from "./status-select";
 import { LeadWindowManager } from "./lead-mini-windows";
 import { BulkWhatsAppDialog } from "./bulk-whatsapp-dialog";
@@ -106,7 +113,14 @@ function contactChip(iso: string | null, now: number): { classes: string; label:
 // אחר לגמרי מ"אין מענה 2" לבדו.
 function lastUpdate(lead: Lead, now: number): { label: string; when: string; classes: string } {
   const at = lead.sub_status_at ?? lead.handled_at ?? lead.last_contact_at;
-  const label = lead.sub_status ?? STATUS_LABELS[lead.status as LeadStatusValue] ?? lead.status;
+  // "ראיון נקבע" לבד לא אומר לרכזת אם מישהו מגיע למשרד או שצריך להתקשר.
+  // 23.09: גובגט קובע ראיונות טלפוניים, ומועמדת יצאה למשרד כי כולם —
+  // היא, והרכזות שראו את השורה הזו — הבינו "ראיון" כפגישה.
+  const booked =
+    lead.status === LeadStatus.INTERVIEW_BOOKED && lead.interview_type
+      ? `${STATUS_LABELS[LeadStatus.INTERVIEW_BOOKED]} · ${INTERVIEW_TYPE_SHORT[lead.interview_type]}`
+      : null;
+  const label = lead.sub_status ?? booked ?? STATUS_LABELS[lead.status as LeadStatusValue] ?? lead.status;
   if (!at) return { label, when: "—", classes: "text-slate-400" };
 
   const days = Math.floor((now - new Date(at).getTime()) / 86_400_000);
