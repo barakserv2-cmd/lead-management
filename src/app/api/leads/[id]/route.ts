@@ -42,6 +42,7 @@ const DATE_FIELDS = new Set(["start_date", "arrival_date", "employment_end_date"
 // answered from the log at all.
 const SNAPSHOT_COLUMNS =
   "name, phone, email, job_title, location, experience, age, screening_score, interview_date, " +
+  "status, sub_status, " +
   "interview_notes, hired_client, hired_position, rejection_reason, start_date, arrival_date, " +
   "employment_end_date, notes, followup_notes";
 

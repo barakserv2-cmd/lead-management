@@ -179,6 +179,15 @@ export async function POST(
     .select("id, event_type, event_text, created_by, created_at")
     .single();
 
+  // רישום ביומן הוא מגע לכל דבר — אותו תיקון כמו בהערות (בקשת חושן, 23.09)
+  if (!error) {
+    await supabase
+      .from("leads")
+      .update({ last_contact_at: new Date().toISOString() })
+      .eq("id", leadId)
+      .then(() => undefined, () => undefined);
+  }
+
   if (error) {
     const missing = error.message.includes("lead_events");
     return NextResponse.json(

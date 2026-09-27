@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { NotebookPen } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -11,6 +11,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { LeadEventsSection } from "./lead-events-section";
+import { StatusSelect } from "./status-select";
 
 /**
  * One-click "הערה" button that opens the candidate's journal: add a note
@@ -21,12 +22,39 @@ export function LeadNotesDialog({
   leadId,
   leadName,
   size = "sm",
+  currentStatus,
+  currentSubStatus,
 }: {
   leadId: string;
   leadName: string;
   size?: "sm" | "xs";
+  /** כשהמסך כבר מחזיק את הסטטוס — חוסך קריאה ומציג אותו מיד */
+  currentStatus?: string;
+  currentSubStatus?: string | null;
 }) {
   const [open, setOpen] = useState(false);
+  // כתיבת הערה ושינוי סטטוס הם אותו רגע בעבודה של הרכזת, והם היו בשני
+  // מסכים נפרדים (בקשת חושן, 23.09). מסכים שלא מחזיקים את הסטטוס טוענים
+  // אותו כאן בפתיחה.
+  const [status, setStatus] = useState<{ status: string; sub: string | null } | null>(
+    currentStatus ? { status: currentStatus, sub: currentSubStatus ?? null } : null
+  );
+
+  useEffect(() => {
+    if (!open || status) return;
+    let alive = true;
+    fetch(`/api/leads/${leadId}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (alive && d?.lead?.status) {
+          setStatus({ status: d.lead.status as string, sub: (d.lead.sub_status as string | null) ?? null });
+        }
+      })
+      .catch(() => undefined);
+    return () => {
+      alive = false;
+    };
+  }, [open, status, leadId]);
 
   return (
     <>
@@ -59,6 +87,19 @@ export function LeadNotesDialog({
               האירועים ונשאר לתמיד — לא בשדה &quot;הערות&quot; שבכרטיס.
             </DialogDescription>
           </DialogHeader>
+          {status && (
+            <div className="flex items-center gap-2 border-b pb-3 mb-1">
+              <span className="text-sm text-slate-600 shrink-0">סטטוס:</span>
+              <div className="w-48">
+                <StatusSelect
+                  leadId={leadId}
+                  leadName={leadName}
+                  currentStatus={status.status}
+                  currentSubStatus={status.sub}
+                />
+              </div>
+            </div>
+          )}
           {open && <LeadEventsSection leadId={leadId} />}
         </DialogContent>
       </Dialog>
