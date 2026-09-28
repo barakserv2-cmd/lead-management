@@ -12,8 +12,7 @@ const INTERVIEW_TYPE_SHORT: Record<string, string> = {
   video: "וידאו",
 };
 import { StatusSelect } from "./status-select";
-import { LeadWindowManager } from "./lead-mini-windows";
-import { useOpenLeadWindows } from "@/lib/useOpenLeadWindows";
+import { openLeadWindow } from "@/lib/leadWindows";
 import { BulkWhatsAppDialog } from "./bulk-whatsapp-dialog";
 import { BulkImportDialog } from "./bulk-import-dialog";
 import { LeadCardPanel } from "./lead-card-panel";
@@ -143,47 +142,16 @@ export function LeadsContent({
 }) {
   // נלכד פעם אחת — Date.now() בכל שורה אינו טהור ומחזיר ערכים לא יציבים
   const [nowMs] = useState(() => Date.now());
-  // החלונות שורדים ניווט ורענון — ראו useOpenLeadWindows
-  const { openIds: openLeadIds, chatFirstIds, open: openLeadWindow, close: closeLeadWindow } = useOpenLeadWindows();
+  // החלונות עצמם מרונדרים בלייאאוט (LeadDock) — כאן רק פותחים
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [waDialogOpen, setWaDialogOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
   const [panelLeadId, setPanelLeadId] = useState<string | null>(null);
 
-  // הקפצת צ'אט על הודעה נכנסת: לידים שהגיעו מהפולר (גם אם אינם בעמוד
-  // הנוכחי), וסימון חלונות שנפתחו בגלל הודעה — ייפתחו על טאב הצ'אט.
-  const [incomingLeads, setIncomingLeads] = useState<Lead[]>([]);
   const sinceRef = useRef<string>(new Date().toISOString());
   const seenMsgIds = useRef<Set<string>>(new Set());
 
   const panelLead = panelLeadId ? leads.find((l) => l.id === panelLeadId) ?? null : null;
-
-  // ── השלמת לידים לחלונות ששוחזרו ────────────────
-  // אחרי ניווט הלידים שהיו פתוחים כבר אינם בעמוד הנוכחי של הטבלה
-  // (חיפוש אחרי מתקשר מצמצם את הרשימה לאדם אחד). בלי השליפה הזו
-  // החלון פשוט לא יופיע, כי מנהל החלונות מחפש את הליד במערך שלו.
-  useEffect(() => {
-    const known = new Set([...leads.map((l) => l.id), ...incomingLeads.map((l) => l.id)]);
-    const missing = openLeadIds.filter((id) => !known.has(id));
-    if (missing.length === 0) return;
-    let cancelled = false;
-    (async () => {
-      try {
-        const res = await fetch(`/api/leads/by-ids?ids=${missing.join(",")}`);
-        if (!res.ok) return;
-        const data = (await res.json()) as { leads?: Lead[] };
-        if (cancelled || !data.leads?.length) return;
-        setIncomingLeads((prev) => {
-          const have = new Set(prev.map((l) => l.id));
-          const add = data.leads!.filter((l) => !have.has(l.id));
-          return add.length ? [...prev, ...add] : prev;
-        });
-      } catch {
-        // רשת נפלה — החלון פשוט לא ישוחזר הפעם
-      }
-    })();
-    return () => { cancelled = true; };
-  }, [openLeadIds, leads, incomingLeads]);
 
   // ── פולר הודעות נכנסות: מקפיץ את חלון הצ'אט של המועמד ─────────
   useEffect(() => {
@@ -203,12 +171,7 @@ export function LeadsContent({
           seenMsgIds.current.add(item.message.id);
           sinceRef.current = item.message.created_at;
 
-          // ליד שלא נמצא בעמוד הנוכחי — נוסיף אותו למאגר החלונות
-          setIncomingLeads((prev) =>
-            prev.some((l) => l.id === item.lead.id) || leads.some((l) => l.id === item.lead.id)
-              ? prev
-              : [...prev, item.lead]
-          );
+          // הרציף שולף את הליד בעצמו, גם אם אינו בעמוד הנוכחי
           openLeadWindow(item.lead.id, { chatFirst: true });
           toast.info(`הודעה חדשה מ${item.lead.name}`, {
             description: item.message.content.slice(0, 60),
@@ -482,15 +445,6 @@ export function LeadsContent({
       </div>
 
       <div className="mt-6">{tableView}</div>
-      <LeadWindowManager
-        leads={[...leads, ...incomingLeads]}
-        openLeadIds={openLeadIds}
-        chatFirstIds={chatFirstIds}
-        recruiterNames={recruiterNames}
-        onOpenLead={openLeadWindow}
-        onCloseLead={closeLeadWindow}
-      />
-
       <BulkWhatsAppDialog
         open={waDialogOpen}
         onOpenChange={setWaDialogOpen}
