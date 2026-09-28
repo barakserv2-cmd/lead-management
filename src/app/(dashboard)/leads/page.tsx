@@ -51,7 +51,7 @@ async function LeadsTabs({ active, newCount }: { active: "queue" | "phone" | "es
     { key: "all" as const, href: "/leads?source=__all__", label: "כל הלידים", count: 0 },
   ];
   return (
-    <nav className="flex items-center gap-6 mb-5 border-b border-gray-200" aria-label="תצוגות לידים">
+    <nav className="flex items-center gap-6 mb-5 border-b border-gray-200 overflow-x-auto" aria-label="תצוגות לידים">
       {tabs.map((tab) => {
         const isActive = active === tab.key;
         const alert = tab.key === "escalations" && escCount > 0;
@@ -60,7 +60,7 @@ async function LeadsTabs({ active, newCount }: { active: "queue" | "phone" | "es
             key={tab.key}
             href={tab.href}
             aria-current={isActive ? "page" : undefined}
-            className={`relative -mb-px flex items-center gap-2 pb-2.5 pt-1 text-[13px] font-medium border-b-2 transition-colors ${
+            className={`relative -mb-px flex shrink-0 items-center gap-2 whitespace-nowrap pb-2.5 pt-1 text-[13px] font-medium border-b-2 transition-colors ${
               isActive ? "border-gray-900 text-gray-900" : "border-transparent text-gray-500 hover:text-gray-800"
             }`}
           >

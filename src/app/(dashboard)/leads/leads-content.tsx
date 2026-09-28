@@ -249,7 +249,7 @@ export function LeadsContent({
       <table className="w-full text-[13px] [&_td]:whitespace-nowrap [&_th]:whitespace-nowrap">
         <thead className="bg-gray-50 border-b border-gray-200">
           <tr>
-            <th className="px-3 py-2.5 w-10">
+            <th className="px-2.5 py-2.5 w-10">
               <input
                 type="checkbox"
                 checked={allSelected}
@@ -257,15 +257,15 @@ export function LeadsContent({
                 className="rounded border-gray-300 cursor-pointer"
               />
             </th>
-            <th className="px-3 py-2.5 text-right font-medium text-xs text-gray-500">מועמד</th>
-            <th className="px-3 py-2.5 text-right font-medium text-xs text-gray-500">תפקיד</th>
-            <th className="px-3 py-2.5 text-right font-medium text-xs text-gray-500">סטטוס</th>
-            <th className="px-3 py-2.5 text-right font-medium text-xs text-gray-500">מקור</th>
-            <th className="px-3 py-2.5 text-right font-medium text-xs text-gray-500">רכזת</th>
-            <th className="px-3 py-2.5 text-right font-medium text-xs text-gray-500">נכנס</th>
-            <th className="px-3 py-2.5 text-right font-medium text-xs text-gray-500">עדכון אחרון</th>
-            <th className="px-3 py-2.5 text-right font-medium text-xs text-gray-500">קשר אחרון</th>
-            <th className="px-3 py-2.5 text-right font-medium text-xs text-gray-500">פעולות</th>
+            <th className="px-2.5 py-2.5 text-right font-medium text-xs text-gray-500">מועמד</th>
+            <th className="px-2.5 py-2.5 text-right font-medium text-xs text-gray-500">תפקיד</th>
+            <th className="px-2.5 py-2.5 text-right font-medium text-xs text-gray-500">סטטוס</th>
+            <th className="px-2.5 py-2.5 text-right font-medium text-xs text-gray-500">מקור</th>
+            <th className="hidden min-[1680px]:table-cell px-2.5 py-2.5 text-right font-medium text-xs text-gray-500">רכזת</th>
+            <th className="px-2.5 py-2.5 text-right font-medium text-xs text-gray-500">נכנס</th>
+            <th className="px-2.5 py-2.5 text-right font-medium text-xs text-gray-500">עדכון אחרון</th>
+            <th className="hidden min-[1680px]:table-cell px-2.5 py-2.5 text-right font-medium text-xs text-gray-500">קשר אחרון</th>
+            <th className="px-2.5 py-2.5 text-right font-medium text-xs text-gray-500">פעולות</th>
           </tr>
         </thead>
         <tbody>
@@ -314,7 +314,7 @@ export function LeadsContent({
                       className="rounded border-gray-300 cursor-pointer"
                     />
                   </td>
-                  <td className="px-3 py-2.5">
+                  <td className="px-2.5 py-2.5">
                     <div className="flex items-center gap-2.5">
                       <button
                         type="button"
@@ -349,9 +349,9 @@ export function LeadsContent({
                       </div>
                     </div>
                   </td>
-                  <td className="px-3 py-2.5 text-gray-600">
+                  <td className="px-2.5 py-2.5 text-gray-600">
                     <div className="flex items-center gap-1.5">
-                      <span>{lead.job_title ?? "—"}</span>
+                      <span className="block max-w-[9rem] truncate" title={lead.job_title ?? undefined}>{lead.job_title ?? "—"}</span>
                       {lead.screening_score != null && (
                         <span
                           className={`px-1.5 py-0.5 rounded border text-[10px] font-bold tabular-nums ${scoreClasses(lead.screening_score)}`}
@@ -362,7 +362,7 @@ export function LeadsContent({
                       )}
                     </div>
                   </td>
-                  <td className="px-3 py-2.5" onClick={(e) => e.stopPropagation()}>
+                  <td className="px-2.5 py-2.5" onClick={(e) => e.stopPropagation()}>
                     <div className="flex items-center gap-1.5">
                       <StatusSelect leadId={lead.id} leadName={lead.name} currentStatus={lead.status} currentSubStatus={lead.sub_status} />
                       {lead.rejection_reason && (
@@ -377,12 +377,15 @@ export function LeadsContent({
                       )}
                     </div>
                   </td>
-                  <td className="px-3 py-2.5">
-                    <span className={"inline-flex items-center px-1.5 py-0.5 rounded-md text-xs font-medium ring-1 ring-inset ring-black/5 " + sourceColor}>
+                  <td className="px-2.5 py-2.5">
+                    <span
+                      className={"inline-block max-w-[7rem] truncate align-middle px-1.5 py-0.5 rounded-md text-xs font-medium ring-1 ring-inset ring-black/5 " + sourceColor}
+                      title={lead.source ?? undefined}
+                    >
                       {lead.source ?? "—"}
                     </span>
                   </td>
-                  <td className="px-3 py-2.5">
+                  <td className="hidden min-[1680px]:table-cell px-2.5 py-2.5">
                     {lead.handled_by ? (
                       <span
                         className="inline-flex items-center gap-1.5 text-xs text-gray-700"
@@ -394,7 +397,7 @@ export function LeadsContent({
                       <span className="text-gray-300 text-xs">—</span>
                     )}
                   </td>
-                  <td className="px-3 py-2.5">
+                  <td className="px-2.5 py-2.5">
                     {(() => {
                       const chip = waitingChip(lead);
                       return (
@@ -404,7 +407,7 @@ export function LeadsContent({
                       );
                     })()}
                   </td>
-                  <td className="px-3 py-2.5">
+                  <td className="px-2.5 py-2.5">
                     {(() => {
                       const u = lastUpdate(lead, nowMs);
                       return (
@@ -415,7 +418,7 @@ export function LeadsContent({
                       );
                     })()}
                   </td>
-                  <td className="px-3 py-2.5">
+                  <td className="hidden min-[1680px]:table-cell px-2.5 py-2.5">
                     {(() => {
                       const chip = contactChip(lead.last_contact_at, nowMs);
                       return (
@@ -428,7 +431,7 @@ export function LeadsContent({
                       );
                     })()}
                   </td>
-                  <td className="px-3 py-2.5" onClick={(e) => e.stopPropagation()}>
+                  <td className="px-2.5 py-2.5" onClick={(e) => e.stopPropagation()}>
                     <div className="flex items-center gap-1">
                       <button
                         type="button"
@@ -440,7 +443,7 @@ export function LeadsContent({
                       </button>
                       {/* יומן האירועים ישירות מהשורה — הוספת הערה ועריכה בלי
                           לפתוח את הכרטיס המלא, כמו בלוח הראיונות */}
-                      <LeadNotesDialog leadId={lead.id} leadName={lead.name ?? ""} size="xs" />
+                      <LeadNotesDialog leadId={lead.id} leadName={lead.name ?? ""} size="icon" />
                       {intlPhone ? (
                         <>
                           <a
