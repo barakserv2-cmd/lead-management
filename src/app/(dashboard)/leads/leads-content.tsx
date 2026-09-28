@@ -13,6 +13,7 @@ const INTERVIEW_TYPE_SHORT: Record<string, string> = {
 };
 import { StatusSelect } from "./status-select";
 import { LeadWindowManager } from "./lead-mini-windows";
+import { useOpenLeadWindows } from "@/lib/useOpenLeadWindows";
 import { BulkWhatsAppDialog } from "./bulk-whatsapp-dialog";
 import { BulkImportDialog } from "./bulk-import-dialog";
 import { LeadCardPanel } from "./lead-card-panel";
@@ -142,7 +143,8 @@ export function LeadsContent({
 }) {
   // נלכד פעם אחת — Date.now() בכל שורה אינו טהור ומחזיר ערכים לא יציבים
   const [nowMs] = useState(() => Date.now());
-  const [openLeadIds, setOpenLeadIds] = useState<string[]>([]);
+  // החלונות שורדים ניווט ורענון — ראו useOpenLeadWindows
+  const { openIds: openLeadIds, chatFirstIds, open: openLeadWindow, close: closeLeadWindow } = useOpenLeadWindows();
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [waDialogOpen, setWaDialogOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
@@ -151,19 +153,37 @@ export function LeadsContent({
   // הקפצת צ'אט על הודעה נכנסת: לידים שהגיעו מהפולר (גם אם אינם בעמוד
   // הנוכחי), וסימון חלונות שנפתחו בגלל הודעה — ייפתחו על טאב הצ'אט.
   const [incomingLeads, setIncomingLeads] = useState<Lead[]>([]);
-  const [chatFirstIds, setChatFirstIds] = useState<Set<string>>(new Set());
   const sinceRef = useRef<string>(new Date().toISOString());
   const seenMsgIds = useRef<Set<string>>(new Set());
 
   const panelLead = panelLeadId ? leads.find((l) => l.id === panelLeadId) ?? null : null;
 
-  function openLeadWindow(id: string) {
-    setOpenLeadIds((prev) => {
-      if (prev.includes(id)) return prev; // already open
-      if (prev.length >= 4) return [...prev.slice(1), id]; // evict oldest
-      return [...prev, id];
-    });
-  }
+  // ── השלמת לידים לחלונות ששוחזרו ────────────────
+  // אחרי ניווט הלידים שהיו פתוחים כבר אינם בעמוד הנוכחי של הטבלה
+  // (חיפוש אחרי מתקשר מצמצם את הרשימה לאדם אחד). בלי השליפה הזו
+  // החלון פשוט לא יופיע, כי מנהל החלונות מחפש את הליד במערך שלו.
+  useEffect(() => {
+    const known = new Set([...leads.map((l) => l.id), ...incomingLeads.map((l) => l.id)]);
+    const missing = openLeadIds.filter((id) => !known.has(id));
+    if (missing.length === 0) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(`/api/leads/by-ids?ids=${missing.join(",")}`);
+        if (!res.ok) return;
+        const data = (await res.json()) as { leads?: Lead[] };
+        if (cancelled || !data.leads?.length) return;
+        setIncomingLeads((prev) => {
+          const have = new Set(prev.map((l) => l.id));
+          const add = data.leads!.filter((l) => !have.has(l.id));
+          return add.length ? [...prev, ...add] : prev;
+        });
+      } catch {
+        // רשת נפלה — החלון פשוט לא ישוחזר הפעם
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [openLeadIds, leads, incomingLeads]);
 
   // ── פולר הודעות נכנסות: מקפיץ את חלון הצ'אט של המועמד ─────────
   useEffect(() => {
@@ -189,8 +209,7 @@ export function LeadsContent({
               ? prev
               : [...prev, item.lead]
           );
-          setChatFirstIds((prev) => new Set(prev).add(item.lead.id));
-          openLeadWindow(item.lead.id);
+          openLeadWindow(item.lead.id, { chatFirst: true });
           toast.info(`הודעה חדשה מ${item.lead.name}`, {
             description: item.message.content.slice(0, 60),
           });
@@ -207,10 +226,6 @@ export function LeadsContent({
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [leads]);
-
-  function closeLeadWindow(id: string) {
-    setOpenLeadIds((prev) => prev.filter((x) => x !== id));
-  }
 
   const allSelected = leads.length > 0 && selectedIds.size === leads.length;
 
