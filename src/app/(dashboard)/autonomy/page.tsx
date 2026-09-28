@@ -14,6 +14,7 @@ export default async function AutonomyPage() {
   const user = await getAuthedUser();
   if (!user) redirect("/login");
   const db = getSupabaseAdmin();
+  // eslint-disable-next-line react-hooks/purity -- server component, renders once per request
   const since = new Date(Date.now() - DAYS * 86400_000).toISOString();
 
   const { data: leads } = await db

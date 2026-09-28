@@ -35,6 +35,7 @@ export function HiredConfirmDialog({
   useEffect(() => {
     if (!open) return;
     let cancelled = false;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- marks the getOpenJobs request below as in flight; must run after the opening commit so the job search input mounts enabled and receives autoFocus
     setJobsLoading(true);
     getOpenJobs().then((res) => {
       if (cancelled) return;

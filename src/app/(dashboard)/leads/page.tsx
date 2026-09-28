@@ -160,7 +160,7 @@ export default async function LeadsPage({
         <div className="flex items-center justify-between mb-6">
           <div>
             <h1 className="text-xl font-semibold text-gray-900 tracking-tight">ראיון טלפון</h1>
-            <p className="text-sm text-gray-500 mt-0.5">שיחות סינון טלפוניות שגובגט תיאם — לביצוע ע"י הרכזות</p>
+            <p className="text-sm text-gray-500 mt-0.5">שיחות סינון טלפוניות שגובגט תיאם — לביצוע ע״י הרכזות</p>
           </div>
           <AddLeadDialog />
         </div>
@@ -224,6 +224,7 @@ export default async function LeadsPage({
     }
   }
   const myId = session?.user?.id ?? "00000000-0000-0000-0000-000000000000";
+  // eslint-disable-next-line react-hooks/purity -- server component, renders once per request
   const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
   const ownershipFilter = `assigned_to.is.null,assigned_at.lt.${cutoff},assigned_to.eq.${myId}`;
 

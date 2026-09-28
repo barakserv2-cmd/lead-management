@@ -30,10 +30,17 @@ export function JobMatchesSheet({ open, jobId, jobTitle, clientName, onOpenChang
   const [matches, setMatches] = useState<JobMatch[]>([]);
   const [loading, setLoading] = useState(false);
 
+  // מעבר לטעינה כשהגיליון נפתח או כשהמשרה מתחלפת (במקום setState בתוך ה-effect)
+  const fetchKey = open && jobId ? jobId : null;
+  const [prevFetchKey, setPrevFetchKey] = useState<string | null>(null);
+  if (fetchKey !== prevFetchKey) {
+    setPrevFetchKey(fetchKey);
+    if (fetchKey) setLoading(true);
+  }
+
   useEffect(() => {
     if (!open || !jobId) return;
     let cancelled = false;
-    setLoading(true);
     getJobMatches(jobId, 30).then((res) => {
       if (cancelled) return;
       setMatches(res);

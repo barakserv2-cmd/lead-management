@@ -197,15 +197,18 @@ export function FilterBar({
   const [dateFrom, setDateFrom] = useState<string>(searchParams.get("from") ?? "");
   const [dateTo, setDateTo] = useState<string>(searchParams.get("to") ?? "");
 
-  // Sync from URL when searchParams change externally
-  useEffect(() => {
+  // Sync from URL when searchParams change externally (adjusted during render, not in an effect)
+  const searchKey = searchParams.toString();
+  const [prevSearchKey, setPrevSearchKey] = useState(searchKey);
+  if (searchKey !== prevSearchKey) {
+    setPrevSearchKey(searchKey);
     setSelectedStatuses(new Set(searchParams.get("statuses")?.split(",").filter(Boolean) ?? []));
     setSelectedTags(new Set(searchParams.get("tags")?.split(",").filter(Boolean) ?? []));
     setSelectedSubs(new Set(searchParams.get("sub")?.split(",").filter(Boolean) ?? []));
     setSelectedHandlers(new Set(searchParams.get("handler")?.split(",").filter(Boolean) ?? []));
     setDateFrom(searchParams.get("from") ?? "");
     setDateTo(searchParams.get("to") ?? "");
-  }, [searchParams]);
+  }
 
   function applyDates(from: string, to: string) {
     const params = new URLSearchParams(searchParams.toString());

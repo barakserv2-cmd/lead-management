@@ -1,7 +1,7 @@
 "use client";
 
 import { PauseCircle, Bot } from "lucide-react";
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useSyncExternalStore } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import type { Lead } from "@/types/leads";
@@ -171,17 +171,39 @@ export function LeadCardPanel({ lead, open, onOpenChange, recruiterNames = {} }:
   const [assignedAt, setAssignedAt] = useState<string | null>(lead?.assigned_at ?? null);
   const [claiming, setClaiming] = useState(false);
 
-  useEffect(() => {
+  // Re-sync the mirror when a different lead is shown / the server assignment
+  // changes — adjusted during render instead of in an effect.
+  const syncKey = `${lead?.id}|${lead?.assigned_to}|${lead?.assigned_at}`;
+  const [prevSyncKey, setPrevSyncKey] = useState(syncKey);
+  if (syncKey !== prevSyncKey) {
+    setPrevSyncKey(syncKey);
     setAssignedTo(lead?.assigned_to ?? null);
     setAssignedAt(lead?.assigned_at ?? null);
-  }, [lead?.id, lead?.assigned_to, lead?.assigned_at]);
+  }
+
+  // תוקף הנעילה תלוי בשעון, ו-Date.now() בזמן רינדור אינו טהור — לכן נקרא דרך
+  // useSyncExternalStore: נבדק מול השעה האמיתית בכל רינדור (פתיחת ליד / ליד אחר),
+  // והמנוי מרנדר מחדש בדיוק ברגע שהנעילה פגה בזמן שהכרטיס פתוח
+  const lockDeadlineMs =
+    assignedTo && assignedAt ? new Date(assignedAt).getTime() + LOCK_TTL_MS : null;
+  const subscribeLockExpiry = useCallback(
+    (onExpire: () => void) => {
+      if (lockDeadlineMs == null) return () => {};
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      const wait = () => {
+        const left = lockDeadlineMs - Date.now();
+        if (left > 0) timer = setTimeout(wait, left);
+        else onExpire();
+      };
+      wait();
+      return () => clearTimeout(timer);
+    },
+    [lockDeadlineMs],
+  );
+  const getLockFresh = () => lockDeadlineMs != null && Date.now() < lockDeadlineMs;
+  const lockFresh = useSyncExternalStore(subscribeLockExpiry, getLockFresh, getLockFresh);
 
   if (!lead) return null;
-
-  const lockFresh =
-    !!assignedTo &&
-    !!assignedAt &&
-    Date.now() - new Date(assignedAt).getTime() < LOCK_TTL_MS;
 
   async function handleClaim() {
     setClaiming(true);

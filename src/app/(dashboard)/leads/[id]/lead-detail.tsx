@@ -410,13 +410,18 @@ export function LeadDetail({
     }
   }
 
+  // Clear the hint as soon as the employer input becomes too short (adjusted during render)
+  const [prevHiredClient, setPrevHiredClient] = useState(editHiredClient);
+  if (editHiredClient !== prevHiredClient) {
+    setPrevHiredClient(editHiredClient);
+    const trimmed = editHiredClient.trim();
+    if (!trimmed || trimmed.length < 2) setEmployerHint(null);
+  }
+
   // Debounced employer name normalization preview
   useEffect(() => {
     const trimmed = editHiredClient.trim();
-    if (!trimmed || trimmed.length < 2) {
-      setEmployerHint(null);
-      return;
-    }
+    if (!trimmed || trimmed.length < 2) return;
     const timer = setTimeout(async () => {
       const result = await normalizeEmployer(trimmed);
       if (result.wasNormalized && result.bestMatch && result.bestMatch !== trimmed) {

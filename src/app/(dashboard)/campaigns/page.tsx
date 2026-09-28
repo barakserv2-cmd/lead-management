@@ -127,30 +127,37 @@ export default function ExtrasPage() {
   const [loading, setLoading] = useState(false);
   const [bulkImportOpen, setBulkImportOpen] = useState(false);
 
-  // --- Init ---
-  useEffect(() => { fetchCampaigns(); }, []);
-  useEffect(() => { if (selectedCampaign) fetchScheduleLeads(); }, [selectedCampaign]);
-
-  async function fetchCampaigns() {
-    const { data: camps } = await supabase.from('campaigns').select('*').order('start_date', { ascending: false });
-    if (camps && camps.length > 0) {
-      setCampaigns(camps);
-      if (!selectedCampaign) setSelectedCampaign(camps[0]);
-    }
+  // עדכוני ה-state קורים בתוך then (ולא אחרי await) כי הפונקציות נקראות מתוך useEffect
+  function fetchCampaigns() {
+    return supabase
+      .from('campaigns')
+      .select('*')
+      .order('start_date', { ascending: false })
+      .then(({ data: camps }) => {
+        if (camps && camps.length > 0) {
+          setCampaigns(camps);
+          if (!selectedCampaign) setSelectedCampaign(camps[0]);
+        }
+      });
   }
 
-  async function fetchScheduleLeads() {
-    const { data } = await supabase
+  function fetchScheduleLeads() {
+    return supabase
       .from('leads')
       .select('id, name, phone, email, status, job_title, hired_client, arrival_date')
       .not('hired_client', 'is', null)
-      .not('arrival_date', 'is', null);
-
-    const leads = (data ?? []) as ScheduleLead[];
-    setScheduleLeads(leads);
-    // Auto-expand all employers on fresh load
-    setExpandedEmployers(new Set(leads.map(l => l.hired_client)));
+      .not('arrival_date', 'is', null)
+      .then(({ data }) => {
+        const leads = (data ?? []) as ScheduleLead[];
+        setScheduleLeads(leads);
+        // Auto-expand all employers on fresh load
+        setExpandedEmployers(new Set(leads.map(l => l.hired_client)));
+      });
   }
+
+  // --- Init ---
+  useEffect(() => { fetchCampaigns(); }, []);
+  useEffect(() => { if (selectedCampaign) fetchScheduleLeads(); }, [selectedCampaign]);
 
   // ── Grouped data ───────────────────────────────────────────
 

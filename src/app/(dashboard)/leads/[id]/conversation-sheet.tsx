@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useEffectEvent, useState } from "react";
 import { toast } from "sonner";
 import {
   Sheet,
@@ -159,13 +159,6 @@ export function ConversationSheet({
   const [loadingLogs, setLoadingLogs] = useState(false);
   const [loadingReminders, setLoadingReminders] = useState(false);
 
-  // Fetch data when sheet opens
-  useEffect(() => {
-    if (!open) return;
-    fetchLogs();
-    fetchReminders();
-  }, [open, lead.id]);
-
   async function fetchLogs() {
     setLoadingLogs(true);
     const result = await getInteractionLogs(lead.id);
@@ -179,6 +172,17 @@ export function ConversationSheet({
     setReminders(result.reminders as Reminder[]);
     setLoadingReminders(false);
   }
+
+  // Fetch data when sheet opens
+  // (effect event — הטעינה מתבצעת רק כשהגיליון נפתח / ליד אחר, לא בכל רינדור)
+  const loadData = useEffectEvent(() => {
+    fetchLogs();
+    fetchReminders();
+  });
+  useEffect(() => {
+    if (!open) return;
+    loadData();
+  }, [open, lead.id]);
 
   async function handleCompleteReminder(id: string) {
     const result = await completeReminder(id);

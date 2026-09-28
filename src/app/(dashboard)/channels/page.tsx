@@ -54,7 +54,7 @@ export default async function ChannelsPage() {
   return (
     <div dir="rtl" className="max-w-4xl mx-auto p-4 md:p-6 space-y-6">
       <div>
-        <h1 className="text-xl font-semibold text-gray-900 tracking-tight text-gray-900">ביצועי ערוצים · שלב א'</h1>
+        <h1 className="text-xl font-semibold text-gray-900 tracking-tight">ביצועי ערוצים · שלב א׳</h1>
         <p className="text-sm text-gray-500 mt-1">
           30 יום · {totals.leads} לידים · {totals.hired} גיוסים ({totals.leads ? Math.round((totals.hired / totals.leads) * 100) : 0}%)
           · מטרה: לראות את זמן התגובה יורד וההמרה עולה ככל שגובגט עונה ראשונה
@@ -95,7 +95,7 @@ export default async function ChannelsPage() {
       <div className="bg-sky-50 border border-sky-200 rounded-xl p-4 text-sm text-sky-900">
         <b>איך לקרוא:</b> עמודת <b>זמן תגובה</b> אמורה לצנוח לכיוון דקות ככל שגובגט עונה ראשונה. אם ערוץ עם המרה נמוכה (אדום)
         מתחיל להראות תגובה מהירה — עקוב אחרי ההמרה שלו בשבועיים הקרובים. אם היא עולה → הערוץ לא היה רע, רק איטי. אם נשארת נמוכה
-        גם עם מענה מהיר → זה ערוץ לחתוך (שלב ג').
+        גם עם מענה מהיר → זה ערוץ לחתוך (שלב ג׳).
       </div>
 
       <p className="text-xs text-gray-400 text-center pt-2 border-t border-gray-100">

@@ -193,7 +193,7 @@ export function LeadDetailDrawer({
 
   // Notes
   const [notes, setNotes] = useState("");
-  const [notesLoading, setNotesLoading] = useState(false);
+  const [notesLoading, setNotesLoading] = useState(true);
   const [savingNotes, setSavingNotes] = useState(false);
 
   // Preferences
@@ -228,7 +228,9 @@ export function LeadDetailDrawer({
   const [historyLoaded, setHistoryLoaded] = useState(false);
 
   // Reset all state when lead changes
-  useEffect(() => {
+  const [prevLead, setPrevLead] = useState(lead);
+  if (lead !== prevLead) {
+    setPrevLead(lead);
     setDisplayName(lead.name);
     setDisplayPhone(lead.phone);
     setDisplayEmail(lead.email);
@@ -241,8 +243,11 @@ export function LeadDetailDrawer({
     setHistoryEntries([]);
     setHistoryLoaded(false);
 
-    // Fetch fresh notes
     setNotesLoading(true);
+  }
+
+  // Fetch fresh notes
+  useEffect(() => {
     getLeadNotes(lead.id).then((result) => {
       setNotes(result.notes ?? "");
       setNotesLoading(false);
