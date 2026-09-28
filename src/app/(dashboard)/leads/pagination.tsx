@@ -45,7 +45,7 @@ export function Pagination({
   }
 
   return (
-    <div className={`flex items-center justify-between bg-white rounded-xl shadow-sm border px-4 py-3 ${className}`}>
+    <div className={`flex items-center justify-between bg-white rounded-xl border border-gray-200 px-4 py-3 ${className}`}>
       <span className="text-sm text-gray-500">
         {from}–{to} מתוך {totalCount}
       </span>

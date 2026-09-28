@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { Gauge, Check, Circle } from "lucide-react";
 import { redirect } from "next/navigation";
 import { getAuthedUser, getSupabaseAdmin } from "@/lib/api-auth";
 
@@ -111,17 +112,19 @@ export default async function AutonomyPage() {
   return (
     <div dir="rtl" className="max-w-3xl mx-auto p-4 md:p-6 space-y-6">
       <div>
-        <h1 className="text-2xl font-bold text-[#0E2233]">מד אוטונומיה — L4</h1>
+        <h1 className="text-xl font-semibold text-gray-900 tracking-tight">מד אוטונומיה — L4</h1>
         <p className="text-sm text-gray-500 mt-1">כמה גובגט מטפלת לבד, 7 הימים האחרונים · {leadList.length} לידים</p>
       </div>
 
-      <div className="bg-[#0E2233] text-white rounded-2xl p-6 flex items-center justify-between">
+      <div className="bg-white border border-gray-200 rounded-xl p-6 flex items-center justify-between">
         <div>
-          <div className="text-sm text-white/70">רמת אוטונומיה נוכחית</div>
-          <div className="text-5xl font-black mt-1">L{lScore}</div>
-          <div className="text-sm text-white/70 mt-1">{met}/5 מדדים ביעד · {met === 5 ? "L4 מוכח 🎉" : "מטפסת ל-L4"}</div>
+          <div className="text-[13px] font-medium text-gray-500">רמת אוטונומיה נוכחית</div>
+          <div className="text-5xl font-semibold tracking-tight text-gray-900 mt-1">L{lScore}</div>
+          <div className="text-[13px] text-gray-500 mt-1">{met}/5 מדדים ביעד · {met === 5 ? "L4 מוכח" : "מטפסת ל-L4"}</div>
         </div>
-        <div className="text-6xl">{met === 5 ? "🚀" : "📈"}</div>
+        <div className={`w-14 h-14 rounded-xl flex items-center justify-center ${met === 5 ? "bg-emerald-50 text-emerald-600" : "bg-cyan-50 text-cyan-600"}`}>
+          <Gauge className="w-7 h-7" strokeWidth={1.75} />
+        </div>
       </div>
 
       <div className="space-y-3">
@@ -129,14 +132,14 @@ export default async function AutonomyPage() {
           const card = (
             <>
               <div className={`w-9 h-9 rounded-full flex items-center justify-center text-lg flex-shrink-0 ${m.ok ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-400"}`}>
-                {m.ok ? "✓" : "○"}
+                {m.ok ? <Check className="w-4 h-4" strokeWidth={2.5} /> : <Circle className="w-3.5 h-3.5" strokeWidth={2} />}
               </div>
               <div className="flex-1 min-w-0">
-                <div className="text-sm font-semibold text-[#0E2233]">{m.label}</div>
+                <div className="text-sm font-semibold text-gray-900">{m.label}</div>
                 <div className="text-xs text-gray-500 mt-0.5">{m.hint}</div>
               </div>
               <div className="text-left flex-shrink-0">
-                <div className={`text-xl font-bold ${m.ok ? "text-green-600" : "text-[#0E2233]"}`}>{m.value}</div>
+                <div className={`text-xl font-bold ${m.ok ? "text-green-600" : "text-gray-900"}`}>{m.value}</div>
                 <div className="text-[11px] text-gray-400">יעד {m.target}</div>
               </div>
             </>

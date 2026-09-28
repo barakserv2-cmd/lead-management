@@ -84,9 +84,9 @@ function LeadRow({
 }) {
   const hover = {
     slate: "hover:bg-slate-50",
-    orange: "hover:bg-orange-100/40",
-    purple: "hover:bg-purple-100/40",
-    amber: "hover:bg-amber-100/40",
+    orange: "hover:bg-gray-50",
+    purple: "hover:bg-gray-50",
+    amber: "hover:bg-gray-50",
   }[tone];
 
   return (
@@ -94,7 +94,7 @@ function LeadRow({
       <div className="min-w-0 flex-1">
         <Link
           href={`/leads/${id}`}
-          className="font-semibold text-slate-900 hover:text-cyan-700 hover:underline"
+          className="font-medium text-gray-900 hover:text-cyan-700"
         >
           {name || "מועמד ללא שם"}
         </Link>
@@ -109,9 +109,9 @@ function LeadRow({
             href={waHref(phone)}
             target="_blank"
             rel="noopener noreferrer"
-            className="text-emerald-600 hover:text-emerald-800 text-xs font-semibold"
+            className="h-7 px-2 inline-flex items-center rounded-md border border-gray-200 text-emerald-700 hover:bg-emerald-50 text-xs font-medium"
           >
-            WA
+            WhatsApp
           </a>
         </div>
       )}
@@ -135,13 +135,27 @@ function Block({
   children: React.ReactNode;
 }) {
   if (count === 0) return null;
+  // כרטיס ניטרלי; הצבע רק בנקודה ובמונה — כך חמשת הבלוקים נקראים כמערכת
+  // אחת, והדחיפות עדיין מזוהה במבט.
+  const DOT: Record<string, string> = {
+    "border-orange-200": "bg-orange-500",
+    "border-purple-200": "bg-purple-500",
+    "border-red-200": "bg-red-500",
+    "border-amber-200": "bg-amber-500",
+    "border-slate-200": "bg-gray-400",
+  };
+  void head;
   return (
-    <section className={`rounded-xl border ${border} overflow-hidden bg-white`}>
-      <div className={`flex items-center justify-between px-4 py-2.5 border-b ${border} ${head}`}>
-        <h2 className="font-semibold text-sm">
-          {title} ({count})
+    <section className="rounded-xl border border-gray-200 overflow-hidden bg-white">
+      <div className="flex items-center justify-between gap-3 px-4 py-3 border-b border-gray-100">
+        <h2 className="flex items-center gap-2 font-semibold text-[13px] text-gray-900">
+          <span className={`w-2 h-2 rounded-full ${DOT[border] ?? "bg-gray-400"}`} />
+          {title}
+          <span className="min-w-5 h-5 px-1.5 inline-flex items-center justify-center rounded-md bg-gray-100 text-gray-600 text-[11px] font-semibold tabular-nums">
+            {count}
+          </span>
         </h2>
-        {hint && <span className="text-xs opacity-70">{hint}</span>}
+        {hint && <span className="text-xs text-gray-500">{hint}</span>}
       </div>
       <ul className="divide-y divide-slate-100">{children}</ul>
     </section>
@@ -241,7 +255,7 @@ export default async function MyDayPage() {
   return (
     <div>
       <div className="mb-6">
-        <h1 className="text-2xl font-bold">היום שלי</h1>
+        <h1 className="text-xl font-semibold text-gray-900 tracking-tight">היום שלי</h1>
         <p className="text-sm text-gray-500 mt-0.5">
           כל מה שדורש ממך פעולה היום, במקום אחד · {openCount} מועמדים פתוחים באחריותך
         </p>
@@ -249,7 +263,7 @@ export default async function MyDayPage() {
 
       <div className="flex flex-col gap-4 max-w-4xl">
         <Block
-          title="🟠 גובגט מחכה לך"
+          title="גובגט מחכה לך"
           count={escalations.length}
           hint="גובגט מוקפא עד שתחליטי"
           border="border-orange-200"
@@ -280,7 +294,7 @@ export default async function MyDayPage() {
         </Block>
 
         <Block
-          title="📅 ראיונות היום"
+          title="ראיונות היום"
           count={interviews.length}
           hint="לאשר טלפונית מי מגיע"
           border="border-purple-200"
@@ -309,7 +323,7 @@ export default async function MyDayPage() {
         </Block>
 
         <Block
-          title="❗ ראיונות שעברו בלי תוצאה"
+          title="ראיונות שעברו בלי תוצאה"
           count={pastInterviews.length}
           hint="הראיון היה — מה קרה בו?"
           border="border-red-200"
@@ -343,7 +357,7 @@ export default async function MyDayPage() {
         <MyReminders />
 
         <Block
-          title="🗓️ מעקב בלי תאריך"
+          title="מעקב בלי תאריך"
           count={undatedFollowUps.length}
           hint="לקבוע מתי לחזור, אחרת זה לא משימה"
           border="border-amber-200"
@@ -366,7 +380,7 @@ export default async function MyDayPage() {
         </Block>
 
         <Block
-          title="⏳ לא נגעת בהם"
+          title="לא נגעת בהם"
           count={stale.length}
           hint={`${STALE_DAYS} ימים ומעלה — להמשיך או לסגור`}
           border="border-slate-200"
@@ -393,9 +407,12 @@ export default async function MyDayPage() {
         </Block>
 
         {actionable === 0 && (
-          <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-5 py-8 text-center">
-            <p className="text-emerald-900 font-semibold">אין כלום שממתין לך 🎉</p>
-            <p className="text-sm text-emerald-800/80 mt-1">
+          <div className="rounded-xl border border-gray-200 bg-white px-5 py-10 text-center">
+            <div className="mx-auto mb-3 w-10 h-10 rounded-full bg-emerald-50 ring-1 ring-emerald-200 text-emerald-600 flex items-center justify-center">
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5"><path d="M20 6 9 17l-5-5" /></svg>
+            </div>
+            <p className="text-gray-900 font-semibold">אין כלום שממתין לך</p>
+            <p className="text-sm text-gray-500 mt-1">
               אין אסקלציות, אין ראיונות היום, ואף מועמד פתוח לא נשכח.
             </p>
             <Link

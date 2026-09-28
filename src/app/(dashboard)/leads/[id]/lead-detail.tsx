@@ -466,14 +466,14 @@ export function LeadDetail({
       </Link>
 
       {/* ═══ COMPACT HEADER ═══════════════════════════════════ */}
-      <div className="bg-white rounded-xl border shadow-sm px-6 py-4">
+      <div className="bg-white rounded-xl border border-gray-200 px-6 py-4">
         <div className="flex items-center gap-4">
           <span className="flex-shrink-0 w-12 h-12 rounded-full bg-cyan-600 text-white flex items-center justify-center text-lg font-bold">
             {getInitials(displayName)}
           </span>
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 flex-wrap">
-              <h1 className="text-2xl font-bold text-gray-900 truncate">
+              <h1 className="text-xl font-semibold text-gray-900 tracking-tight truncate">
                 {displayName}
               </h1>
               <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold ${getStatusColorClasses(lead.status)}`}>

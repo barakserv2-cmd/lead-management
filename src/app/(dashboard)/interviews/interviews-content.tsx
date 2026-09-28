@@ -245,7 +245,7 @@ export function InterviewsContent({
     <div dir="rtl" className="max-w-6xl">
       <div className="flex flex-wrap items-end justify-between gap-3 mb-5">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">{title}</h1>
+          <h1 className="text-xl font-semibold text-gray-900 tracking-tight text-slate-900">{title}</h1>
           <p className="text-sm text-slate-500 mt-1">
             <span className="font-semibold text-slate-700">{todayCount}</span> היום ·{" "}
             <span className="font-semibold text-slate-700">{upcomingCount}</span> קרובים · לוח משותף לכל המחלקות
@@ -466,7 +466,7 @@ export function InterviewsContent({
                             {r.job_title && <span className="text-sm text-slate-700 bg-slate-100 rounded px-1.5 py-0.5">{r.job_title}</span>}
                             {r.client && <span className="text-sm text-slate-600">@ {r.client}</span>}
                             {r.interview_type && (
-                              <span className="text-xs text-slate-500">{r.interview_type === "video" ? "🎥 וידאו" : r.interview_type === "phone" ? "📞 טלפוני" : "🏢 פרונטלי"}</span>
+                              <span className="text-xs text-slate-500">{r.interview_type === "video" ? "וידאו" : r.interview_type === "phone" ? "טלפוני" : "פרונטלי"}</span>
                             )}
                             {r.status === LeadStatus.POSTPONED_ARRIVAL && (
                               <span className="text-[11px] font-semibold rounded px-1.5 py-0.5 bg-teal-100 text-teal-800">
@@ -491,7 +491,7 @@ export function InterviewsContent({
                             ) : (
                               <span className="text-slate-400">אין טלפון</span>
                             )}
-                            {r.location && <span>📍 {r.location}</span>}
+                            {r.location && <span>{r.location}</span>}
                             {r.recruiter && <span>רכזת: {r.recruiter}</span>}
                             {r.source && <span className="text-slate-400">{r.source}</span>}
                           </div>
@@ -545,7 +545,7 @@ export function InterviewsContent({
                             title="שנה מועד ראיון"
                             className="h-7 inline-flex items-center whitespace-nowrap px-2 text-xs rounded-md border border-purple-300 text-purple-700 hover:bg-purple-50 transition-colors"
                           >
-                            🗓 שנה מועד
+                            שנה מועד
                           </button>
                           <InterviewMessageDialog
                             name={r.name}

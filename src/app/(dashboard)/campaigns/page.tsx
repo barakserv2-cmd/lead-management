@@ -181,11 +181,11 @@ export default function ExtrasPage() {
     <div className="p-6 max-w-[1400px] mx-auto dir-rtl font-sans text-gray-800">
 
       {/* HEADER */}
-      <div className="flex justify-between items-center mb-6 bg-white p-4 rounded-xl shadow-sm border border-gray-200">
+      <div className="flex justify-between items-center mb-6 bg-white p-4 rounded-xl border border-gray-200 border-gray-200">
         <div className="flex items-center gap-4">
           <div className="bg-purple-100 p-3 rounded-full text-purple-600"><Calendar size={24} /></div>
           <div>
-            <h1 className="text-2xl font-bold">{selectedCampaign.name}</h1>
+            <h1 className="text-xl font-semibold text-gray-900 tracking-tight">{selectedCampaign.name}</h1>
             <p className="text-sm text-gray-500">
               {employerGroups.length} מעסיקים &middot; {scheduleLeads.length} עובדים
             </p>
@@ -204,7 +204,7 @@ export default function ExtrasPage() {
           <button onClick={() => setBulkImportOpen(true)} className="bg-emerald-600 text-white px-4 py-2 rounded-lg font-bold hover:bg-emerald-700 flex items-center gap-2">
             <Upload size={18} /> ייבוא מ-Excel
           </button>
-          <button onClick={() => { setCampFormData({ name: '', start_date: '', end_date: '' }); setSelectedCampaign(null); setIsCampModalOpen(true); }} className="bg-purple-600 text-white px-4 py-2 rounded-lg font-bold hover:bg-purple-700 flex items-center gap-2">
+          <button onClick={() => { setCampFormData({ name: '', start_date: '', end_date: '' }); setSelectedCampaign(null); setIsCampModalOpen(true); }} className="bg-cyan-600 text-white px-4 py-2 rounded-lg font-medium hover:bg-cyan-700 flex items-center gap-2">
             <PlusCircle size={18} /> פרויקט חדש
           </button>
           <select className="border rounded p-2 bg-gray-50" value={selectedCampaign.id} onChange={(e) => { const c = campaigns.find(x => x.id === e.target.value); if (c) setSelectedCampaign(c); }}>
@@ -241,7 +241,7 @@ export default function ExtrasPage() {
           const isExpanded = expandedEmployers.has(group.employer);
 
           return (
-            <div key={group.employer} className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+            <div key={group.employer} className="bg-white rounded-xl border border-gray-200 border-gray-200 overflow-hidden">
               {/* ── Employer Header (clickable) ─── */}
               <button
                 onClick={() => toggleEmployer(group.employer)}

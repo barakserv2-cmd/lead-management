@@ -54,7 +54,7 @@ export default async function ChannelsPage() {
   return (
     <div dir="rtl" className="max-w-4xl mx-auto p-4 md:p-6 space-y-6">
       <div>
-        <h1 className="text-2xl font-bold text-[#0E2233]">ביצועי ערוצים · שלב א'</h1>
+        <h1 className="text-xl font-semibold text-gray-900 tracking-tight text-gray-900">ביצועי ערוצים · שלב א'</h1>
         <p className="text-sm text-gray-500 mt-1">
           30 יום · {totals.leads} לידים · {totals.hired} גיוסים ({totals.leads ? Math.round((totals.hired / totals.leads) * 100) : 0}%)
           · מטרה: לראות את זמן התגובה יורד וההמרה עולה ככל שגובגט עונה ראשונה
@@ -79,7 +79,7 @@ export default async function ChannelsPage() {
               const m = med(r.resp);
               return (
                 <tr key={r.source} className="border-t border-gray-100">
-                  <td className="px-4 py-2.5 font-medium text-[#0E2233]">{r.source}</td>
+                  <td className="px-4 py-2.5 font-medium text-gray-900">{r.source}</td>
                   <td className="px-4 py-2.5 tabular-nums">{r.leads}</td>
                   <td className={`px-4 py-2.5 tabular-nums ${m !== null && m < 5 ? "text-green-600 font-semibold" : "text-gray-600"}`}>{respStr(m)}</td>
                   <td className="px-4 py-2.5 tabular-nums text-gray-600">{r.interview}</td>

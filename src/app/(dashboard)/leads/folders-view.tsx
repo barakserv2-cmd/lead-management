@@ -126,7 +126,7 @@ export function FoldersView({ folders }: { folders: SourceFolderStats[] }) {
   );
 
   return (
-    <div className="bg-white rounded-xl shadow-sm border border-gray-200 divide-y divide-gray-100 overflow-hidden">
+    <div className="bg-white rounded-xl border border-gray-200 border-gray-200 divide-y divide-gray-100 overflow-hidden">
       <FolderRow
         href="/leads?source=__all__"
         icon={<FolderIcon className="w-8 h-8 text-cyan-500 flex-shrink-0" />}

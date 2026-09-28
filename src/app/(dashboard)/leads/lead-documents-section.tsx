@@ -54,7 +54,7 @@ function SignControls({
   if (sign.signed) {
     return (
       <span className="text-[10px] px-1.5 py-0.5 rounded bg-green-100 text-green-700 font-semibold whitespace-nowrap">
-        ✍️ נחתם דיגיטלית
+        נחתם דיגיטלית
       </span>
     );
   }
@@ -63,7 +63,7 @@ function SignControls({
     return (
       <span className="flex items-center gap-1 whitespace-nowrap">
         <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 font-semibold">
-          ⏳ ממתין לחתימה
+          ממתין לחתימה
         </span>
         <button
           type="button"
@@ -93,7 +93,7 @@ function SignControls({
       className="text-[10px] px-1.5 py-0.5 rounded text-violet-700 hover:bg-violet-100 transition-colors whitespace-nowrap disabled:opacity-50"
       title="שליחת קישור חתימה דיגיטלית בוואטסאפ"
     >
-      {sending ? "..." : "✍️ לחתימה"}
+      {sending ? "..." : "לחתימה"}
     </button>
   );
 }
@@ -254,7 +254,7 @@ function DocSlot({
     >
       <div className="flex items-center gap-2">
         <span className="w-7 h-7 rounded-full bg-white border border-current/20 flex items-center justify-center text-base leading-none">
-          {uploading ? "⏳" : "+"}
+          {uploading ? "…" : "+"}
         </span>
         <div className="min-w-0 flex-1">
           <div className="font-semibold">{label}</div>
@@ -268,7 +268,7 @@ function DocSlot({
             title="הדבק תמונה או קובץ מהלוח"
             className="flex-shrink-0 text-[10px] px-1.5 py-1 rounded border border-current/20 bg-white/70 hover:bg-white text-gray-600"
           >
-            📋 הדבק
+            הדבק
           </span>
         )}
       </div>
@@ -394,7 +394,7 @@ export function LeadDocumentsSection({ leadId }: { leadId: string }) {
         ]);
       }
       if (body.success) {
-        toast.success("קישור החתימה נשלח בוואטסאפ ✍️");
+        toast.success("קישור החתימה נשלח בוואטסאפ");
       } else if (body.link) {
         await navigator.clipboard.writeText(body.link).catch(() => {});
         toast.error(body.error ?? "השליחה נכשלה", { description: "הקישור הועתק ללוח — אפשר לשלוח ידנית" });
@@ -459,7 +459,7 @@ export function LeadDocumentsSection({ leadId }: { leadId: string }) {
         setSigRequests((prev) => [body.request, ...prev]);
       }
       if (body.success) {
-        toast.success(`"${t.name}" נשלח לחתימה בוואטסאפ ✍️`);
+        toast.success(`"${t.name}" נשלח לחתימה בוואטסאפ`);
       } else if (body.link) {
         await navigator.clipboard.writeText(body.link).catch(() => {});
         toast.error(body.error ?? "השליחה נכשלה", { description: "הקישור הועתק ללוח — אפשר לשלוח ידנית" });
@@ -628,7 +628,7 @@ export function LeadDocumentsSection({ leadId }: { leadId: string }) {
                   onClick={() => handleOpen(d)}
                   className="truncate hover:text-cyan-700 flex-1 text-right"
                 >
-                  📄 {d.file_name} · {formatSize(d.file_size)}
+                  {d.file_name} · {formatSize(d.file_size)}
                 </button>
                 <SignControls
                   doc={d}
@@ -654,7 +654,7 @@ export function LeadDocumentsSection({ leadId }: { leadId: string }) {
         {templates.length > 0 && (
           <div className="mt-3 rounded-lg border border-violet-200 bg-violet-50/40 p-2.5">
             <div className="text-[11px] font-semibold text-violet-800 mb-1.5 flex items-center gap-1">
-              ✍️ שליחת מסמך לחתימה דיגיטלית
+              שליחת מסמך לחתימה דיגיטלית
             </div>
             <div className="space-y-1">
               {templates.map((t) => (
@@ -662,14 +662,14 @@ export function LeadDocumentsSection({ leadId }: { leadId: string }) {
                   key={t.id}
                   className="flex items-center justify-between gap-2 px-2 py-1 rounded bg-white border border-violet-100 text-[11px]"
                 >
-                  <span className="truncate text-gray-700">📄 {t.name}</span>
+                  <span className="truncate text-gray-700">{t.name}</span>
                   <button
                     type="button"
                     onClick={() => handleSendTemplate(t)}
                     disabled={templateSending !== null}
-                    className="flex-shrink-0 px-2 py-0.5 rounded bg-violet-600 text-white font-semibold hover:bg-violet-700 transition-colors disabled:opacity-50"
+                    className="flex-shrink-0 px-2 py-0.5 rounded bg-cyan-600 text-white font-medium hover:bg-cyan-700 transition-colors disabled:opacity-50"
                   >
-                    {templateSending === t.id ? "שולח..." : "שלח ✍️"}
+                    {templateSending === t.id ? "שולח..." : "שלח"}
                   </button>
                 </div>
               ))}
@@ -733,9 +733,9 @@ export function LeadDocumentsSection({ leadId }: { leadId: string }) {
                   setRecruiterDialog(null);
                   void doSendTemplate(t, recruiterVals);
                 }}
-                className="flex-1 py-2 rounded-lg bg-violet-600 text-white font-semibold hover:bg-violet-700"
+                className="flex-1 py-2 rounded-lg bg-cyan-600 text-white font-medium hover:bg-cyan-700"
               >
-                שלח לחתימה ✍️
+                שלח לחתימה
               </button>
               <button
                 type="button"

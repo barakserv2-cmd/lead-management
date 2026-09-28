@@ -33,11 +33,11 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="w-full max-w-md bg-white rounded-2xl shadow-xl p-8 overflow-hidden">
-      <div className="h-1 bg-gradient-to-r from-cyan-600 via-cyan-400 to-amber-500 -mx-8 -mt-8 mb-8" />
+    <div className="w-full max-w-sm bg-white rounded-xl border border-gray-200 shadow-sm p-8 overflow-hidden">
       <div className="text-center mb-8">
-        <h1 className="text-2xl font-bold text-gray-900">ברק שירותים</h1>
-        <p className="text-gray-500 mt-2">התחברות למערכת גיוס</p>
+        <div className="mx-auto mb-4 w-10 h-10 rounded-lg bg-gray-900 text-white flex items-center justify-center text-base font-bold">ב</div>
+        <h1 className="text-xl font-semibold text-gray-900 tracking-tight">ברק שירותים</h1>
+        <p className="text-[13px] text-gray-500 mt-1">התחברות למערכת גיוס</p>
       </div>
       <form onSubmit={handleSubmit} className="space-y-4">
         <div>
@@ -48,7 +48,7 @@ export default function LoginPage() {
             type="email"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-cyan-500 focus:border-transparent"
+            className="w-full h-10 px-3 border border-gray-300 rounded-md shadow-xs text-sm focus:outline-none focus:border-cyan-400 focus:ring-4 focus:ring-cyan-100"
             placeholder="your@email.com"
             dir="ltr"
             required
@@ -62,7 +62,7 @@ export default function LoginPage() {
             type="password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-cyan-500 focus:border-transparent"
+            className="w-full h-10 px-3 border border-gray-300 rounded-md shadow-xs text-sm focus:outline-none focus:border-cyan-400 focus:ring-4 focus:ring-cyan-100"
             dir="ltr"
             required
           />
@@ -75,7 +75,7 @@ export default function LoginPage() {
         <button
           type="submit"
           disabled={loading}
-          className="w-full py-3 bg-cyan-600 text-white rounded-lg font-medium hover:bg-cyan-700 transition-colors disabled:opacity-50"
+          className="w-full h-10 bg-cyan-600 text-white rounded-md text-sm font-medium shadow-xs hover:bg-cyan-700 transition-colors disabled:opacity-50"
         >
           {loading ? "מתחבר..." : "התחברות"}
         </button>

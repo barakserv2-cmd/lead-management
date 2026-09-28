@@ -89,7 +89,7 @@ export function FinanceContent({
   return (
     <div className="space-y-8" dir="rtl">
       <p className="text-xs bg-amber-50 border border-amber-200 text-amber-800 rounded-lg px-3 py-2 w-fit">
-        🔒 הלשונית הזו גלויה רק לך. רכזות ואדמיניות אחרות לא רואות אותה — האכיפה בצד השרת.
+        הלשונית הזו גלויה רק לך. רכזות ואדמיניות אחרות לא רואות אותה — האכיפה בצד השרת.
       </p>
 
       <div className="flex flex-wrap items-center gap-2 text-sm">

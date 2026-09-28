@@ -78,7 +78,7 @@ export function MyReminders() {
     <section className="mb-5 rounded-xl border border-amber-200 bg-amber-50 overflow-hidden">
       <div className="flex items-center justify-between px-4 py-2.5 border-b border-amber-200">
         <h2 className="font-semibold text-amber-900 text-sm">
-          🔔 להתקשר שוב ({due.length})
+          להתקשר שוב ({due.length})
         </h2>
         {laterCount > 0 && (
           <span className="text-xs text-amber-700/70">ועוד {laterCount} בהמשך</span>

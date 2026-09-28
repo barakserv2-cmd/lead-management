@@ -1,5 +1,6 @@
 "use client";
 
+import { TrendingUp } from "lucide-react";
 import { useState, useMemo } from "react";
 import type { Lead } from "@/types/leads";
 import { StatusSelect } from "../../leads/status-select";
@@ -104,7 +105,7 @@ export function HiredContent({
   return (
     <div dir="rtl">
       {/* Header */}
-      <h1 className="text-2xl font-bold mb-6">דוח מועסקים</h1>
+      <h1 className="text-xl font-semibold text-gray-900 tracking-tight mb-6">דוח מועסקים</h1>
 
       {/* Summary Card */}
       <div className="bg-cyan-50 border border-cyan-200 rounded-xl px-6 py-4 mb-6 flex items-center gap-3 flex-wrap">
@@ -215,12 +216,12 @@ export function HiredContent({
       {filtered.length === 0 ? (
         <div className="text-center py-16">
           <div className="w-16 h-16 rounded-full bg-gray-100 flex items-center justify-center mx-auto mb-4">
-            <span className="text-2xl">📈</span>
+            <TrendingUp className="w-7 h-7 text-gray-400" strokeWidth={1.5} />
           </div>
           <p className="text-gray-500 font-medium">אין נתונים להצגה</p>
         </div>
       ) : (
-        <div className="bg-white rounded-xl border shadow-sm overflow-hidden">
+        <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
           <table className="w-full text-sm">
             <thead>
               <tr className="bg-gray-50 border-b text-right">

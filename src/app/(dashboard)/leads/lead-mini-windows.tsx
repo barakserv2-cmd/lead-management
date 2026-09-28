@@ -221,7 +221,7 @@ function LeadMiniWindow({
     >
       {/* Header */}
       <div
-        className="flex items-center gap-2 px-3 py-2 bg-gradient-to-l from-cyan-600 to-cyan-700 text-white cursor-pointer select-none flex-shrink-0"
+        className="flex items-center gap-2 px-3 py-2 bg-gray-900 text-white cursor-pointer select-none flex-shrink-0"
         onClick={onToggleMinimize}
       >
         <span className="w-7 h-7 rounded-full bg-white/20 flex items-center justify-center text-[10px] font-bold flex-shrink-0">

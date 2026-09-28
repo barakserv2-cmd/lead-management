@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { HardHat, Home, Repeat, Filter, ShieldCheck, Folder, Wallet, type LucideIcon } from "lucide-react";
 import { getAuthedUser, getSupabaseAdmin } from "@/lib/api-auth";
 import { LEAD_STATUSES } from "@/lib/constants";
 import type { Lead } from "@/types/leads";
@@ -18,13 +19,13 @@ export const dynamic = "force-dynamic";
 
 type Tab = "hired" | "advances" | "transfers" | "funnel" | "finance" | "guarantee" | "sources";
 
-const TABS: { key: Tab; label: string; icon: string }[] = [
-  { key: "hired", label: "דוח מועסקים", icon: "👷" },
-  { key: "advances", label: "דוח מקדמות לדיור", icon: "🏠" },
-  { key: "transfers", label: "דוח העברות בין עבודות", icon: "🔁" },
-  { key: "funnel", label: "משפך", icon: "📉" },
-  { key: "guarantee", label: "אחריות", icon: "🛡️" },
-  { key: "sources", label: "תיקיות לפי גורם גיוס", icon: "📁" },
+const TABS: { key: Tab; label: string; icon: LucideIcon }[] = [
+  { key: "hired", label: "דוח מועסקים", icon: HardHat },
+  { key: "advances", label: "דוח מקדמות לדיור", icon: Home },
+  { key: "transfers", label: "דוח העברות בין עבודות", icon: Repeat },
+  { key: "funnel", label: "משפך", icon: Filter },
+  { key: "guarantee", label: "אחריות", icon: ShieldCheck },
+  { key: "sources", label: "תיקיות לפי גורם גיוס", icon: Folder },
 ];
 
 /** ברירת מחדל: 30 הימים האחרונים, לפי לוח ישראל. */
@@ -180,20 +181,26 @@ export default async function ReportsPage({
 
   return (
     <div dir="rtl">
-      <div className="flex items-center gap-1 mb-6 bg-gray-100 rounded-lg p-1 w-fit">
-        {[...TABS, ...(financeAllowed ? [{ key: "finance" as Tab, label: "כספים", icon: "💰" }] : [])].map((t) => (
-          <Link
-            key={t.key}
-            href={`/reports?tab=${t.key}`}
-            className={`px-4 py-2 rounded-md text-sm font-semibold transition-colors ${
-              tab === t.key ? "bg-white text-gray-900 shadow-sm" : "text-gray-500 hover:text-gray-800"
-            }`}
-          >
-            <span className="ml-1.5">{t.icon}</span>
-            {t.label}
-          </Link>
-        ))}
-      </div>
+      <h1 className="text-xl font-semibold text-gray-900 tracking-tight mb-4">דוחות</h1>
+      <nav className="flex items-center gap-6 mb-6 border-b border-gray-200 overflow-x-auto" aria-label="סוגי דוחות">
+        {[...TABS, ...(financeAllowed ? [{ key: "finance" as Tab, label: "כספים", icon: Wallet }] : [])].map((t) => {
+          const Icon = t.icon;
+          const isActive = tab === t.key;
+          return (
+            <Link
+              key={t.key}
+              href={`/reports?tab=${t.key}`}
+              aria-current={isActive ? "page" : undefined}
+              className={`-mb-px flex items-center gap-1.5 whitespace-nowrap pb-2.5 pt-1 text-[13px] font-medium border-b-2 transition-colors ${
+                isActive ? "border-gray-900 text-gray-900" : "border-transparent text-gray-500 hover:text-gray-800"
+              }`}
+            >
+              <Icon className={`w-4 h-4 ${isActive ? "text-cyan-600" : "text-gray-400"}`} strokeWidth={1.75} />
+              {t.label}
+            </Link>
+          );
+        })}
+      </nav>
       {content}
     </div>
   );

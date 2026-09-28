@@ -160,7 +160,7 @@ export function UsersContent({ users: initialUsers }: { users: UserProfile[] }) 
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-2xl font-bold">ניהול משתמשים</h1>
+          <h1 className="text-xl font-semibold text-gray-900 tracking-tight">ניהול משתמשים</h1>
           <p className="text-sm text-gray-500 mt-1">הוספה ועריכה של מגייסים ואדמינים</p>
         </div>
         <Button onClick={openAddDialog} className="gap-1.5">

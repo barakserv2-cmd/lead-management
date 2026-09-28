@@ -1,5 +1,6 @@
 "use client";
 
+import { Building2 } from "lucide-react";
 import { useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
@@ -179,7 +180,7 @@ export function ClientsContent({ clients: initialClients }: { clients: Client[] 
     <div>
       {/* ═══ HEADER ═══════════════════════════════════════════ */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
-        <h1 className="text-2xl font-bold">מעסיקים</h1>
+        <h1 className="text-xl font-semibold text-gray-900 tracking-tight">מעסיקים</h1>
         <div className="flex items-center gap-3">
           <Input
             value={search}
@@ -195,16 +196,16 @@ export function ClientsContent({ clients: initialClients }: { clients: Client[] 
       </div>
 
       {/* ═══ FILTER TABS ══════════════════════════════════════ */}
-      <div className="flex gap-1 mb-6 bg-gray-100 rounded-lg p-1 w-fit">
+      <div className="flex gap-6 mb-6 border-b border-gray-200">
         {FILTER_TABS.map((tab) => (
           <button
             key={tab.key}
             type="button"
             onClick={() => setActiveFilter(tab.key)}
-            className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+            className={`-mb-px pb-2.5 pt-1 border-b-2 text-[13px] font-medium transition-colors ${
               activeFilter === tab.key
-                ? "bg-white text-gray-900 shadow-sm"
-                : "text-gray-500 hover:text-gray-700"
+                ? "border-gray-900 text-gray-900"
+                : "border-transparent text-gray-500 hover:text-gray-800"
             }`}
           >
             {tab.label}
@@ -221,7 +222,7 @@ export function ClientsContent({ clients: initialClients }: { clients: Client[] 
       {filtered.length === 0 ? (
         <div className="text-center py-16">
           <div className="w-16 h-16 rounded-full bg-gray-100 flex items-center justify-center mx-auto mb-4">
-            <span className="text-2xl">🏢</span>
+            <Building2 className="w-7 h-7 text-gray-400" strokeWidth={1.5} />
           </div>
           <p className="text-gray-500 font-medium">
             {search ? "לא נמצאו תוצאות" : "אין מעסיקים עדיין"}
@@ -341,7 +342,7 @@ function ClientCard({ client, onEdit }: { client: Client; onEdit: (client: Clien
   const typeLabel = TYPE_LABELS[client.type] ?? client.type;
 
   return (
-    <div className="bg-white rounded-xl border shadow-sm hover:shadow-md transition-shadow">
+    <div className="bg-white rounded-xl border border-gray-200 hover:border-gray-300 hover:shadow-xs transition-colors">
       {/* Header */}
       <div className="p-4 pb-3">
         <div className="flex items-start justify-between gap-2">

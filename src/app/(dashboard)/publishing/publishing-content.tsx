@@ -182,7 +182,7 @@ export function PublishingContent({ userEmail, userName, isAdmin, openJobs }: Pr
       {/* ── header ── */}
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-slate-800">פרסום אורגני בפייסבוק</h1>
+          <h1 className="text-xl font-semibold text-gray-900 tracking-tight text-slate-800">פרסום אורגני בפייסבוק</h1>
           <p className="mt-1 text-sm text-slate-600">
             {userName ? `${userName} · ` : ""}
             {groups.length} קבוצות · {queued.length} ממתינים לפרסום

@@ -1,5 +1,6 @@
 "use client";
 
+import { PauseCircle, Bot } from "lucide-react";
 import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
@@ -50,7 +51,7 @@ function GubgetPausedBanner({ leadId, handledBy }: { leadId: string; handledBy: 
   }
   return (
     <div className="mx-6 mt-5 -mb-1 p-4 rounded-xl bg-amber-50 border-2 border-amber-200 flex items-start gap-3">
-      <span className="text-xl leading-none shrink-0 mt-0.5">⏸️</span>
+      <PauseCircle className="w-5 h-5 shrink-0 mt-0.5 text-amber-600" strokeWidth={1.75} />
       <div className="flex-1 min-w-0">
         <div className="text-sm font-semibold text-amber-900">גובגט מוקפאת — הליד בטיפול ידני</div>
         <div className="text-sm text-amber-800 mt-0.5">
@@ -244,7 +245,7 @@ export function LeadCardPanel({ lead, open, onOpenChange, recruiterNames = {} }:
         showCloseButton={false}
       >
         {/* Header */}
-        <SheetHeader className="bg-gradient-to-bl from-cyan-50 to-white p-6 border-b">
+        <SheetHeader className="bg-white p-6 border-b border-gray-200">
           <div className="flex items-start justify-between">
             <div className="flex items-center gap-3">
               <div className="w-12 h-12 rounded-full bg-cyan-600 text-white flex items-center justify-center text-lg font-bold shrink-0">
@@ -329,7 +330,7 @@ export function LeadCardPanel({ lead, open, onOpenChange, recruiterNames = {} }:
           (lead.handled_by === "gubget@eilatjobs.com" || !lead.handled_by) &&
           ["NEW_LEAD", "CONTACTED", "SCREENING_IN_PROGRESS", "FIT_FOR_INTERVIEW"].includes(lead.status) && (
           <div className="mx-6 mt-5 -mb-1 p-4 rounded-xl bg-sky-50 border-2 border-sky-200 flex items-start gap-3">
-            <span className="text-xl leading-none shrink-0 mt-0.5">🤖</span>
+            <Bot className="w-5 h-5 shrink-0 mt-0.5 text-sky-600" strokeWidth={1.75} />
             <div className="flex-1 min-w-0">
               <div className="text-sm font-semibold text-sky-800">גובגט מטפלת בליד</div>
               <div className="text-sm text-sky-700 mt-0.5">
@@ -370,7 +371,7 @@ export function LeadCardPanel({ lead, open, onOpenChange, recruiterNames = {} }:
         )}
 
         {/* AI Summary */}
-        <div className="mx-6 mt-5 mb-4 p-4 rounded-xl bg-gradient-to-bl from-violet-50 to-blue-50 border border-violet-200/60">
+        <div className="mx-6 mt-5 mb-4 p-4 rounded-xl bg-violet-50/60 border border-violet-200">
           <div className="flex items-center gap-2 mb-2">
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4 text-violet-600">
               <path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z" />

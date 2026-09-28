@@ -133,7 +133,7 @@ export function GubgetSummary({ snapshot }: { snapshot: GubgetSnapshot }) {
   return (
     <div className={`rounded-xl border px-5 py-3.5 ${state.tone}`}>
       <div className="flex items-center gap-2 flex-wrap mb-2">
-        <span className="text-sm font-bold text-gray-900">🤖 גובגט</span>
+        <span className="text-sm font-bold text-gray-900">גובגט</span>
         <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${state.chip}`}>
           {state.badge}
         </span>
