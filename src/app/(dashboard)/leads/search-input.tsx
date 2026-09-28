@@ -93,7 +93,7 @@ export function SearchInput() {
           }
         }}
         placeholder="חיפוש לפי שם, טלפון או תפקיד..."
-        className="w-full pr-9 pl-16 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:border-cyan-400 focus:ring-2 focus:ring-cyan-100"
+        className="w-full h-9 pr-9 pl-16 border border-gray-300 rounded-md text-[13px] shadow-xs placeholder:text-gray-400 focus:outline-none focus:border-cyan-400 focus:ring-4 focus:ring-cyan-100"
       />
       <div className="absolute left-2.5 top-1/2 -translate-y-1/2 flex items-center gap-1.5">
         {isPending ? (

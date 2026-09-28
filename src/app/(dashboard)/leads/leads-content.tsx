@@ -245,11 +245,11 @@ export function LeadsContent({
     .map((l) => ({ name: l.name, phone: formatPhone(l.phone)! }));
 
   const tableView = (
-    <div className="bg-white rounded-xl shadow-sm border overflow-hidden">
-      <table className="w-full text-sm">
-        <thead className="bg-slate-50/80 border-b border-slate-200">
+    <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+      <table className="w-full text-[13px] [&_td]:whitespace-nowrap [&_th]:whitespace-nowrap">
+        <thead className="bg-gray-50 border-b border-gray-200">
           <tr>
-            <th className="px-3 py-3 w-10">
+            <th className="px-3 py-2.5 w-10">
               <input
                 type="checkbox"
                 checked={allSelected}
@@ -257,15 +257,15 @@ export function LeadsContent({
                 className="rounded border-gray-300 cursor-pointer"
               />
             </th>
-            <th className="px-4 py-3 text-right font-medium text-gray-600">מועמד</th>
-            <th className="px-4 py-3 text-right font-medium text-gray-600">תפקיד</th>
-            <th className="px-4 py-3 text-right font-medium text-gray-600">סטטוס</th>
-            <th className="px-4 py-3 text-right font-medium text-gray-600">מקור</th>
-            <th className="px-4 py-3 text-right font-medium text-gray-600">רכזת</th>
-            <th className="px-4 py-3 text-right font-medium text-gray-600">נכנס</th>
-            <th className="px-4 py-3 text-right font-medium text-gray-600">עדכון אחרון</th>
-            <th className="px-4 py-3 text-right font-medium text-gray-600">קשר אחרון</th>
-            <th className="px-4 py-3 text-right font-medium text-gray-600">פעולות</th>
+            <th className="px-3 py-2.5 text-right font-medium text-xs text-gray-500">מועמד</th>
+            <th className="px-3 py-2.5 text-right font-medium text-xs text-gray-500">תפקיד</th>
+            <th className="px-3 py-2.5 text-right font-medium text-xs text-gray-500">סטטוס</th>
+            <th className="px-3 py-2.5 text-right font-medium text-xs text-gray-500">מקור</th>
+            <th className="px-3 py-2.5 text-right font-medium text-xs text-gray-500">רכזת</th>
+            <th className="px-3 py-2.5 text-right font-medium text-xs text-gray-500">נכנס</th>
+            <th className="px-3 py-2.5 text-right font-medium text-xs text-gray-500">עדכון אחרון</th>
+            <th className="px-3 py-2.5 text-right font-medium text-xs text-gray-500">קשר אחרון</th>
+            <th className="px-3 py-2.5 text-right font-medium text-xs text-gray-500">פעולות</th>
           </tr>
         </thead>
         <tbody>
@@ -279,7 +279,9 @@ export function LeadsContent({
                   </>
                 ) : emptyReason === "queue-clear" ? (
                   <>
-                    <div className="text-2xl mb-1">🎉</div>
+                    <div className="mx-auto mb-2 w-9 h-9 rounded-full bg-emerald-50 ring-1 ring-emerald-200 text-emerald-600 flex items-center justify-center">
+                      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4"><path d="M20 6 9 17l-5-5" /></svg>
+                    </div>
                     <div className="text-gray-700 font-medium">התור ריק — כל הלידים החדשים טופלו</div>
                   </>
                 ) : (
@@ -296,7 +298,7 @@ export function LeadsContent({
               return (
                 <tr
                   key={lead.id}
-                  className={"border-b border-gray-100 transition-colors duration-150 cursor-pointer " + (isSelected ? "bg-cyan-50/60" : "hover:bg-cyan-50/40")}
+                  className={"border-b border-gray-100 last:border-0 transition-colors duration-100 cursor-pointer " + (isSelected ? "bg-cyan-50/50" : "hover:bg-gray-50")}
                   onClick={() => openLeadWindow(lead.id)}
                 >
                   <td
@@ -312,12 +314,12 @@ export function LeadsContent({
                       className="rounded border-gray-300 cursor-pointer"
                     />
                   </td>
-                  <td className="px-4 py-3">
+                  <td className="px-3 py-2.5">
                     <div className="flex items-center gap-2.5">
                       <button
                         type="button"
                         onClick={(e) => { e.stopPropagation(); openLeadWindow(lead.id); }}
-                        className="flex-shrink-0 w-8 h-8 rounded-full bg-cyan-600 text-white flex items-center justify-center text-xs font-bold hover:bg-cyan-700 transition-colors"
+                        className="flex-shrink-0 w-8 h-8 rounded-full bg-gray-100 ring-1 ring-gray-200 text-gray-600 flex items-center justify-center text-[11px] font-semibold hover:bg-gray-200 transition-colors"
                         title="פתח חלון עריכה"
                       >
                         {getInitials(lead.name)}
@@ -347,7 +349,7 @@ export function LeadsContent({
                       </div>
                     </div>
                   </td>
-                  <td className="px-4 py-3 text-gray-600">
+                  <td className="px-3 py-2.5 text-gray-600">
                     <div className="flex items-center gap-1.5">
                       <span>{lead.job_title ?? "—"}</span>
                       {lead.screening_score != null && (
@@ -360,30 +362,30 @@ export function LeadsContent({
                       )}
                     </div>
                   </td>
-                  <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
+                  <td className="px-3 py-2.5" onClick={(e) => e.stopPropagation()}>
                     <div className="flex items-center gap-1.5">
                       <StatusSelect leadId={lead.id} leadName={lead.name} currentStatus={lead.status} currentSubStatus={lead.sub_status} />
                       {lead.rejection_reason && (
-                        <span className="inline-block px-2 py-0.5 rounded-full text-[10px] font-medium bg-red-50 text-red-600 border border-red-200">
+                        <span className="inline-block px-2 py-0.5 rounded-md text-[11px] font-medium bg-red-50 text-red-700 ring-1 ring-inset ring-red-200">
                           {lead.rejection_reason}
                         </span>
                       )}
                       {lead.hired_client && lead.hired_position && (
-                        <span className="inline-block px-2 py-0.5 rounded-full text-[10px] font-medium bg-green-50 text-green-700 border border-green-200">
+                        <span className="inline-block px-2 py-0.5 rounded-md text-[11px] font-medium bg-emerald-50 text-emerald-700 ring-1 ring-inset ring-emerald-200">
                           {lead.hired_client} | {lead.hired_position}
                         </span>
                       )}
                     </div>
                   </td>
-                  <td className="px-4 py-3">
-                    <span className={"inline-block px-2.5 py-1 rounded-full text-xs font-medium " + sourceColor}>
+                  <td className="px-3 py-2.5">
+                    <span className={"inline-flex items-center px-1.5 py-0.5 rounded-md text-xs font-medium ring-1 ring-inset ring-black/5 " + sourceColor}>
                       {lead.source ?? "—"}
                     </span>
                   </td>
-                  <td className="px-4 py-3">
+                  <td className="px-3 py-2.5">
                     {lead.handled_by ? (
                       <span
-                        className="inline-block px-2.5 py-1 rounded-full text-xs font-medium bg-emerald-50 text-emerald-700"
+                        className="inline-flex items-center gap-1.5 text-xs text-gray-700"
                         title={lead.handled_by}
                       >
                         {recruiterNames[lead.handled_by.toLowerCase()] ?? lead.handled_by.split("@")[0]}
@@ -392,17 +394,17 @@ export function LeadsContent({
                       <span className="text-gray-300 text-xs">—</span>
                     )}
                   </td>
-                  <td className="px-4 py-3">
+                  <td className="px-3 py-2.5">
                     {(() => {
                       const chip = waitingChip(lead);
                       return (
-                        <span className={"inline-block px-2.5 py-1 rounded-full text-xs font-medium " + chip.classes} title={formatShortDate(lead.created_at)}>
+                        <span className={"inline-flex items-center px-1.5 py-0.5 rounded-md text-xs font-medium " + chip.classes} title={formatShortDate(lead.created_at)}>
                           {chip.label}
                         </span>
                       );
                     })()}
                   </td>
-                  <td className="px-4 py-3">
+                  <td className="px-3 py-2.5">
                     {(() => {
                       const u = lastUpdate(lead, nowMs);
                       return (
@@ -413,12 +415,12 @@ export function LeadsContent({
                       );
                     })()}
                   </td>
-                  <td className="px-4 py-3">
+                  <td className="px-3 py-2.5">
                     {(() => {
                       const chip = contactChip(lead.last_contact_at, nowMs);
                       return (
                         <span
-                          className={"inline-block px-2.5 py-1 rounded-full text-xs font-medium " + chip.classes}
+                          className={"inline-flex items-center px-1.5 py-0.5 rounded-md text-xs font-medium " + chip.classes}
                           title={chip.title}
                         >
                           {chip.label}
@@ -426,7 +428,7 @@ export function LeadsContent({
                       );
                     })()}
                   </td>
-                  <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
+                  <td className="px-3 py-2.5" onClick={(e) => e.stopPropagation()}>
                     <div className="flex items-center gap-1">
                       <button
                         type="button"

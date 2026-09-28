@@ -45,29 +45,39 @@ async function LeadsTabs({ active, newCount }: { active: "queue" | "phone" | "es
     .eq("needs_human_attention", true);
   const escCount = escRaw ?? 0;
   const tabs = [
-    { key: "queue" as const, href: "/leads", label: `חדשים לטיפול${newCount > 0 ? ` (${newCount})` : ""}` },
-    { key: "phone" as const, href: "/leads?view=phone", label: "ראיון טלפון" },
-    { key: "escalations" as const, href: "/leads?view=escalations", label: `אסקלציות${escCount > 0 ? ` (${escCount})` : ""}` },
-    { key: "all" as const, href: "/leads?source=__all__", label: "כל הלידים" },
+    { key: "queue" as const, href: "/leads", label: "חדשים לטיפול", count: newCount },
+    { key: "phone" as const, href: "/leads?view=phone", label: "ראיון טלפון", count: 0 },
+    { key: "escalations" as const, href: "/leads?view=escalations", label: "אסקלציות", count: escCount },
+    { key: "all" as const, href: "/leads?source=__all__", label: "כל הלידים", count: 0 },
   ];
   return (
-    <div className="flex items-center gap-1 mb-5 bg-gray-100 rounded-lg p-1 w-fit">
-      {tabs.map((tab) => (
-        <Link
-          key={tab.key}
-          href={tab.href}
-          className={`px-4 py-2 rounded-md text-sm font-semibold transition-colors ${
-            active === tab.key
-              ? "bg-white text-gray-900 shadow-sm"
-              : "text-gray-500 hover:text-gray-800"
-          } ${tab.key === "queue" && newCount > 0 && active !== "queue" ? "text-blue-600" : ""} ${
-            tab.key === "escalations" && escCount > 0 && active !== "escalations" ? "text-red-600" : ""
-          }`}
-        >
-          {tab.label}
-        </Link>
-      ))}
-    </div>
+    <nav className="flex items-center gap-6 mb-5 border-b border-gray-200" aria-label="תצוגות לידים">
+      {tabs.map((tab) => {
+        const isActive = active === tab.key;
+        const alert = tab.key === "escalations" && escCount > 0;
+        return (
+          <Link
+            key={tab.key}
+            href={tab.href}
+            aria-current={isActive ? "page" : undefined}
+            className={`relative -mb-px flex items-center gap-2 pb-2.5 pt-1 text-[13px] font-medium border-b-2 transition-colors ${
+              isActive ? "border-gray-900 text-gray-900" : "border-transparent text-gray-500 hover:text-gray-800"
+            }`}
+          >
+            {tab.label}
+            {tab.count > 0 && (
+              <span
+                className={`min-w-5 h-5 px-1.5 inline-flex items-center justify-center rounded-md text-[11px] font-semibold tabular-nums ${
+                  alert ? "bg-red-50 text-red-700 ring-1 ring-red-200" : "bg-gray-100 text-gray-600"
+                }`}
+              >
+                {tab.count.toLocaleString("he-IL")}
+              </span>
+            )}
+          </Link>
+        );
+      })}
+    </nav>
   );
 }
 
@@ -127,7 +137,7 @@ export default async function LeadsPage({
       <div>
         <div className="flex items-center justify-between mb-6">
           <div>
-            <h1 className="text-2xl font-bold">אסקלציות</h1>
+            <h1 className="text-xl font-semibold text-gray-900 tracking-tight">אסקלציות</h1>
             <p className="text-sm text-gray-500 mt-0.5">שיחות שגובגט העביר לרכזת — גובגט מוקפא עד שתאשרו לו להמשיך</p>
           </div>
           <AddLeadDialog />
@@ -149,7 +159,7 @@ export default async function LeadsPage({
       <div>
         <div className="flex items-center justify-between mb-6">
           <div>
-            <h1 className="text-2xl font-bold">ראיון טלפון</h1>
+            <h1 className="text-xl font-semibold text-gray-900 tracking-tight">ראיון טלפון</h1>
             <p className="text-sm text-gray-500 mt-0.5">שיחות סינון טלפוניות שגובגט תיאם — לביצוע ע"י הרכזות</p>
           </div>
           <AddLeadDialog />
@@ -387,7 +397,7 @@ export default async function LeadsPage({
             </Link>
           )}
           <div className="min-w-0">
-            <h1 className="text-2xl font-bold">{title}</h1>
+            <h1 className="text-xl font-semibold text-gray-900 tracking-tight">{title}</h1>
             <p className="text-sm text-gray-500 mt-0.5">
               {range ? <>נכנסו {range} · </> : null}
               <span className="tabular-nums">{totalCount.toLocaleString("he-IL")}</span> לידים מוצגים
@@ -399,14 +409,14 @@ export default async function LeadsPage({
       {!isNamedFolder && <LeadsTabs active={isQueue ? "queue" : "all"} newCount={newCount} />}
 
       {isDefaultQueue && range && inRangeTotal > totalCount ? (
-        <div className="flex items-center justify-between gap-3 flex-wrap mb-4 px-4 py-3 rounded-xl border border-amber-200 bg-amber-50 text-sm">
+        <div className="flex items-center justify-between gap-3 flex-wrap mb-4 px-4 py-2.5 rounded-lg border border-amber-200 bg-amber-50/60 text-[13px]">
           <span className="text-amber-900">
             מוצגים רק <b className="tabular-nums">{totalCount.toLocaleString("he-IL")}</b> לידים שעדיין ממתינים לנציג —
             מתוך <b className="tabular-nums">{inRangeTotal.toLocaleString("he-IL")}</b> שנכנסו {range}.
           </span>
           <Link
             href={allInRangeHref}
-            className="px-3 py-1.5 rounded-lg bg-white border border-amber-300 text-amber-800 text-xs font-semibold hover:bg-amber-100 transition-colors"
+            className="h-7 inline-flex items-center px-2.5 rounded-md bg-white border border-gray-300 text-gray-700 text-xs font-medium shadow-xs hover:bg-gray-50 transition-colors"
           >
             הצג את כל הלידים בטווח ←
           </Link>
@@ -418,7 +428,7 @@ export default async function LeadsPage({
             <>
               {" "}
               <span className="text-indigo-700 font-medium">
-                🤖 {awaitingReply} מתוכם כבר קיבלו הודעה מגובגט וממתינים לתשובה — הם ירדו מהרשימה רק כשיענו.
+                {awaitingReply} מתוכם כבר קיבלו הודעה מגובגט וממתינים לתשובה — הם ירדו מהרשימה רק כשיענו.
               </span>
             </>
           )}
@@ -428,7 +438,7 @@ export default async function LeadsPage({
       <Suspense fallback={null}>
         <PipelineStrip statusCounts={statusCounts} />
       </Suspense>
-      <div className="mb-4 bg-white rounded-xl border shadow-sm p-3 space-y-3">
+      <div className="mb-3 flex flex-col gap-2.5">
         <Suspense fallback={null}>
           <SearchInput />
         </Suspense>

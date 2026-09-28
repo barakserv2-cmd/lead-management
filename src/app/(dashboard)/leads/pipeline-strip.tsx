@@ -29,12 +29,13 @@ const STAGES: { key: string; label: string; hint: string; statuses: readonly Lea
   { key: "closed", label: "נסגרו", hint: "נדחה / לא הגיע / אבד קשר", statuses: CLOSED_STATUSES },
 ];
 
+// המספרים עצמם בשחור — צבע רק למה שדורש תשומת לב (ממתינים) ולתוצאה (גויסו)
 const STAGE_ACCENT: Record<string, string> = {
-  waiting: "text-blue-700",
-  working: "text-cyan-700",
-  interview: "text-purple-700",
+  waiting: "text-gray-900",
+  working: "text-gray-900",
+  interview: "text-gray-900",
   hired: "text-emerald-700",
-  closed: "text-gray-500",
+  closed: "text-gray-400",
 };
 
 function pct(part: number, total: number): string {
@@ -80,7 +81,7 @@ export function PipelineStrip({ statusCounts }: { statusCounts: Record<string, n
   const inPlay = sum(PRE_INTERVIEW_STATUSES) + sum(INTERVIEW_STATUSES);
 
   return (
-    <section className="mb-4 bg-white rounded-xl border shadow-sm p-4" aria-label="תמונת מצב לפי שלב">
+    <section className="mb-5" aria-label="תמונת מצב לפי שלב">
       <div className="flex items-baseline justify-between gap-3 flex-wrap mb-3">
         <h2 className="text-sm font-semibold text-gray-800">
           תמונת מצב <span className="text-gray-400 font-normal">· {total.toLocaleString("he-IL")} לידים בטווח</span>
@@ -96,7 +97,7 @@ export function PipelineStrip({ statusCounts }: { statusCounts: Record<string, n
       </div>
 
       {/* פס יחסי — כל סטטוס בצבע שלו, לחיץ */}
-      <div className="flex h-2.5 w-full overflow-hidden rounded-full bg-gray-100 mb-4" role="img" aria-label="התפלגות סטטוסים">
+      <div className="flex h-1.5 w-full gap-px overflow-hidden rounded-full bg-gray-100 mb-3" role="img" aria-label="התפלגות סטטוסים">
         {STAGES.flatMap((st) => st.statuses).map((s) => {
           const c = count(s);
           if (c === 0) return null;
@@ -122,8 +123,8 @@ export function PipelineStrip({ statusCounts }: { statusCounts: Record<string, n
           return (
             <div
               key={st.key}
-              className={`rounded-lg border p-2.5 transition-colors ${
-                active ? "border-cyan-400 bg-cyan-50/60 ring-1 ring-cyan-300" : "border-gray-200 hover:border-gray-300"
+              className={`rounded-lg border p-3 transition-colors ${
+                active ? "border-cyan-300 bg-cyan-50/40 ring-1 ring-cyan-300" : "border-gray-200 hover:border-gray-300 hover:shadow-xs"
               } ${n === 0 ? "opacity-60" : ""}`}
             >
               <button
@@ -133,9 +134,9 @@ export function PipelineStrip({ statusCounts }: { statusCounts: Record<string, n
                 className="w-full text-right disabled:cursor-default"
                 title={`הצג רק: ${st.label}`}
               >
-                <div className="text-[11px] text-gray-500">{st.label}</div>
+                <div className="text-xs font-medium text-gray-500">{st.label}</div>
                 <div className="flex items-baseline gap-1.5">
-                  <span className={`text-xl font-bold tabular-nums ${STAGE_ACCENT[st.key]}`}>
+                  <span className={`text-2xl font-semibold tracking-tight tabular-nums ${STAGE_ACCENT[st.key]}`}>
                     {n.toLocaleString("he-IL")}
                   </span>
                   <span className="text-[11px] text-gray-400 tabular-nums">{pct(n, total)}</span>
@@ -149,7 +150,7 @@ export function PipelineStrip({ statusCounts }: { statusCounts: Record<string, n
                       type="button"
                       onClick={(e) => pick([s], e.ctrlKey || e.metaKey)}
                       className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] transition-colors ${
-                        selected.has(s) ? "bg-cyan-600 text-white" : "bg-gray-50 text-gray-600 hover:bg-gray-100"
+                        selected.has(s) ? "bg-gray-900 text-white" : "bg-gray-100 text-gray-600 hover:bg-gray-200"
                       }`}
                     >
                       <span className={`w-1.5 h-1.5 rounded-full ${STATUS_COLORS[s].dot}`} />
