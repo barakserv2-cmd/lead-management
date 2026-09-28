@@ -111,7 +111,7 @@ const INTERVIEW_STATUSES: LeadStatusValue[] = [
   LeadStatus.LOST_CONTACT,
 ];
 
-type Range = "today" | "yesterday" | "tomorrow" | "week" | "upcoming" | "past" | "all";
+type Range = "today" | "yesterday" | "tomorrow" | "week" | "upcoming" | "awaiting" | "past" | "all";
 
 const RANGE_LABELS: Record<Range, string> = {
   today: "היום",
@@ -119,9 +119,17 @@ const RANGE_LABELS: Record<Range, string> = {
   tomorrow: "מחר",
   week: "7 ימים",
   upcoming: "כל הקרובים",
+  awaiting: "ממתינים לתוצאה",
   past: "עברו",
   all: "הכל",
 };
+
+// ראיון שהמועד שלו עבר והסטטוס עדיין "ראיון נקבע" / "דחה הגעה" — איש לא רשם
+// מה קרה בו. ברירת המחדל "כל הקרובים" מסתירה אותם, ולכן הם נשכחו.
+const AWAITING_STATUSES = new Set<string>([LeadStatus.INTERVIEW_BOOKED, LeadStatus.POSTPONED_ARRIVAL]);
+function isAwaitingOutcome(r: InterviewRow, today: string): boolean {
+  return !r.postponedOriginal && AWAITING_STATUSES.has(r.status) && wallDateKey(r.interview_date) < today;
+}
 
 export function InterviewsContent({
   rows,
@@ -171,6 +179,7 @@ export function InterviewsContent({
       if (range === "week" && (key < today || key > addDays(today, 7))) return false;
       if (range === "upcoming" && key < today) return false;
       if (range === "past" && key >= today) return false;
+      if (range === "awaiting" && !isAwaitingOutcome(r, today)) return false;
       }
       // handled interviews leave the work queue (unless explicitly shown, or
       // the recruiter filtered to that exact status)
@@ -208,6 +217,7 @@ export function InterviewsContent({
 
   const todayCount = rows.filter((r) => wallDateKey(r.interview_date) === today).length;
   const upcomingCount = rows.filter((r) => wallDateKey(r.interview_date) >= today).length;
+  const awaitingCount = rows.filter((r) => isAwaitingOutcome(r, today)).length;
 
   const exportUrl = (() => {
     const p = new URLSearchParams({ type: "interviews" });
@@ -363,6 +373,15 @@ export function InterviewsContent({
             }`}
           >
             {RANGE_LABELS[r]}
+            {r === "awaiting" && awaitingCount > 0 && (
+              <span
+                className={`ms-1.5 inline-flex min-w-5 h-5 px-1 items-center justify-center rounded-md text-[11px] font-semibold tabular-nums ${
+                  range === r ? "bg-white/20 text-white" : "bg-red-50 text-red-700 ring-1 ring-inset ring-red-200"
+                }`}
+              >
+                {awaitingCount}
+              </span>
+            )}
           </button>
         ))}
       </div>
