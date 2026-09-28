@@ -132,7 +132,7 @@ export default async function TodayPage({
   }));
 
   return (
-    <div dir="rtl" className="p-6 max-w-6xl mx-auto">
+    <div dir="rtl" className="max-w-6xl mx-auto">
       {/* refresh the board every 15s so handling/new leads appear near-live —
           pointless on a past day, where nothing new can land */}
       {isToday && <AutoRefresh intervalMs={15000} />}
@@ -148,7 +148,7 @@ export default async function TodayPage({
             {isToday ? " · מתעדכן אוטומטית" : ""}
           </p>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3">
           <DayNav
             selected={selectedDate}
             todayKey={todayKey}

@@ -42,7 +42,7 @@ export default function SurveyPage() {
   const canSubmit = Object.keys(ratings).length > 0 || missing.length > 0 || comment.trim();
 
   return (
-    <div dir="rtl" className="max-w-2xl mx-auto p-4 md:p-6 space-y-6">
+    <div dir="rtl" className="max-w-2xl mx-auto space-y-6">
       <div>
         <h1 className="text-xl font-semibold text-gray-900 tracking-tight">שאלון משוב — גובגט</h1>
         <p className="text-sm text-gray-500 mt-1">המשוב שלכן מכוון את גובגט לשפר את עצמה — במיוחד בהנגשת המשרות. דקה, פעם בשבוע.</p>

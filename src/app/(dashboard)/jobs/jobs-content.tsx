@@ -377,7 +377,7 @@ export function JobsContent({
           )}
         </div>
 
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           <Chip active={onlyUrgent} onClick={() => setOnlyUrgent((v) => !v)} tone="amber">
             <AlertTriangle className="w-3.5 h-3.5" /> רק דחופות
           </Chip>

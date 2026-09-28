@@ -185,7 +185,7 @@ export default function ExtrasPage() {
   if (!selectedCampaign) return <div className="p-10 text-center">טוען...</div>;
 
   return (
-    <div className="p-6 max-w-[1400px] mx-auto dir-rtl font-sans text-gray-800">
+    <div className="max-w-[1400px] mx-auto dir-rtl font-sans text-gray-800">
 
       {/* HEADER */}
       <div className="flex justify-between items-center mb-6 bg-white p-4 rounded-xl border border-gray-200 border-gray-200">

@@ -449,10 +449,10 @@ export function LeadDetailDrawer({
           </SheetHeader>
 
           {/* ═══ TWO-PANEL BODY ═══════════════════════════════════ */}
-          <div className="flex-1 flex min-h-0 overflow-hidden">
+          <div className="flex-1 flex flex-col md:flex-row min-h-0 overflow-y-auto md:overflow-hidden">
 
             {/* ── LEFT: Contact Info + Tabs ───────────────────── */}
-            <div className="w-[380px] flex-shrink-0 border-l overflow-y-auto bg-white">
+            <div className="w-full md:w-[380px] flex-shrink-0 border-b md:border-b-0 md:border-l md:overflow-y-auto bg-white">
               {/* Contact fields */}
               <div className="p-5 space-y-3 border-b">
                 {contactFields.map((f) => (

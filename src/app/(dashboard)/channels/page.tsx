@@ -52,7 +52,7 @@ export default async function ChannelsPage() {
   const respStr = (m: number | null) => (m === null ? "—" : m < 60 ? `${m.toFixed(0)} דק'` : `${(m / 60).toFixed(1)} ש'`);
 
   return (
-    <div dir="rtl" className="max-w-4xl mx-auto p-4 md:p-6 space-y-6">
+    <div dir="rtl" className="max-w-4xl mx-auto space-y-6">
       <div>
         <h1 className="text-xl font-semibold text-gray-900 tracking-tight">ביצועי ערוצים · שלב א׳</h1>
         <p className="text-sm text-gray-500 mt-1">

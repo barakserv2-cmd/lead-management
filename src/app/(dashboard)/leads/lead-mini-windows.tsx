@@ -216,7 +216,7 @@ function LeadMiniWindow({
   return (
     <div
       className={`flex flex-col bg-white rounded-t-xl shadow-2xl border border-gray-200 overflow-hidden transition-all duration-200 ${
-        minimized ? "w-[240px]" : "w-[360px] h-[480px]"
+        minimized ? "w-[240px] max-w-[calc(100vw-2rem)]" : "w-[360px] max-w-[calc(100vw-2rem)] h-[480px] max-h-[calc(100dvh-5rem)]"
       }`}
     >
       {/* Header */}
