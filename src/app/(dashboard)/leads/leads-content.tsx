@@ -171,10 +171,17 @@ export function LeadsContent({
           seenMsgIds.current.add(item.message.id);
           sinceRef.current = item.message.created_at;
 
-          // הרציף שולף את הליד בעצמו, גם אם אינו בעמוד הנוכחי
-          openLeadWindow(item.lead.id, { chatFirst: true });
+          // הרציף שולף את הליד בעצמו, גם אם אינו בעמוד הנוכחי.
+          // auto: אם מישהו מקליד עכשיו — לא נחטוף לו את המסך.
+          const opened = openLeadWindow(item.lead.id, { chatFirst: true, auto: true });
+          const leadId = item.lead.id;
           toast.info(`הודעה חדשה מ${item.lead.name}`, {
             description: item.message.content.slice(0, 60),
+            duration: opened ? 4000 : 15000,
+            // לא נפתח כי הרכזת באמצע משהו — ההודעה מחכה לה, עם כפתור
+            action: opened
+              ? undefined
+              : { label: "פתח", onClick: () => openLeadWindow(leadId, { chatFirst: true }) },
           });
         }
       } catch {

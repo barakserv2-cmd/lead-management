@@ -102,3 +102,51 @@ describe("מחזור שמירה ושחזור", () => {
     expect(() => mod.closeLeadWindow("a")).not.toThrow();
   });
 });
+
+/**
+ * סער, 28.09: "תוך כדי רושם הערה ונכנסת לי שיחה — זה יוצא ממנה".
+ * הפולר של ההודעות הנכנסות פתח חלון בעצמו באמצע הקלדה וגרר את הרכזת
+ * החוצה ממה שעשתה; וכשהרציף מלא, הפתיחה האוטומטית דחקה החוצה בדיוק את
+ * החלון שכתבו בו. פתיחה יזומה של המערכת נסוגה; פתיחה של אדם — לעולם לא.
+ */
+describe("פתיחה אוטומטית לא חוטפת את המסך", () => {
+  async function withFocus(tagName: string | null) {
+    // מדמים דפדפן בסביבת node — רק החלקים שהמודול נוגע בהם
+    const g = globalThis as unknown as { window: unknown; document: unknown };
+    g.window = { sessionStorage: { getItem: () => null, setItem: () => {} } };
+    g.document = {
+      activeElement: tagName ? { tagName, isContentEditable: false } : null,
+    };
+    vi.resetModules();
+    return await import("./leadWindows");
+  }
+
+  it("מישהו מקליד → הודעה נכנסת לא פותחת חלון", async () => {
+    const mod = await withFocus("TEXTAREA");
+    expect(mod.openLeadWindow("a", { auto: true })).toBe(false);
+  });
+
+  it("גם שדה טקסט רגיל ובחירה נחשבים הקלדה", async () => {
+    for (const tag of ["INPUT", "SELECT"]) {
+      const mod = await withFocus(tag);
+      expect(mod.openLeadWindow("a", { auto: true }), tag).toBe(false);
+    }
+  });
+
+  it("אף אחד לא מקליד → נפתח כרגיל", async () => {
+    const mod = await withFocus(null);
+    expect(mod.openLeadWindow("a", { auto: true })).toBe(true);
+  });
+
+  it("פתיחה של אדם עוברת גם באמצע הקלדה — זו בחירה שלו", async () => {
+    const mod = await withFocus("TEXTAREA");
+    expect(mod.openLeadWindow("a")).toBe(true);
+  });
+
+  it("רציף מלא → פתיחה אוטומטית נסוגה ולא דוחקת חלון שעובדים בו", async () => {
+    const mod = await withFocus(null);
+    for (const id of ["a", "b", "c", "d"]) mod.openLeadWindow(id);
+    expect(mod.openLeadWindow("e", { auto: true })).toBe(false);
+    expect(mod.openLeadWindow("a", { auto: true })).toBe(true);
+  });
+});

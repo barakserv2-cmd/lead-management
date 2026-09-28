@@ -86,14 +86,46 @@ function setState(next: WindowState) {
   emit();
 }
 
-export function openLeadWindow(id: string, opts?: { chatFirst?: boolean }) {
+/**
+ * האם המשתמש/ת מקליד/ה עכשיו משהו.
+ *
+ * סער, 28.09: "תוך כדי רושם הערה ונכנסת לי שיחה זה יוצא ממנה". הפולר
+ * של ההודעות הנכנסות פתח חלון בעצמו, באמצע הקלדה — וגרר את הרכזת החוצה
+ * ממה שעשתה. מערכת לא חוטפת את המסך ממי שכותב בדיוק עכשיו.
+ */
+function isTyping(): boolean {
+  if (typeof document === "undefined") return false;
+  const el = document.activeElement as HTMLElement | null;
+  if (!el) return false;
+  if (el.isContentEditable) return true;
+  const tag = el.tagName;
+  return tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT";
+}
+
+/**
+ * מחזיר true אם החלון נפתח בפועל.
+ *
+ * `auto` = המערכת יזמה את הפתיחה (הודעה נכנסת), ולא אדם. במצב
+ * הזה יש שתי סיבות לא לפתוח: מישהו מקליד, או שהרציף מלא ופתיחה
+ * היתה דוחפת החוצה חלון שעובדים בו. בשני המקרים ההתראה נשארת —
+ * הרכזת תפתח כשיתאים לה.
+ */
+export function openLeadWindow(
+  id: string,
+  opts?: { chatFirst?: boolean; auto?: boolean }
+): boolean {
   hydrate();
+  if (opts?.auto) {
+    if (isTyping()) return false;
+    if (!state.ids.includes(id) && state.ids.length >= MAX_WINDOWS) return false;
+  }
   const ids = addWindow(state.ids, id);
   const chatFirst = opts?.chatFirst && !state.chatFirst.includes(id)
     ? [...state.chatFirst, id]
     : state.chatFirst;
-  if (ids === state.ids && chatFirst === state.chatFirst) return;
+  if (ids === state.ids && chatFirst === state.chatFirst) return true;
   setState({ ids, chatFirst: chatFirst.filter((x) => ids.includes(x)) });
+  return true;
 }
 
 export function closeLeadWindow(id: string) {
