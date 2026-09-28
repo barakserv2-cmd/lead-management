@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { STATUS_LABELS } from "@/lib/stateMachine";
 import type { LeadStatusValue } from "@/lib/stateMachine";
 import { openLeadWindow } from "@/lib/leadWindows";
+import { onQuickFind } from "@/lib/quickFind";
 
 /**
  * חיפוש מהיר — Ctrl+K.
@@ -33,6 +34,9 @@ export function QuickFind() {
   const [cursor, setCursor] = useState(0);
   const [loading, setLoading] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  // הכפתור בסרגל העליון — הדרך היחידה שעובדת גם בטאבלט
+  useEffect(() => onQuickFind(() => setOpen(true)), []);
 
   // Ctrl+K / Cmd+K מכל מקום במערכת
   useEffect(() => {
