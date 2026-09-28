@@ -17,7 +17,7 @@
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { LeadStatus } from "./stateMachine";
-import { EMPLOYMENT_END_REASONS, employmentEndReasonLabel } from "./constants";
+import { EMPLOYMENT_END_REASONS, employmentEndReasonLabel, candidateSegmentLabel } from "./constants";
 
 export const SURVIVAL_DAYS = [30, 60, 90, 180] as const;
 export type SurvivalDay = (typeof SURVIVAL_DAYS)[number];
@@ -34,6 +34,14 @@ export interface RetentionLead {
   employment_end_date: string | null;
   employment_end_reason: string | null;
   hired_client: string | null;
+  candidate_segment?: string | null;
+  comes_with_friend?: boolean | null;
+}
+
+/** שלושה מצבים של "מגיע עם חבר" — גם "לא סומן" מוצג, כדי שיראו כמה חסר. */
+export function friendGroupLabel(v: boolean | null | undefined): string {
+  if (v == null) return "לא סומן";
+  return v ? "עם חבר" : "לבד";
 }
 
 export interface TransferStart {
@@ -81,6 +89,8 @@ export interface RetentionReport {
   totals: RetentionGroup;
   bySource: RetentionGroup[];
   byClient: RetentionGroup[];
+  bySegment: RetentionGroup[];
+  byFriend: RetentionGroup[];
   /** סיבות עזיבה בקוהורט, כולל "לא צוין" */
   reasons: ReasonCount[];
   /** התקבלו ותאריך ההתחלה עוד לפניהם */
@@ -95,6 +105,8 @@ export interface RetentionReport {
 interface Spell {
   source: string;
   client: string;
+  segment: string;
+  friend: string;
   start: string;
   end: string | null;
   reason: string | null;
@@ -208,6 +220,8 @@ export function analyzeRetention(
     spells.push({
       source: (l.source ?? "").trim() || "אחר",
       client: (l.hired_client ?? "").trim() || "לא ידוע",
+      segment: candidateSegmentLabel(l.candidate_segment),
+      friend: friendGroupLabel(l.comes_with_friend),
       start,
       end: ended ? l.employment_end_date!.slice(0, 10) : null,
       reason: ended ? l.employment_end_reason : null,
@@ -251,6 +265,8 @@ export function analyzeRetention(
     totals: summarize("סה״כ", cohort, today),
     bySource: groupBy(cohort, (s) => s.source, today),
     byClient: groupBy(cohort, (s) => s.client, today),
+    bySegment: groupBy(cohort, (s) => s.segment, today),
+    byFriend: groupBy(cohort, (s) => s.friend, today),
     reasons,
     upcoming,
     neverStarted,
@@ -267,7 +283,9 @@ export async function computeRetention(db: SupabaseClient): Promise<RetentionRep
   const [{ data: leads }, { data: transfers }] = await Promise.all([
     db
       .from("leads")
-      .select("id, source, status, start_date, employment_end_date, employment_end_reason, hired_client")
+      .select(
+        "id, source, status, start_date, employment_end_date, employment_end_reason, hired_client, candidate_segment, comes_with_friend"
+      )
       .in("status", [LeadStatus.HIRED, LeadStatus.STARTED, LeadStatus.EMPLOYMENT_ENDED])
       .limit(10000),
     db.from("job_transfers").select("lead_id, from_start_date").limit(10000),

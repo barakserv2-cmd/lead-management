@@ -106,6 +106,23 @@ describe("analyzeRetention — survival", () => {
   });
 });
 
+describe("analyzeRetention — segment and friend", () => {
+  it("groups by candidate segment and by whether the worker came with a friend", () => {
+    const r = analyzeRetention(
+      [
+        worker("a", "2026-05-01", { candidate_segment: "boarding_pre_army", comes_with_friend: true }),
+        worker("b", "2026-05-01", { candidate_segment: "boarding_pre_army", comes_with_friend: false }),
+        left("c", "2026-05-01", "2026-06-01"),
+      ],
+      [],
+      TODAY
+    );
+    expect(r.bySegment.find((g) => g.key === "בוגר פנימייה / לפני גיוס")?.started).toBe(2);
+    expect(r.bySegment.find((g) => g.key === "לא סומן")?.left).toBe(1);
+    expect(r.byFriend.map((g) => g.key).sort()).toEqual(["לבד", "עם חבר", "לא סומן"].sort());
+  });
+});
+
 describe("analyzeRetention — reasons and monthly flow", () => {
   it("groups exits by reason, marks planned endings, and shows missing reasons", () => {
     const r = analyzeRetention(

@@ -139,6 +139,10 @@ export function RetentionContent({ data }: { data: RetentionReport }) {
 
       <GroupTable title="לפי גורם גיוס" keyLabel="גורם גיוס" groups={data.bySource} />
 
+      <GroupTable title="לפי סוג מועמד" keyLabel="סוג מועמד" groups={data.bySegment} />
+
+      <GroupTable title="עם חבר או לבד" keyLabel="הגיע לאילת" groups={data.byFriend} />
+
       <section className="space-y-2">
         <h2 className="text-sm font-semibold text-gray-800">למה עוזבים</h2>
         {missingReason > 0 && (

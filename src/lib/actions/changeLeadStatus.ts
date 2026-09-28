@@ -13,7 +13,12 @@ import {
 import { normalizeEmployerName } from "@/lib/employerNormalization";
 import { logAudit } from "@/lib/audit";
 import { setMachineConversationMode } from "@/lib/machineBridge";
-import { isEmploymentEndReason, employmentEndReasonLabel } from "@/lib/constants";
+import {
+  isEmploymentEndReason,
+  employmentEndReasonLabel,
+  isNoArrivalReason,
+  noArrivalReasonLabel,
+} from "@/lib/constants";
 
 function getSupabase() {
   return createServerClient(
@@ -38,6 +43,9 @@ export interface ChangeStatusInput {
     /** code from EMPLOYMENT_END_REASONS */
     employmentEndReason?: string;
     employmentEndNotes?: string;
+    /** code from NO_ARRIVAL_REASONS — NO_SHOW / CANCELLED_ARRIVAL */
+    noArrivalReason?: string;
+    noArrivalNotes?: string;
     interviewDate?: string;
     interviewType?: "phone" | "in_person" | "video";
     interviewNotes?: string;
@@ -169,6 +177,19 @@ export async function changeLeadStatus(input: ChangeStatusInput): Promise<Change
     if (endNotes) updateData.employment_end_notes = endNotes;
   }
 
+  // "לא הגיע" / "ביטל הגעה" — הסיבה נשארת על הליד גם כשהוא מתקדם הלאה
+  // (למשל תיאום הגעה מחדש), כך שדוח ההגעה יודע שהיה ניסיון שנכשל ולמה.
+  if (
+    (newStatus === LeadStatus.NO_SHOW || newStatus === LeadStatus.CANCELLED_ARRIVAL) &&
+    extra?.noArrivalReason
+  ) {
+    if (!isNoArrivalReason(extra.noArrivalReason)) {
+      return { success: false, error: `סיבת אי-הגעה לא חוקית: ${extra.noArrivalReason}` };
+    }
+    updateData.no_arrival_reason = extra.noArrivalReason;
+    updateData.no_arrival_notes = extra.noArrivalNotes?.trim() || null;
+  }
+
   if (newStatus === LeadStatus.INTERVIEW_BOOKED) {
     if (extra?.interviewDate) updateData.interview_date = extra.interviewDate;
     if (extra?.interviewType) updateData.interview_type = extra.interviewType;
@@ -262,6 +283,16 @@ export async function changeLeadStatus(input: ChangeStatusInput): Promise<Change
       event_type: "סיום העסקה",
       event_text:
         `סיבת סיום: ${employmentEndReasonLabel(extra.employmentEndReason)}` + (endNotes ? ` — ${endNotes}` : ""),
+    });
+  }
+  if (
+    (newStatus === LeadStatus.NO_SHOW || newStatus === LeadStatus.CANCELLED_ARRIVAL) &&
+    extra?.noArrivalReason
+  ) {
+    const naNotes = extra.noArrivalNotes?.trim();
+    journalRows.push({
+      event_type: newStatus === LeadStatus.NO_SHOW ? "לא הגיע" : "ביטל הגעה",
+      event_text: `סיבה: ${noArrivalReasonLabel(extra.noArrivalReason)}` + (naNotes ? ` — ${naNotes}` : ""),
     });
   }
   if (extra?.interviewNotes) journalRows.push({ event_type: "ראיון", event_text: `הערות ראיון: ${extra.interviewNotes}` });

@@ -13,7 +13,14 @@ import {
   getAllowedTransitions,
   type LeadStatusValue,
 } from "@/lib/stateMachine";
-import { SUB_STATUSES, NO_ANSWER_3, NOT_AVAILABLE_NOW, SENT_TO_INTERVIEW, FOLLOW_UP } from "@/lib/constants";
+import {
+  SUB_STATUSES,
+  NO_ANSWER_3,
+  NOT_AVAILABLE_NOW,
+  SENT_TO_INTERVIEW,
+  FOLLOW_UP,
+  noArrivalReasonLabel,
+} from "@/lib/constants";
 
 const SUB_STATUS_DIALOG_CONFIG: Partial<Record<LeadStatusValue, SubStatusPickerConfig>> = {
   [LeadStatus.CONTACTED]: {
@@ -33,6 +40,7 @@ const SUB_STATUS_DIALOG_CONFIG: Partial<Record<LeadStatusValue, SubStatusPickerC
 import { InterviewScheduleDialog } from "./interview-schedule-dialog";
 import { HiredConfirmDialog } from "./hired-confirm-dialog";
 import { EmploymentEndDialog, type EmploymentEndData } from "./employment-end-dialog";
+import { NoArrivalDialog, type NoArrivalData } from "./no-arrival-dialog";
 import { SubStatusPickerDialog, type SubStatusPickerConfig } from "./sub-status-picker-dialog";
 import { RejectionReasonDialog } from "./rejection-reason-dialog";
 import { StartWorkDialog } from "./start-work-dialog";
@@ -119,6 +127,8 @@ export function StatusSelect({
   const [showHiredDialog, setShowHiredDialog] = useState(false);
   const [showEmploymentEndDialog, setShowEmploymentEndDialog] = useState(false);
   const [showRejectionDialog, setShowRejectionDialog] = useState(false);
+  // "לא הגיע" / "ביטל הגעה" — איזה מהשניים נבחר, כשהדיאלוג פתוח
+  const [noArrivalTarget, setNoArrivalTarget] = useState<LeadStatusValue | null>(null);
   const [showStartWorkDialog, setShowStartWorkDialog] = useState(false);
   const [callbackFor, setCallbackFor] = useState<string | null>(null);
   // "מעקב" מחייב מועד; "לא זמין במיידי" רק מציע אותו
@@ -235,6 +245,12 @@ export function StatusSelect({
     // Intercept NOT_ACCEPTED — a written reason is mandatory, no way around it
     if (newStatus === LeadStatus.NOT_ACCEPTED) {
       setShowRejectionDialog(true);
+      return;
+    }
+
+    // Intercept NO_SHOW / CANCELLED_ARRIVAL — a structured reason is mandatory
+    if (newStatus === LeadStatus.NO_SHOW || newStatus === LeadStatus.CANCELLED_ARRIVAL) {
+      setNoArrivalTarget(newStatus);
       return;
     }
 
@@ -445,6 +461,32 @@ export function StatusSelect({
     setStatus(LeadStatus.NOT_ACCEPTED);
     setSubStatus(null);
     setToast({ message: "נשמר — לא התקבל", type: "success" });
+  }
+
+  async function handleNoArrivalConfirm(data: NoArrivalData) {
+    const target = noArrivalTarget;
+    if (!target) return;
+    setLoading(true);
+
+    const result = await changeLeadStatus({
+      leadId,
+      newStatus: target,
+      userId: "user",
+      notes: `${STATUS_LABELS[target]}: ${noArrivalReasonLabel(data.noArrivalReason)}`,
+      extra: { noArrivalReason: data.noArrivalReason, noArrivalNotes: data.noArrivalNotes },
+    });
+
+    setLoading(false);
+
+    if (!result.success) {
+      setToast({ message: result.error ?? "שגיאה בעדכון", type: "error" });
+      return;
+    }
+
+    setNoArrivalTarget(null);
+    setStatus(target);
+    setSubStatus(null);
+    setToast({ message: `${STATUS_LABELS[target]} — נשמר`, type: "success" });
   }
 
   async function handleSubStatusConfirm(chosenSub: string) {
@@ -687,6 +729,16 @@ export function StatusSelect({
               editOnly={status === LeadStatus.EMPLOYMENT_ENDED}
               onConfirm={handleEmploymentEndConfirm}
               onCancel={() => setShowEmploymentEndDialog(false)}
+              loading={loading}
+            />
+          )}
+
+          {noArrivalTarget && (
+            <NoArrivalDialog
+              title={STATUS_LABELS[noArrivalTarget]}
+              leadName={leadName}
+              onConfirm={handleNoArrivalConfirm}
+              onCancel={() => setNoArrivalTarget(null)}
               loading={loading}
             />
           )}

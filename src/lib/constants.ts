@@ -174,6 +174,54 @@ export function employmentEndReasonLabel(code: string | null | undefined): strin
   return EMPLOYMENT_END_REASONS.find((r) => r.code === code)?.label ?? code;
 }
 
+// ── Candidate segment ("סוג מועמד") ────────────────────────
+// מי שבא עם מטרה ותאריך נשאר יותר — הפילוח הזה מאפשר לבדוק את זה בדוחות.
+
+export const CANDIDATE_SEGMENTS = [
+  { code: "boarding_pre_army", label: "בוגר פנימייה / לפני גיוס" },
+  { code: "preferred_work", label: "חייל משוחרר — עבודה מועדפת" },
+  { code: "post_army", label: "אחרי צבא" },
+  { code: "oleh", label: "עולה חדש" },
+  { code: "seasonal", label: "עובד עונתי" },
+  { code: "older", label: "מבוגר" },
+  { code: "other", label: "אחר" },
+] as const;
+
+export type CandidateSegment = (typeof CANDIDATE_SEGMENTS)[number]["code"];
+
+export function isCandidateSegment(v: unknown): v is CandidateSegment {
+  return CANDIDATE_SEGMENTS.some((s) => s.code === v);
+}
+
+export function candidateSegmentLabel(code: string | null | undefined): string {
+  if (!code) return "לא סומן";
+  return CANDIDATE_SEGMENTS.find((s) => s.code === code)?.label ?? code;
+}
+
+// ── No-arrival reasons ("לא הגיע" / "ביטל הגעה") ───────────
+
+export const NO_ARRIVAL_REASONS = [
+  { code: "personal", label: "קרה משהו אישי" },
+  { code: "not_for_me", label: "החליט שזה לא מתאים לו" },
+  { code: "friend_backed_out", label: "החבר שהיה אמור להגיע התחרט" },
+  { code: "found_other_job", label: "מצא עבודה אחרת" },
+  { code: "travel_or_money", label: "נסיעה / כסף" },
+  { code: "housing", label: "מגורים" },
+  { code: "unreachable", label: "לא עונה" },
+  { code: "other", label: "אחר" },
+] as const;
+
+export type NoArrivalReason = (typeof NO_ARRIVAL_REASONS)[number]["code"];
+
+export function isNoArrivalReason(v: unknown): v is NoArrivalReason {
+  return NO_ARRIVAL_REASONS.some((r) => r.code === v);
+}
+
+export function noArrivalReasonLabel(code: string | null | undefined): string {
+  if (!code) return "לא צוין";
+  return NO_ARRIVAL_REASONS.find((r) => r.code === code)?.label ?? code;
+}
+
 // ── Conversation Mode enums ─────────────────────────────────
 
 export const INTERACTION_TYPES = {
