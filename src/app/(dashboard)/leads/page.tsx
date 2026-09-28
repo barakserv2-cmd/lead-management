@@ -12,9 +12,28 @@ import { LeadStatus } from "@/lib/stateMachine";
 import { InterviewsContent } from "../interviews/interviews-content";
 import { fetchInterviewRows, interviewWindow } from "@/lib/interviewsBoard";
 import { EscalationsView, type EscalationRow } from "./escalations-view";
+import { PipelineStrip } from "./pipeline-strip";
 import { Suspense } from "react";
 
 const PAGE_SIZE = 50;
+
+// "1–31 באוג׳ 2026" / "12 בספט׳ 2026" — טווח התאריכים בשפה של אנשים,
+// כדי שהכותרת תגיד בדיוק מה מוצג ולא רק את ה-URL.
+function rangeLabel(from: string | null, to: string | null): string | null {
+  if (!from && !to) return null;
+  const d = (s: string) => new Date(`${s}T12:00:00Z`);
+  const fmt = (s: string, opts: Intl.DateTimeFormatOptions) =>
+    new Intl.DateTimeFormat("he-IL", { timeZone: "UTC", ...opts }).format(d(s));
+  const full = { day: "numeric", month: "short", year: "numeric" } as const;
+  if (from && !to) return `מ-${fmt(from, full)}`;
+  if (!from && to) return `עד ${fmt(to, full)}`;
+  if (from === to) return fmt(from!, full);
+  const [fy, fm] = from!.split("-");
+  const [ty, tm] = to!.split("-");
+  if (fy === ty && fm === tm) return `${Number(from!.slice(8))}–${fmt(to!, full)}`;
+  if (fy === ty) return `${fmt(from!, { day: "numeric", month: "short" })} – ${fmt(to!, full)}`;
+  return `${fmt(from!, full)} – ${fmt(to!, full)}`;
+}
 
 // טאבים עליונים: תור עבודה (ברירת מחדל) / ראיון טלפון / אסקלציות / כל הלידים
 // ("תיקיות לפי גורם גיוס" עברה לדוחות — /reports?tab=sources)
@@ -339,10 +358,23 @@ export default async function LeadsPage({
 
   const isNamedFolder = !isQueue && sourceParam !== "__all__";
 
+  // התור מסנן בשקט ל"ממתין לנציג". עם טווח תאריכים זה מטעה — "אוגוסט"
+  // נראה כמו כל הלידים של אוגוסט, אבל מוצגים רק אלה שעוד לא טופלו.
+  const isDefaultQueue = isQueue && statusFilter.length === 0;
+  const range = rangeLabel(dateFrom, dateTo);
+  const inRangeTotal = Object.values(statusCounts).reduce((n, c) => n + c, 0);
+  const allInRangeHref = (() => {
+    const p = new URLSearchParams();
+    for (const [k, v] of Object.entries(params)) if (v && k !== "page" && k !== "view") p.set(k, v);
+    p.set("source", "__all__");
+    return `/leads?${p.toString()}`;
+  })();
+  const title = isDefaultQueue ? folderLabel : isQueue ? "לידים לפי סטטוס" : folderLabel;
+
   return (
     <div>
-      <div className="flex items-center justify-between mb-6">
-        <div className="flex items-center gap-3">
+      <div className="flex items-start justify-between gap-4 mb-5">
+        <div className="flex items-center gap-3 min-w-0">
           {isNamedFolder && (
             <Link
               href="/reports?tab=sources"
@@ -354,17 +386,34 @@ export default async function LeadsPage({
               כל התיקיות
             </Link>
           )}
-          <h1 className="text-2xl font-bold">{folderLabel}</h1>
+          <div className="min-w-0">
+            <h1 className="text-2xl font-bold">{title}</h1>
+            <p className="text-sm text-gray-500 mt-0.5">
+              {range ? <>נכנסו {range} · </> : null}
+              <span className="tabular-nums">{totalCount.toLocaleString("he-IL")}</span> לידים מוצגים
+            </p>
+          </div>
         </div>
-        <div className="flex items-center gap-3">
-          <span className="text-sm text-gray-500">{totalCount} לידים</span>
-          <AddLeadDialog />
-        </div>
+        <AddLeadDialog />
       </div>
       {!isNamedFolder && <LeadsTabs active={isQueue ? "queue" : "all"} newCount={newCount} />}
-      {isQueue && (
+
+      {isDefaultQueue && range && inRangeTotal > totalCount ? (
+        <div className="flex items-center justify-between gap-3 flex-wrap mb-4 px-4 py-3 rounded-xl border border-amber-200 bg-amber-50 text-sm">
+          <span className="text-amber-900">
+            מוצגים רק <b className="tabular-nums">{totalCount.toLocaleString("he-IL")}</b> לידים שעדיין ממתינים לנציג —
+            מתוך <b className="tabular-nums">{inRangeTotal.toLocaleString("he-IL")}</b> שנכנסו {range}.
+          </span>
+          <Link
+            href={allInRangeHref}
+            className="px-3 py-1.5 rounded-lg bg-white border border-amber-300 text-amber-800 text-xs font-semibold hover:bg-amber-100 transition-colors"
+          >
+            הצג את כל הלידים בטווח ←
+          </Link>
+        </div>
+      ) : isDefaultQueue ? (
         <p className="text-sm text-gray-500 -mt-2 mb-4">
-          כל ליד חדש שנכנס מופיע כאן למעלה. טיפלת? שנה סטטוס והוא יורד מהרשימה. כתום/אדום = ממתין יותר מדי.
+          ליד חדש מופיע כאן למעלה ויורד מהרשימה כשמשנים לו סטטוס. כתום/אדום = ממתין יותר מדי.
           {awaitingReply > 0 && (
             <>
               {" "}
@@ -374,13 +423,19 @@ export default async function LeadsPage({
             </>
           )}
         </p>
-      )}
+      ) : null}
+
       <Suspense fallback={null}>
-        <SearchInput />
+        <PipelineStrip statusCounts={statusCounts} />
       </Suspense>
-      <Suspense fallback={null}>
-        <FilterBar allTags={allTags} recruiters={recruiters} statusCounts={statusCounts} totalCount={totalCount} />
-      </Suspense>
+      <div className="mb-4 bg-white rounded-xl border shadow-sm p-3 space-y-3">
+        <Suspense fallback={null}>
+          <SearchInput />
+        </Suspense>
+        <Suspense fallback={null}>
+          <FilterBar allTags={allTags} recruiters={recruiters} statusCounts={statusCounts} totalCount={totalCount} />
+        </Suspense>
+      </div>
       <Suspense fallback={null}>
         <Pagination
           currentPage={currentPage}
@@ -390,7 +445,17 @@ export default async function LeadsPage({
           className="mb-4"
         />
       </Suspense>
-      <LeadsContent leads={typedLeads} recruiterNames={recruiterNames} />
+      <LeadsContent
+        leads={typedLeads}
+        recruiterNames={recruiterNames}
+        emptyReason={
+          searchQuery || statusFilter.length || tagFilter.length || subStatusFilter.length || handlerFilter.length || dateFrom || dateTo
+            ? "filtered"
+            : isDefaultQueue
+              ? "queue-clear"
+              : "none"
+        }
+      />
       <Suspense fallback={null}>
         <Pagination
           currentPage={currentPage}

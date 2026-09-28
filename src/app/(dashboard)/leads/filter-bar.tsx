@@ -174,7 +174,6 @@ export function FilterBar({
   allTags,
   recruiters = [],
   statusCounts = {},
-  totalCount,
 }: {
   allTags: string[];
   recruiters?: { email: string; name: string; count?: number }[];
@@ -336,24 +335,10 @@ export function FilterBar({
   const hasFilters = selectedStatuses.size > 0 || selectedSubs.size > 0 || selectedTags.size > 0 || selectedHandlers.size > 0 || !!dateFrom || !!dateTo;
 
   return (
-    <div className="mb-4">
+    <div>
       <div className="flex items-center gap-2 flex-wrap">
-        {/* מונה תוצאות — כמה לידים עונים על הסינון הנוכחי */}
-        {typeof totalCount === "number" && (
-          <span
-            className={`inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-bold tabular-nums ${
-              hasFilters
-                ? "bg-cyan-600 text-white"
-                : "bg-gray-100 text-gray-600"
-            }`}
-            title={hasFilters ? "מספר הלידים שעונים על הסינון" : "סך כל הלידים ברשימה"}
-          >
-            {totalCount.toLocaleString("he-IL")} לידים
-          </span>
-        )}
-
         <MultiSelectDropdown
-          label="סינון לפי סטטוס"
+          label="סטטוס"
           options={statusOptions}
           selected={selectedStatuses}
           onChange={handleStatusChange}
@@ -372,7 +357,7 @@ export function FilterBar({
         />
 
         <MultiSelectDropdown
-          label="סינון לפי תת-סטטוס"
+          label="תת-סטטוס"
           options={SUB_STATUS_OPTIONS.map((o) => ({ value: o.value, label: o.label }))}
           selected={selectedSubs}
           onChange={handleSubChange}
@@ -388,7 +373,7 @@ export function FilterBar({
         />
 
         <MultiSelectDropdown
-          label="סינון לפי רכזת"
+          label="רכזת"
           options={handlerOptions}
           selected={selectedHandlers}
           onChange={handleHandlerChange}
@@ -407,7 +392,7 @@ export function FilterBar({
 
         {tagOptions.length > 0 && (
           <MultiSelectDropdown
-            label="סינון לפי תגיות"
+            label="תגיות"
             options={tagOptions}
             selected={selectedTags}
             onChange={handleTagChange}
@@ -462,7 +447,8 @@ export function FilterBar({
           )}
         </div>
 
-        {/* Quick date presets */}
+        {/* Quick date presets — one segmented control */}
+        <div className="inline-flex items-center rounded-lg border border-gray-200 bg-gray-50 p-0.5">
         {datePresets().map((p) => {
           const active = dateFrom === p.from && dateTo === p.to;
           return (
@@ -470,16 +456,18 @@ export function FilterBar({
               key={p.label}
               type="button"
               onClick={() => { setDateFrom(p.from); setDateTo(p.to); applyDates(p.from, p.to); }}
-              className={`px-2.5 py-1 rounded-full text-[11px] font-medium border transition-colors ${
+              aria-pressed={active}
+              className={`px-2.5 py-1 rounded-md text-[11px] font-medium transition-colors ${
                 active
-                  ? "border-cyan-400 bg-cyan-600 text-white"
-                  : "border-gray-200 bg-white text-gray-600 hover:border-cyan-300"
+                  ? "bg-white text-cyan-700 shadow-sm font-semibold"
+                  : "text-gray-600 hover:text-gray-900"
               }`}
             >
               {p.label}
             </button>
           );
         })}
+        </div>
 
         {hasFilters && (
           <>
