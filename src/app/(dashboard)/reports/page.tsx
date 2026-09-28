@@ -36,6 +36,22 @@ function defaultRange(): { from: string; to: string } {
   return { from: d.toISOString().slice(0, 10), to: today };
 }
 
+// חצות לפי שעון ישראל כרגע UTC — נכון גם בשעון חורף (+02:00) וגם בקיץ
+// (+03:00). היסט קבוע של +03:00 הזיז בחורף כל טווח בשעה.
+function ilDayStartUTC(dateStr: string): Date {
+  const noon = new Date(`${dateStr}T12:00:00Z`);
+  const offsetMs =
+    new Date(noon.toLocaleString("en-US", { timeZone: "Asia/Jerusalem" })).getTime() -
+    new Date(noon.toLocaleString("en-US", { timeZone: "UTC" })).getTime();
+  return new Date(new Date(`${dateStr}T00:00:00Z`).getTime() - offsetMs);
+}
+
+function shiftDays(dateStr: string, days: number): string {
+  const d = new Date(`${dateStr}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + days);
+  return d.toISOString().slice(0, 10);
+}
+
 export default async function ReportsPage({
   searchParams,
 }: {
@@ -57,8 +73,8 @@ export default async function ReportsPage({
   const from = /^\d{4}-\d{2}-\d{2}$/.test(rawFrom ?? "") ? rawFrom! : dr.from;
   const to = /^\d{4}-\d{2}-\d{2}$/.test(rawTo ?? "") ? rawTo! : dr.to;
   // גבולות יום לפי שעון ישראל — created_at הוא זמן אמת
-  const fromIso = new Date(`${from}T00:00:00+03:00`).toISOString();
-  const toIso = new Date(`${to}T23:59:59+03:00`).toISOString();
+  const fromIso = ilDayStartUTC(from).toISOString();
+  const toIso = new Date(ilDayStartUTC(shiftDays(to, 1)).getTime() - 1).toISOString();
 
   // Placed workers — the pick-list for both entry forms.
   const workersPromise =
@@ -77,8 +93,35 @@ export default async function ReportsPage({
     const folders = await computeSourceFolders(supabase);
     content = <FoldersView folders={folders} />;
   } else if (tab === "funnel") {
-    const analytics = await computeAnalytics(supabase, fromIso, toIso);
-    content = <FunnelContent data={analytics} from={from} to={to} />;
+    // תקופת השוואה: אותו מספר ימים, מיד לפני התקופה הנבחרת
+    const days = Math.round((ilDayStartUTC(to).getTime() - ilDayStartUTC(from).getTime()) / 86_400_000) + 1;
+    const prevTo = shiftDays(from, -1);
+    const prevFrom = shiftDays(prevTo, -(days - 1));
+    const [analytics, prev, { data: profiles }] = await Promise.all([
+      computeAnalytics(supabase, fromIso, toIso),
+      computeAnalytics(
+        supabase,
+        ilDayStartUTC(prevFrom).toISOString(),
+        new Date(ilDayStartUTC(from).getTime() - 1).toISOString()
+      ),
+      supabase.from("user_profiles").select("name, email"),
+    ]);
+    // שם תצוגה לרכזת במקום האימייל
+    const recruiterNames: Record<string, string> = {};
+    for (const p of (profiles ?? []) as { name: string | null; email: string | null }[]) {
+      if (p.email && p.name && !p.name.includes("@")) recruiterNames[p.email.toLowerCase()] = p.name;
+    }
+    content = (
+      <FunnelContent
+        data={analytics}
+        prev={prev}
+        from={from}
+        to={to}
+        prevFrom={prevFrom}
+        prevTo={prevTo}
+        recruiterNames={recruiterNames}
+      />
+    );
   } else if (tab === "guarantee") {
     const rows = await computeGuaranteeReport(supabase);
     content = <GuaranteeContent rows={rows} />;
