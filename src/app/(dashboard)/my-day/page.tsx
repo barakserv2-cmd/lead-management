@@ -26,6 +26,42 @@ const OPEN_STATUSES: string[] = [
 /** אחרי כמה ימי שתיקה מועמד פתוח נחשב נשכח. */
 const STALE_DAYS = 3;
 
+/** אחרי כמה שעות בלי אף הודעה יוצאת שיחה של גובגט נחשבת שהשתתקה. */
+const QUIET_HOURS = 48;
+
+/** השלבים שבהם גובגט מנהל את השיחה לבד, לפני שמישהו קבע ראיון. */
+const QUIET_STATUSES: string[] = [
+  LeadStatus.CONTACTED,
+  LeadStatus.SCREENING_IN_PROGRESS,
+  LeadStatus.FIT_FOR_INTERVIEW,
+];
+
+/** ליד סגור לא צריך טיפול גם אם נשאר עליו דגל ישן. */
+const CLOSED_STATUSES: string[] = [
+  LeadStatus.REJECTED,
+  LeadStatus.NOT_SUITABLE,
+  LeadStatus.LOST_CONTACT,
+  LeadStatus.INVALID_PHONE,
+  LeadStatus.NOT_ACCEPTED,
+  LeadStatus.NO_SHOW,
+  LeadStatus.CANCELLED_ARRIVAL,
+  LeadStatus.EMPLOYMENT_ENDED,
+];
+
+/** ליד בלי רכזת אחראית — נקבע ע"י גובגט או ע"י המועמד עצמו. */
+function isUnowned(handledBy: unknown): boolean {
+  const owner = typeof handledBy === "string" ? handledBy.trim().toLowerCase() : "";
+  return !owner || owner === GUBGET_EMAIL;
+}
+
+function UnownedTag() {
+  return (
+    <span className="ms-1 inline-block rounded bg-gray-100 px-1.5 text-[11px] font-medium text-gray-600">
+      ללא רכזת
+    </span>
+  );
+}
+
 /**
  * ראיון שעדיין דורש משהו מהרכזת. מי שכבר בוטל או לא הגיע — לא צריך להופיע
  * ברשימת היום, בדיוק כמו בלוח הראיונות שמנקה את עצמו.
@@ -171,7 +207,15 @@ export default async function MyDayPage() {
 
   const today = israelToday();
 
-  const [escRes, ivRes, pastIvRes, openRes, remRes] = await Promise.all([
+  // "שלי או של אף אחד": ראיון שגובגט או המועמד עצמו קבעו (קישור תיאום עצמי)
+  // נשאר בלי רכזת אחראית — handled_by ריק או של גובגט — ולכן לא הופיע לאף
+  // אחד. עכשיו הוא מופיע לכל הרכזות עד שמישהי רושמת תוצאה.
+  const mineOrUnowned = `handled_by.ilike.${email},handled_by.is.null,handled_by.eq.${GUBGET_EMAIL}`;
+  // eslint-disable-next-line react-hooks/purity -- server component, renders once per request
+  const quietCutoffMs = Date.now() - QUIET_HOURS * 3600_000;
+  const quietCutoff = new Date(quietCutoffMs).toISOString();
+
+  const [escRes, ivRes, pastIvRes, openRes, remRes, attnRes, quietRes] = await Promise.all([
     // אסקלציות שממתינות לי: מה שגובגט העביר ועדיין לא נלקח, או מה שכבר עליי
     supabase
       .from("leads")
@@ -182,8 +226,8 @@ export default async function MyDayPage() {
     // ראיונות היום — גבולות היום ב-Z, כי interview_date הוא שעון ישראל בתווית UTC
     supabase
       .from("leads")
-      .select("id, name, phone, status, interview_date, interview_type")
-      .ilike("handled_by", email)
+      .select("id, name, phone, status, interview_date, interview_type, handled_by")
+      .or(mineOrUnowned)
       .gte("interview_date", `${today}T00:00:00Z`)
       .lte("interview_date", `${today}T23:59:59Z`)
       .order("interview_date", { ascending: true })
@@ -192,9 +236,10 @@ export default async function MyDayPage() {
     // נבנה, אחד מהם מחודש מרץ — הם היו בלתי נראים כי שום דף לא חיפש אותם.
     supabase
       .from("leads")
-      .select("id, name, phone, sub_status, interview_date")
-      .ilike("handled_by", email)
-      .eq("status", LeadStatus.INTERVIEW_BOOKED)
+      // "דחה הגעה" נשאר בסטטוס הזה גם אחרי המועד החדש — גם הוא ממתין לתוצאה
+      .select("id, name, phone, status, sub_status, interview_date, handled_by")
+      .or(mineOrUnowned)
+      .in("status", [LeadStatus.INTERVIEW_BOOKED, LeadStatus.POSTPONED_ARRIVAL])
       .lt("interview_date", `${today}T00:00:00Z`)
       .order("interview_date", { ascending: true })
       .limit(200),
@@ -213,6 +258,29 @@ export default async function MyDayPage() {
       .eq("recruiter", email)
       .eq("is_completed", false)
       .limit(500),
+    // "דורש תשומת לב" — נדלק בהרבה מקומות (מועמד שביטל ראיון שקבע לבד, שאלה
+    // בוואטסאפ, מועמד קיים שהגיש שוב, תקופת אחריות שמסתיימת) אבל הוצג רק בתוך
+    // כרטיס הליד, כלומר רק למי שכבר פתחה אותו.
+    supabase
+      .from("leads")
+      .select("id, name, phone, status, attention_reason, needs_attention_at, handled_by")
+      .eq("needs_attention", true)
+      .not("needs_human_attention", "is", true)
+      .not("status", "in", `(${CLOSED_STATUSES.join(",")})`)
+      .or(mineOrUnowned)
+      .order("needs_attention_at", { ascending: true, nullsFirst: false })
+      .limit(200),
+    // שיחות של גובגט שהשתתקו: ליד בלי רכזת, באמצע התהליך, ששום הודעה לא
+    // יצאה אליו כבר QUIET_HOURS שעות. אף בלוק ואף חוק לא תפס אותם עד עכשיו.
+    supabase
+      .from("leads")
+      .select("id, name, phone, status, last_contact_at, created_at")
+      .or(`handled_by.is.null,handled_by.eq.${GUBGET_EMAIL}`)
+      .in("status", QUIET_STATUSES)
+      .not("needs_human_attention", "is", true)
+      .or(`last_contact_at.lt.${quietCutoff},last_contact_at.is.null`)
+      .order("last_contact_at", { ascending: true, nullsFirst: true })
+      .limit(200),
   ]);
 
   const escalations = (escRes.data ?? []).filter((l) => {
@@ -227,6 +295,15 @@ export default async function MyDayPage() {
   const pastInterviews = pastIvRes.data ?? [];
   const pastIds = new Set(pastInterviews.map((l) => l.id as string));
 
+  // אותה משימה מוצגת פעם אחת: ראיון שעבר קודם לדגל
+  const attention = (attnRes.data ?? []).filter((l) => !pastIds.has(l.id as string));
+  const attentionIds = new Set(attention.map((l) => l.id as string));
+
+  const quiet = (quietRes.data ?? [])
+    .map((l) => ({ ...l, lastTouch: (l.last_contact_at ?? l.created_at) as string }))
+    .filter((l) => !attentionIds.has(l.id as string))
+    .filter((l) => new Date(l.lastTouch).getTime() < quietCutoffMs);
+
   // "מעקב" שנשמר לפני שהמועד הפך לחובה — החלטה שנדחתה ואיש לא קבע מתי לחזור
   const remindedLeadIds = new Set((remRes.data ?? []).map((r) => r.lead_id as string));
   const undatedFollowUps = (openRes.data ?? []).filter(
@@ -240,7 +317,12 @@ export default async function MyDayPage() {
       lastTouch: (l.last_contact_at ?? l.handled_at ?? l.created_at) as string,
     }))
     // מי שכבר מופיע בבלוק אחר לא חוזר כאן — אותה משימה מוצגת פעם אחת
-    .filter((l) => !pastIds.has(l.id as string) && !undatedIds.has(l.id as string))
+    .filter(
+      (l) =>
+        !pastIds.has(l.id as string) &&
+        !undatedIds.has(l.id as string) &&
+        !attentionIds.has(l.id as string)
+    )
     .filter((l) => daysSince(l.lastTouch) >= STALE_DAYS)
     .sort((a, b) => new Date(a.lastTouch).getTime() - new Date(b.lastTouch).getTime());
 
@@ -249,6 +331,8 @@ export default async function MyDayPage() {
     escalations.length +
     interviews.length +
     pastInterviews.length +
+    attention.length +
+    quiet.length +
     undatedFollowUps.length +
     stale.length;
 
@@ -316,6 +400,7 @@ export default async function MyDayPage() {
                   {INTERVIEW_TYPE_LABELS[(l.interview_type as string) ?? ""] ?? "ראיון"}
                   {" · "}
                   {statusLabel(l.status as string)}
+                  {isUnowned(l.handled_by) && <UnownedTag />}
                 </>
               }
             />
@@ -344,13 +429,74 @@ export default async function MyDayPage() {
                     {l.sub_status ? ` · ${l.sub_status}` : ""}
                     {" · "}
                     <span className={days >= 14 ? "text-red-600 font-semibold" : ""}>
-                      עברו {days} ימים והסטטוס עדיין &quot;ראיון נקבע&quot;
+                      עברו {days} ימים והסטטוס עדיין &quot;{statusLabel(l.status as string)}&quot;
                     </span>
+                    {isUnowned(l.handled_by) && <UnownedTag />}
                   </>
                 }
               />
             );
           })}
+        </Block>
+
+        <Block
+          title="דורש תשומת לב"
+          count={attention.length}
+          hint="סימון שהמערכת הדליקה — לבדוק ולנקות בכרטיס"
+          border="border-amber-200"
+          head="bg-amber-50 text-amber-900"
+        >
+          {attention.map((l) => (
+            <LeadRow
+              key={l.id}
+              id={l.id as string}
+              name={l.name as string | null}
+              phone={l.phone as string | null}
+              tone="amber"
+              meta={
+                <>
+                  {(l.attention_reason as string | null) ?? "סומן לטיפול"}
+                  {" · "}
+                  {statusLabel(l.status as string)}
+                  {l.needs_attention_at && (
+                    <span className="text-slate-400">
+                      {" · "}
+                      {daysSince(l.needs_attention_at as string) === 0
+                        ? "היום"
+                        : `לפני ${daysSince(l.needs_attention_at as string)} ימים`}
+                    </span>
+                  )}
+                  {isUnowned(l.handled_by) && <UnownedTag />}
+                </>
+              }
+            />
+          ))}
+        </Block>
+
+        <Block
+          title="שיחות של גובגט שהשתתקו"
+          count={quiet.length}
+          hint={`בלי רכזת ובלי אף הודעה ${QUIET_HOURS} שעות — לקחת או לסגור`}
+          border="border-slate-200"
+          head="bg-slate-50 text-slate-800"
+        >
+          {quiet.map((l) => (
+            <LeadRow
+              key={l.id}
+              id={l.id as string}
+              name={l.name as string | null}
+              phone={l.phone as string | null}
+              meta={
+                <>
+                  {statusLabel(l.status as string)}
+                  {" · "}
+                  <span className={daysSince(l.lastTouch) >= 7 ? "text-red-600 font-semibold" : ""}>
+                    הודעה אחרונה לפני {daysSince(l.lastTouch)} ימים
+                  </span>
+                </>
+              }
+            />
+          ))}
         </Block>
 
         {/* התזכורות מביאות את עצמן — אותה רשימה שכבר קיימת ב"לידים של היום" */}
