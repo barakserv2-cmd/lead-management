@@ -9,6 +9,20 @@ import { getAuthedUser, getSupabaseAdmin } from "@/lib/api-auth";
 const INTERVIEW_PLUS = ["INTERVIEW_BOOKED", "ARRIVED", "HIRED", "STARTED", "NO_SHOW", "NOT_ACCEPTED", "EMPLOYMENT_ENDED"];
 const HIRED = ["HIRED", "STARTED", "EMPLOYMENT_ENDED"];
 const DAYS = 30;
+
+/**
+ * איזה מספר ווירטואלי יושב באיזה ערוץ (מסר סער, 27.09).
+ *
+ * בלי המיפוי הזה כל שיחה נרשמת פשוט כ"טלפון", וגוגל נמדדת רק לפי מי
+ * שטרח למלא טופס — הקבוצה הפחות מחויבת. מי שחיפש בגוגל והתקשר
+ * נספר כאילו הגיע מעצמו.
+ *
+ * אם מספר מועבר לערוץ אחר — יש לעדכן כאן, אחרת הדוח משקר.
+ */
+const NUMBER_CHANNEL: Record<string, string> = {
+  "0738021099": "אתר — שיחה",
+  "0738020145": "גוגל ממומן — שיחה",
+};
 // חלון שני, קצר — חציון של 30 יום גורר איתו כל השבוע שגובגט היה מנותק,
 // ואז המסך מראה "שעתיים" גם אחרי שהבעיה תוקנה.
 const WEEK = 7;
@@ -20,9 +34,9 @@ export default async function ChannelsPage() {
   const since = new Date(Date.now() - DAYS * 86400_000).toISOString();
 
   // paginate leads
-  const leads: { id: string; source: string | null; status: string; created_at: string }[] = [];
+  const leads: { id: string; source: string | null; status: string; created_at: string; source_number: string | null }[] = [];
   for (let f = 0; ; f += 1000) {
-    const { data } = await db.from("leads").select("id, source, status, created_at").gte("created_at", since).range(f, f + 999);
+    const { data } = await db.from("leads").select("id, source, status, created_at, source_number").gte("created_at", since).range(f, f + 999);
     if (data) leads.push(...data);
     if (!data || data.length < 1000) break;
   }
@@ -39,7 +53,8 @@ export default async function ChannelsPage() {
   type Row = { source: string; leads: number; interview: number; hired: number; resp: number[]; resp7: number[]; noReply: number };
   const map = new Map<string, Row>();
   for (const l of leads) {
-    const s = l.source || "לא ידוע";
+    // מספר מעקב גובר על תיוג המקור — הוא אומר מאיפה הגיעו, ולא איך פנו
+    const s = (l.source_number ? NUMBER_CHANNEL[l.source_number] : null) ?? (l.source || "לא ידוע");
     if (!map.has(s)) map.set(s, { source: s, leads: 0, interview: 0, hired: 0, resp: [], resp7: [], noReply: 0 });
     const row = map.get(s)!;
     row.leads++;

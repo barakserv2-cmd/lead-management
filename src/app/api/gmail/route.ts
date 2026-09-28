@@ -219,6 +219,19 @@ async function handleFetchEmails(req: NextRequest) {
             if (repeatErr) {
               console.error(`[Gmail] record_repeat_inquiry failed:`, repeatErr.message);
             }
+
+            // הרכזת ענתה לשיחה והקלידה את הליד בעצמה; המייל של מסקיו
+            // מגיע דקה אחריה ונתפס כאן ככפילות. עד עכשיו המספר הווירטואלי
+            // נזרק בדיוק כאן — ולכן השיחות שנענו, האיכותיות ביותר, היו
+            // היחידות בלי ייחוס לערוץ. רושמים רק אם השדה ריק, כדי לא לדרוס
+            // ייחוס קודם — הפנייה הראשונה היא זו שהביאה אותו.
+            if (maskyooCall?.virtualNumber) {
+              await supabase
+                .from("leads")
+                .update({ source_number: maskyooCall.virtualNumber })
+                .eq("id", existingByPhone[0].id)
+                .is("source_number", null);
+            }
             // Do NOT mark as read — lead emails must stay unread in the inbox.
             // Dedup is by original_email_id, so re-scanning is safe.
             continue;
@@ -229,6 +242,8 @@ async function handleFetchEmails(req: NextRequest) {
         const { data: insertedLead, error: insertError } = await supabase.from("leads").insert({
           name,
           phone,
+          // ייחוס ערוץ בעמודה, לא רק בטקסט ההערות (מיגרציה 00098)
+          source_number: maskyooCall?.virtualNumber ?? null,
           email: leadEmail,
           location,
           experience,
