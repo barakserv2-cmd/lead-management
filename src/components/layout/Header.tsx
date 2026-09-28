@@ -3,10 +3,10 @@
 import { useEffect, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { usePathname, useRouter } from "next/navigation";
-import { LogOut, Search } from "lucide-react";
+import { LogOut, Menu, Search } from "lucide-react";
 import { NAV_ITEMS } from "./Sidebar";
 
-export default function Header() {
+export default function Header({ onMenu }: { onMenu?: () => void }) {
   const router = useRouter();
   const pathname = usePathname();
   const [q, setQ] = useState("");
@@ -44,8 +44,16 @@ export default function Header() {
   }
 
   return (
-    <header className="h-14 sticky top-0 z-30 bg-white/90 backdrop-blur border-b border-gray-200 flex items-center justify-between gap-4 px-6">
-      <div className="flex items-center gap-2 text-[13px] min-w-0">
+    <header className="h-14 sticky top-0 z-30 bg-white/90 backdrop-blur border-b border-gray-200 flex items-center justify-between gap-2 sm:gap-4 px-3 sm:px-6">
+      <button
+        type="button"
+        onClick={onMenu}
+        aria-label="פתיחת תפריט"
+        className="lg:hidden w-9 h-9 shrink-0 inline-flex items-center justify-center rounded-md text-gray-600 hover:bg-gray-100"
+      >
+        <Menu className="w-5 h-5" strokeWidth={1.75} />
+      </button>
+      <div className="hidden md:flex items-center gap-2 text-[13px] min-w-0">
         <span className="text-gray-400">ברק שירותים</span>
         {current && (
           <>
@@ -55,7 +63,7 @@ export default function Header() {
         )}
       </div>
 
-      <div className="flex-1 max-w-sm">
+      <div className="flex-1 min-w-0 max-w-sm">
         <div className="relative">
           <Search className="absolute right-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" strokeWidth={1.75} />
           <input
@@ -68,16 +76,16 @@ export default function Header() {
             }}
             placeholder="חיפוש מועמד לפי שם או טלפון"
             aria-label="חיפוש מועמד"
-            className="w-full h-8 pr-8 pl-14 rounded-md border border-gray-200 bg-gray-50 text-[13px] placeholder:text-gray-400 focus:bg-white focus:outline-none focus:border-cyan-400 focus:ring-4 focus:ring-cyan-100 transition-colors"
+            className="w-full h-8 pr-8 pl-3 md:pl-14 rounded-md border border-gray-200 bg-gray-50 text-[13px] placeholder:text-gray-400 focus:bg-white focus:outline-none focus:border-cyan-400 focus:ring-4 focus:ring-cyan-100 transition-colors"
           />
-          <kbd className="absolute left-2 top-1/2 -translate-y-1/2 hidden sm:inline-flex items-center px-1.5 h-5 rounded border border-gray-200 bg-white text-[10px] text-gray-400 font-sans" dir="ltr">
+          <kbd className="absolute left-2 top-1/2 -translate-y-1/2 hidden md:inline-flex items-center px-1.5 h-5 rounded border border-gray-200 bg-white text-[10px] text-gray-400 font-sans" dir="ltr">
             Ctrl K
           </kbd>
         </div>
       </div>
 
-      <div className="flex items-center gap-2">
-        <div className="flex items-center gap-2 px-1.5 py-1 rounded-md">
+      <div className="flex items-center gap-1 sm:gap-2 shrink-0">
+        <div className="hidden sm:flex items-center gap-2 px-1.5 py-1 rounded-md">
           <div className="w-7 h-7 rounded-full bg-gray-100 ring-1 ring-gray-200 text-gray-700 flex items-center justify-center text-xs font-semibold">
             א
           </div>

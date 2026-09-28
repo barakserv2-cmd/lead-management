@@ -200,3 +200,10 @@ table td {
     @apply bg-background text-foreground;
   }
 }
+/* Tables scroll sideways inside their own frame on narrow screens instead
+   of stretching the whole page (which also pushed fixed dialogs off-centre).
+   Unlayered on purpose, so it wins over an `overflow-hidden` utility on the
+   same wrapper. */
+div:has(> table) {
+  overflow-x: auto;
+}

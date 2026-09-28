@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useEffect, useLayoutEffect } from "react";
+import { useState, useRef, useEffect, useLayoutEffect, useSyncExternalStore } from "react";
 import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import { changeLeadStatus } from "@/lib/changeLeadStatusClient";
@@ -82,6 +82,13 @@ function getStatusStyle(status: string) {
   };
 }
 
+// true רק בדפדפן אחרי ה-hydration — בשרת וברינדור הראשון false, כך שהפורטל
+// של החלונות לא יוצר אי-התאמה בין השרת ללקוח
+const noopSubscribe = () => () => {};
+function useIsClient() {
+  return useSyncExternalStore(noopSubscribe, () => true, () => false);
+}
+
 export function StatusSelect({
   leadId,
   leadName,
@@ -100,6 +107,7 @@ export function StatusSelect({
   const [status, setStatus] = useState(currentStatus);
   const [subStatus, setSubStatus] = useState<string | null>(currentSubStatus ?? null);
   const [open, setOpen] = useState(false);
+  const isClient = useIsClient();
   const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(null);
   const [loading, setLoading] = useState(false);
   const [showInterviewDialog, setShowInterviewDialog] = useState(false);
@@ -615,7 +623,7 @@ export function StatusSelect({
           <select
             value={subStatus ?? ""}
             onChange={(e) => handleSubStatusChange(e.target.value)}
-            className="mt-1 w-full h-6 text-[11px] border border-gray-200 rounded-md px-1.5 text-gray-600 bg-white truncate focus:outline-none focus:ring-1 focus:ring-cyan-400"
+            className="block mt-1 w-full h-6 text-[11px] border border-gray-200 rounded-md px-1.5 text-gray-600 bg-white truncate focus:outline-none focus:ring-1 focus:ring-cyan-400"
           >
             <option value="">— תת-סטטוס —</option>
             {SUB_STATUSES[status].map((sub) => (
@@ -633,91 +641,99 @@ export function StatusSelect({
         )}
       </div>
 
-      <InterviewScheduleDialog
-        open={showInterviewDialog}
-        onConfirm={handleInterviewConfirm}
-        onCancel={() => setShowInterviewDialog(false)}
-        loading={loading}
-      />
+      {/* החלונות נפתחים ישירות תחת body — לא בתוך תא הטבלה, שאחרת היו יורשים
+          ממנו את העיצוב (למשל שורה אחת בלי שבירה) ונשפכים מחוץ לחלון */}
+      {isClient &&
+        createPortal(
+          <>
+          <InterviewScheduleDialog
+            open={showInterviewDialog}
+            onConfirm={handleInterviewConfirm}
+            onCancel={() => setShowInterviewDialog(false)}
+            loading={loading}
+          />
 
-      {/* "דחה הגעה" — pick the new interview date */}
-      <InterviewScheduleDialog
-        open={showPostponeDialog}
-        onConfirm={handlePostponeConfirm}
-        onCancel={() => setShowPostponeDialog(false)}
-        loading={loading}
-      />
+          {/* "דחה הגעה" — pick the new interview date */}
+          <InterviewScheduleDialog
+            open={showPostponeDialog}
+            onConfirm={handlePostponeConfirm}
+            onCancel={() => setShowPostponeDialog(false)}
+            loading={loading}
+          />
 
-      <HiredConfirmDialog
-        open={showHiredDialog}
-        onConfirm={handleHiredConfirm}
-        onCancel={() => setShowHiredDialog(false)}
-        loading={loading}
-      />
+          <HiredConfirmDialog
+            open={showHiredDialog}
+            onConfirm={handleHiredConfirm}
+            onCancel={() => setShowHiredDialog(false)}
+            loading={loading}
+          />
 
-      {showEmploymentEndDialog && (
-        <EmploymentEndDialog
-          leadId={leadId}
-          leadName={leadName}
-          editOnly={status === LeadStatus.EMPLOYMENT_ENDED}
-          onConfirm={handleEmploymentEndConfirm}
-          onCancel={() => setShowEmploymentEndDialog(false)}
-          loading={loading}
-        />
-      )}
+          {showEmploymentEndDialog && (
+            <EmploymentEndDialog
+              leadId={leadId}
+              leadName={leadName}
+              editOnly={status === LeadStatus.EMPLOYMENT_ENDED}
+              onConfirm={handleEmploymentEndConfirm}
+              onCancel={() => setShowEmploymentEndDialog(false)}
+              loading={loading}
+            />
+          )}
 
-      {sentToInterview && (
-        <SentToInterviewDialog
-          leadId={leadId}
-          leadName={leadName ?? ""}
-          onDone={() => {
-            setSentToInterview(false);
-            setSubStatus(SENT_TO_INTERVIEW);
-            setToast({ message: "נשלח לראיון — נשמר", type: "success" });
-          }}
-          onCancel={() => setSentToInterview(false)}
-        />
-      )}
+          {sentToInterview && (
+            <SentToInterviewDialog
+              leadId={leadId}
+              leadName={leadName ?? ""}
+              onDone={() => {
+                setSentToInterview(false);
+                setSubStatus(SENT_TO_INTERVIEW);
+                setToast({ message: "נשלח לראיון — נשמר", type: "success" });
+              }}
+              onCancel={() => setSentToInterview(false)}
+            />
+          )}
 
-      {callbackFor && (
-        <CallbackReminderDialog
-          leadName={leadName}
-          reason={callbackFor}
-          onConfirm={handleCallbackConfirm}
-          onSkip={() => { setCallbackFor(null); setCallbackRequired(false); }}
-          loading={loading}
-          required={callbackRequired}
-        />
-      )}
+          {callbackFor && (
+            <CallbackReminderDialog
+              leadName={leadName}
+              reason={callbackFor}
+              onConfirm={handleCallbackConfirm}
+              onSkip={() => { setCallbackFor(null); setCallbackRequired(false); }}
+              loading={loading}
+              required={callbackRequired}
+            />
+          )}
 
-      {showStartWorkDialog && (
-        <StartWorkDialog
-          leadId={leadId}
-          leadName={leadName}
-          editOnly={status === LeadStatus.STARTED}
-          onConfirm={handleStartWorkConfirm}
-          onCancel={() => setShowStartWorkDialog(false)}
-          loading={loading}
-        />
-      )}
+          {showStartWorkDialog && (
+            <StartWorkDialog
+              leadId={leadId}
+              leadName={leadName}
+              editOnly={status === LeadStatus.STARTED}
+              onConfirm={handleStartWorkConfirm}
+              onCancel={() => setShowStartWorkDialog(false)}
+              loading={loading}
+            />
+          )}
 
-      {showRejectionDialog && (
-        <RejectionReasonDialog
-          open
-          leadName={leadName}
-          onConfirm={handleRejectionConfirm}
-          onCancel={() => setShowRejectionDialog(false)}
-          loading={loading}
-        />
-      )}
+          {showRejectionDialog && (
+            <RejectionReasonDialog
+              open
+              leadName={leadName}
+              onConfirm={handleRejectionConfirm}
+              onCancel={() => setShowRejectionDialog(false)}
+              loading={loading}
+            />
+          )}
 
-      <SubStatusPickerDialog
-        open={subStatusDialog.open}
-        config={subStatusDialog.targetStatus ? SUB_STATUS_DIALOG_CONFIG[subStatusDialog.targetStatus] ?? null : null}
-        onConfirm={handleSubStatusConfirm}
-        onCancel={() => setSubStatusDialog({ open: false, targetStatus: null })}
-        loading={loading}
-      />
+          <SubStatusPickerDialog
+            open={subStatusDialog.open}
+            config={subStatusDialog.targetStatus ? SUB_STATUS_DIALOG_CONFIG[subStatusDialog.targetStatus] ?? null : null}
+            onConfirm={handleSubStatusConfirm}
+            onCancel={() => setSubStatusDialog({ open: false, targetStatus: null })}
+            loading={loading}
+          />
+          </>,
+          document.body,
+        )}
     </>
   );
 }
