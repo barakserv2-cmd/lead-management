@@ -684,7 +684,7 @@ export function LeadDocumentsSection({ leadId }: { leadId: string }) {
       {/* דיאלוג שדות רכזת לפני שליחה */}
       {recruiterDialog && (
         <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-5">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-5 max-h-[calc(100dvh-2rem)] overflow-y-auto">
             <div className="font-bold text-gray-800 mb-1">
               {recruiterDialog.name} — פרטי ההעסקה
             </div>

@@ -57,7 +57,7 @@ export function InterviewScheduleDialog({
 
       {/* Modal */}
       <div
-        className="relative bg-white rounded-xl shadow-2xl border border-gray-200 w-full max-w-md mx-4 p-6"
+        className="relative bg-white rounded-xl shadow-2xl border border-gray-200 w-full max-w-md mx-4 p-6 max-h-[calc(100dvh-2rem)] overflow-y-auto"
         dir="rtl"
       >
         {/* Header */}

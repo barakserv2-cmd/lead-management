@@ -168,7 +168,7 @@ export function ChatWidget() {
     <>
       {open && (
         <div
-          className="fixed bottom-20 left-4 z-50 w-[380px] max-h-[600px] bg-white rounded-2xl shadow-2xl border border-gray-200 flex flex-col overflow-hidden"
+          className="fixed bottom-20 left-4 z-50 w-[380px] max-w-[calc(100vw-2rem)] max-h-[min(600px,calc(100dvh-6rem))] bg-white rounded-2xl shadow-2xl border border-gray-200 flex flex-col overflow-hidden"
           dir="rtl"
         >
           {/* Header */}

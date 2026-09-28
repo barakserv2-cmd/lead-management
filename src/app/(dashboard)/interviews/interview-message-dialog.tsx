@@ -61,7 +61,7 @@ export function InterviewMessageDialog({ name, phone, interviewDate, jobTitle, i
       {open && (
         <div className="fixed inset-0 z-[200] flex items-center justify-center">
           <div className="absolute inset-0 bg-black/40" onClick={() => setOpen(false)} />
-          <div dir="rtl" className="relative bg-white rounded-xl shadow-2xl border border-slate-200 w-full max-w-lg mx-4 p-5">
+          <div dir="rtl" className="relative bg-white rounded-xl shadow-2xl border border-slate-200 w-full max-w-lg mx-4 p-5 max-h-[calc(100dvh-2rem)] overflow-y-auto">
             <div className="flex items-start justify-between gap-3 mb-3">
               <div>
                 <h3 className="text-lg font-bold text-slate-900">הודעת אישור ראיון</h3>

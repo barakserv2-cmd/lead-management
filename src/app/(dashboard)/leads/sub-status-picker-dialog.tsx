@@ -83,7 +83,7 @@ export function SubStatusPickerDialog({
       <div className="absolute inset-0 bg-black/40" onClick={handleCancel} />
 
       <div
-        className="relative bg-white rounded-xl shadow-2xl border border-gray-200 w-full max-w-md mx-4 p-6"
+        className="relative bg-white rounded-xl shadow-2xl border border-gray-200 w-full max-w-md mx-4 p-6 max-h-[calc(100dvh-2rem)] overflow-y-auto"
         dir="rtl"
       >
         <div className="flex items-center gap-3 mb-5">

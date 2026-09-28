@@ -3,7 +3,7 @@ import { AutomationClient } from "./automation-client";
 // מסך הניהול של מנוע החוקים — "ספר מנוע החוקים", פרק 7.
 export default function AutomationPage() {
   return (
-    <div className="p-6 max-w-3xl" dir="rtl">
+    <div className="max-w-3xl" dir="rtl">
       <h1 className="text-xl font-semibold text-gray-900 tracking-tight mb-1">אוטומציה — מנוע החוקים</h1>
       <p className="text-sm text-gray-500 mb-6">
         כל חוק בנוי מ&quot;מתי? על מי? מה עושים?&quot;. המנוע רץ כל 5 דקות, פועל רק
