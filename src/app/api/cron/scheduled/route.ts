@@ -149,9 +149,23 @@ async function monitorInstances(db: ReturnType<typeof admin>): Promise<number> {
       label: (a.label as string) ?? null,
     };
     let state: InstanceState = "unknown";
+    // אם החשבון לא נמצא, getAccountByInstance מחזיר את חשבון העסק במקום —
+    // ואז הבדיקה רצה על מספר אחר לגמרי ונרשמת על זה שלא נבדק.
+    // עדיף לדלג מלדווח על משהו שלא נמדד.
+    if (acc.instanceId !== String(a.instance_id)) {
+      console.error(
+        `[cron/scheduled] חשבון ${a.instance_id} לא נמצא — הבדיקה היתה נופלת על ${acc.instanceId}; מדלג`
+      );
+      continue;
+    }
     try {
       state = await getInstanceState(acc);
-    } catch {
+    } catch (e) {
+      // הבליעה שקטה הפכה כל תקלה ל-"unknown" בלי שום דרך לדעת למה.
+      console.error(
+        `[cron/scheduled] בדיקת מצב נכשלה ל-${acc.userEmail ?? a.instance_id} (${acc.provider}/${acc.authStyle}):`,
+        e instanceof Error ? e.message.slice(0, 200) : String(e)
+      );
       state = "unknown";
     }
     checked++;
