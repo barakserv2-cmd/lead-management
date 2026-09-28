@@ -13,7 +13,9 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { getAccountForEmail, sendWhatsAppMessage, businessAccount } from "@/lib/whatsappService";
 import { LeadStatus } from "@/lib/stateMachine";
 
-export const CHECKIN_DAYS = [3, 14, 30] as const;
+// 60 ו-90: רוב העובדים עוזבים אחרי חודש עד שלושה ("מיצו", מצאו תנאים טובים
+// יותר, אילת לא התאימה). הבדיקה ביום 60 מציעה מעבר פנימי לפני שמחליטים לעזוב.
+export const CHECKIN_DAYS = [3, 14, 30, 60, 90] as const;
 
 export function checkinOwnerEmail(): string {
   return (process.env.CHECKIN_OWNER_EMAIL ?? "barakserv@eilatjobs.com").trim().toLowerCase();
@@ -32,7 +34,13 @@ function checkinMessage(day: number, name: string | null, client: string | null)
   if (day === 14) {
     return `היי ${n}, מלי מברק שירותים 🙂 כבר שבועיים${at} — איך אתה מרגיש? יש משהו שהיית רוצה שנשפר?`;
   }
-  return `היי ${n}! חודש${at} 🎉 כיף לראות אותך מחזיק/ה — הכל מסתדר? אני כאן אם צריך משהו.`;
+  if (day === 30) {
+    return `היי ${n}! חודש${at} 🎉 כיף לראות אותך מחזיק/ה — הכל מסתדר? אני כאן אם צריך משהו.`;
+  }
+  if (day === 60) {
+    return `היי ${n}, מלי מברק שירותים 😊 כבר חודשיים${at}! איך אתה מרגיש? אם בא לך לגוון — תפקיד אחר, מקום אחר או משמרות אחרות — ספר/י לי, יש לנו הרבה אפשרויות באילת 🙏`;
+  }
+  return `היי ${n}! שלושה חודשים${at} 🎉 זה הישג אמיתי. הכל טוב? אם יש משהו שיעזור לך להמשיך בכיף, אני כאן.`;
 }
 
 /** תאריך היום לפי לוח ישראל (YYYY-MM-DD). */
@@ -110,7 +118,7 @@ export async function runPostPlacementCare(db: SupabaseClient): Promise<CareSumm
   // כדגלים). ברגע שהמספר מקושר ב"הוואטסאפ שלי" — הכל נדלק לבד.
   const sender = await getAccountForEmail(owner);
 
-  // ── Check-ins בימים 3/14/30 ────────────────────────────────
+  // ── Check-ins בימים CHECKIN_DAYS ───────────────────────────
   const candidates: { lead: PlacedLead; day: number; key: string }[] = [];
   for (const lead of leads) {
     if (!sender) break;

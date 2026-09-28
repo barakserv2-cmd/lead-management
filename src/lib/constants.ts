@@ -145,6 +145,35 @@ export const INTERVIEW_REJECTION_REASONS = [
   "אחר",
 ] as const;
 
+// ── Employment end reasons ("סיום העסקה") ──────────────────
+// הקוד נשמר ב-leads.employment_end_reason. planned = סיום טבעי (השלים
+// תקופה / התגייס) — לא נספר כעזיבה מוקדמת בדוח השימור.
+
+export const EMPLOYMENT_END_REASONS = [
+  { code: "completed_term", label: "השלים את התקופה", planned: true },
+  { code: "army_draft", label: "התגייס לצבא", planned: true },
+  { code: "burned_out", label: "מיצה / רצה לחזור הביתה", planned: false },
+  { code: "eilat_not_for_me", label: "אילת לא התאימה לו", planned: false },
+  { code: "better_offer", label: "מצא עבודה עם תנאים טובים יותר", planned: false },
+  { code: "went_direct", label: "עבר לעבוד ישירות אצל המעסיק", planned: false },
+  { code: "employer_ended", label: "המעסיק סיים את ההעסקה", planned: false },
+  { code: "housing", label: "בעיה במגורים", planned: false },
+  { code: "personal", label: "סיבה אישית / משפחתית", planned: false },
+  { code: "never_started", label: "לא התחיל לעבוד בפועל", planned: false },
+  { code: "other", label: "אחר", planned: false },
+] as const;
+
+export type EmploymentEndReason = (typeof EMPLOYMENT_END_REASONS)[number]["code"];
+
+export function isEmploymentEndReason(v: unknown): v is EmploymentEndReason {
+  return EMPLOYMENT_END_REASONS.some((r) => r.code === v);
+}
+
+export function employmentEndReasonLabel(code: string | null | undefined): string {
+  if (!code) return "לא צוין";
+  return EMPLOYMENT_END_REASONS.find((r) => r.code === code)?.label ?? code;
+}
+
 // ── Conversation Mode enums ─────────────────────────────────
 
 export const INTERACTION_TYPES = {

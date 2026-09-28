@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { HardHat, Home, Repeat, Filter, ShieldCheck, Folder, Wallet, type LucideIcon } from "lucide-react";
+import { HardHat, Home, Repeat, Filter, ShieldCheck, Folder, Wallet, Anchor, type LucideIcon } from "lucide-react";
 import { getAuthedUser, getSupabaseAdmin } from "@/lib/api-auth";
 import { LEAD_STATUSES } from "@/lib/constants";
 import type { Lead } from "@/types/leads";
@@ -9,15 +9,17 @@ import { TransfersContent, type TransferRow } from "./transfers-content";
 import { FunnelContent } from "./funnel-content";
 import { FinanceContent } from "./finance-content";
 import { GuaranteeContent } from "./guarantee-content";
+import { RetentionContent } from "./retention-content";
 import { computeAnalytics, computeFinance } from "@/lib/analytics";
 import { computeGuaranteeReport } from "@/lib/postPlacement";
+import { computeRetention } from "@/lib/retention";
 import { isFinanceUser } from "@/lib/finance";
 import { computeSourceFolders } from "@/lib/sourceFolders";
 import { FoldersView } from "../leads/folders-view";
 
 export const dynamic = "force-dynamic";
 
-type Tab = "hired" | "advances" | "transfers" | "funnel" | "finance" | "guarantee" | "sources";
+type Tab = "hired" | "advances" | "transfers" | "funnel" | "finance" | "guarantee" | "retention" | "sources";
 
 const TABS: { key: Tab; label: string; icon: LucideIcon }[] = [
   { key: "hired", label: "דוח מועסקים", icon: HardHat },
@@ -25,6 +27,7 @@ const TABS: { key: Tab; label: string; icon: LucideIcon }[] = [
   { key: "transfers", label: "דוח העברות בין עבודות", icon: Repeat },
   { key: "funnel", label: "משפך", icon: Filter },
   { key: "guarantee", label: "אחריות", icon: ShieldCheck },
+  { key: "retention", label: "שימור", icon: Anchor },
   { key: "sources", label: "תיקיות לפי גורם גיוס", icon: Folder },
 ];
 
@@ -62,7 +65,7 @@ export default async function ReportsPage({
   const authed = await getAuthedUser();
   const financeAllowed = isFinanceUser(authed?.email);
   const tab: Tab =
-    rawTab === "advances" || rawTab === "transfers" || rawTab === "funnel" || rawTab === "guarantee" || rawTab === "sources"
+    rawTab === "advances" || rawTab === "transfers" || rawTab === "funnel" || rawTab === "guarantee" || rawTab === "retention" || rawTab === "sources"
       ? rawTab
       : rawTab === "finance" && financeAllowed
         ? "finance"
@@ -125,6 +128,9 @@ export default async function ReportsPage({
   } else if (tab === "guarantee") {
     const rows = await computeGuaranteeReport(supabase);
     content = <GuaranteeContent rows={rows} />;
+  } else if (tab === "retention") {
+    const report = await computeRetention(supabase);
+    content = <RetentionContent data={report} />;
   } else if (tab === "finance") {
     const analytics = await computeAnalytics(supabase, fromIso, toIso);
     const finance = await computeFinance(supabase, fromIso, toIso, analytics.sources);

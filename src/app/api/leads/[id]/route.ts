@@ -6,6 +6,7 @@ import { diffFields, logAudit } from "@/lib/audit";
 import { normalizePhone } from "@/lib/phone";
 import { findLeadByPhone, duplicatePhonePayload, isPhoneUniqueViolation } from "@/lib/leadPhoneGuard";
 import { normalizeEmployerName } from "@/lib/employerNormalization";
+import { isEmploymentEndReason } from "@/lib/constants";
 
 // עדכון פרטי מועמד מחלון העריכה הצף. fetch+API ולא server action —
 // הדפוס הקבוע בפרויקט (Next 16 מפיל טפסים דרך server actions).
@@ -30,6 +31,9 @@ const EDITABLE_FIELDS = new Set([
   "start_date",
   "arrival_date",
   "employment_end_date",
+  // סיבת סיום העסקה (00092) — נערכת מדיאלוג הסיום כשהמועמד כבר ב"סיום העסקה"
+  "employment_end_reason",
+  "employment_end_notes",
   // הערות חופשיות — הוצגו בכרטיס לקריאה בלבד ולא היה שום מסך שמאפשר לתקן
   "notes",
   "followup_notes",
@@ -42,7 +46,7 @@ const DATE_FIELDS = new Set(["start_date", "arrival_date", "employment_end_date"
 const SNAPSHOT_COLUMNS =
   "name, phone, email, job_title, location, experience, age, screening_score, interview_date, " +
   "interview_notes, hired_client, hired_position, rejection_reason, start_date, arrival_date, " +
-  "employment_end_date, notes, followup_notes";
+  "employment_end_date, employment_end_reason, employment_end_notes, notes, followup_notes";
 
 // קריאת השדות שהדיאלוגים צריכים כדי לפתוח עם הערך הקיים ולא לדרוס אותו
 // (למשל תאריך תחילת עבודה כשמעבירים ל"התחיל לעבוד").
@@ -134,6 +138,12 @@ export async function PATCH(
         return NextResponse.json({ error: "סוג ראיון לא חוקי" }, { status: 400 });
       }
       updateData.interview_type = s || null;
+    } else if (key === "employment_end_reason") {
+      const s = String(value ?? "").trim();
+      if (s && !isEmploymentEndReason(s)) {
+        return NextResponse.json({ error: "סיבת סיום לא חוקית" }, { status: 400 });
+      }
+      updateData.employment_end_reason = s || null;
     } else if (key === "hired_client") {
       const s = String(value ?? "").trim();
       updateData.hired_client = s ? (await normalizeEmployerName(s)).normalized : null;

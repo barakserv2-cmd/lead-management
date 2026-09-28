@@ -37,6 +37,9 @@ export interface Lead {
   start_date: string | null;
   /** set when the lead moves to EMPLOYMENT_ENDED */
   employment_end_date: string | null;
+  /** code from EMPLOYMENT_END_REASONS (00092); null on older records */
+  employment_end_reason?: string | null;
+  employment_end_notes?: string | null;
   recruitment_status: RecruitmentStatus;
   rejection_reason: string | null;
   hired_client: string | null;
