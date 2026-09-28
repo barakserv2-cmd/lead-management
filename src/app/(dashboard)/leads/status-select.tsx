@@ -560,7 +560,7 @@ export function StatusSelect({
           type="button"
           onClick={() => setOpen(!open)}
           disabled={loading}
-          className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold cursor-pointer transition-all hover:ring-2 hover:ring-offset-1 hover:ring-gray-300 ${current.color} ${loading ? "opacity-50" : ""}`}
+          className={`inline-flex items-center gap-1.5 h-6 px-2 rounded-md text-xs font-medium cursor-pointer transition-colors bg-white text-gray-700 ring-1 ring-inset ring-gray-200 hover:bg-gray-50 hover:ring-gray-300 ${loading ? "opacity-50" : ""}`}
         >
           <span className={`w-1.5 h-1.5 rounded-full ${current.dot}`} />
           {current.label}

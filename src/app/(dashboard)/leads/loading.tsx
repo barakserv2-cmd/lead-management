@@ -10,14 +10,14 @@ export default function LeadsLoading() {
       </div>
 
       {/* טאבים */}
-      <div className="flex items-center gap-1 mb-5 bg-gray-100 rounded-lg p-1 w-fit">
-        <div className="h-9 w-36 bg-white rounded-md shadow-sm" />
-        <div className="h-9 w-40 bg-gray-100 rounded-md" />
-        <div className="h-9 w-24 bg-gray-100 rounded-md" />
+      <div className="flex items-center gap-6 mb-5 pb-2.5 border-b border-gray-200">
+        <div className="h-4 w-28 bg-gray-200 rounded" />
+        <div className="h-4 w-24 bg-gray-100 rounded" />
+        <div className="h-4 w-20 bg-gray-100 rounded" />
       </div>
 
       {/* שורות טבלה */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+      <div className="bg-white rounded-xl border border-gray-200 border-gray-200 overflow-hidden">
         <div className="h-11 bg-slate-50/80 border-b border-slate-200" />
         {Array.from({ length: 10 }).map((_, i) => (
           <div key={i} className="flex items-center gap-4 px-4 py-3.5 border-b border-gray-100">

@@ -335,7 +335,7 @@ export function LeadEventsSection({ leadId }: { leadId: string }) {
               )}
 
               <div className="text-[10px] text-gray-400 mt-1">
-                מאת: {ev.actor === "bot" ? "🤖 גובגט" : ev.author}
+                מאת: {ev.actor === "bot" ? "גובגט" : ev.author}
               </div>
             </div>
           ))}

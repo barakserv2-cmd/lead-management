@@ -83,7 +83,7 @@ export function InterviewDialog({
           <Button
             onClick={handleConfirm}
             disabled={!date || loading}
-            className="bg-purple-600 hover:bg-purple-700"
+            className="bg-cyan-600 hover:bg-cyan-700"
           >
             {loading ? "שומר..." : "אישור"}
           </Button>

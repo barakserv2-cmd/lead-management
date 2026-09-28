@@ -12,9 +12,28 @@ import { LeadStatus } from "@/lib/stateMachine";
 import { InterviewsContent } from "../interviews/interviews-content";
 import { fetchInterviewRows, interviewWindow } from "@/lib/interviewsBoard";
 import { EscalationsView, type EscalationRow } from "./escalations-view";
+import { PipelineStrip } from "./pipeline-strip";
 import { Suspense } from "react";
 
 const PAGE_SIZE = 50;
+
+// "1–31 באוג׳ 2026" / "12 בספט׳ 2026" — טווח התאריכים בשפה של אנשים,
+// כדי שהכותרת תגיד בדיוק מה מוצג ולא רק את ה-URL.
+function rangeLabel(from: string | null, to: string | null): string | null {
+  if (!from && !to) return null;
+  const d = (s: string) => new Date(`${s}T12:00:00Z`);
+  const fmt = (s: string, opts: Intl.DateTimeFormatOptions) =>
+    new Intl.DateTimeFormat("he-IL", { timeZone: "UTC", ...opts }).format(d(s));
+  const full = { day: "numeric", month: "short", year: "numeric" } as const;
+  if (from && !to) return `מ-${fmt(from, full)}`;
+  if (!from && to) return `עד ${fmt(to, full)}`;
+  if (from === to) return fmt(from!, full);
+  const [fy, fm] = from!.split("-");
+  const [ty, tm] = to!.split("-");
+  if (fy === ty && fm === tm) return `${Number(from!.slice(8))}–${fmt(to!, full)}`;
+  if (fy === ty) return `${fmt(from!, { day: "numeric", month: "short" })} – ${fmt(to!, full)}`;
+  return `${fmt(from!, full)} – ${fmt(to!, full)}`;
+}
 
 // טאבים עליונים: תור עבודה (ברירת מחדל) / ראיון טלפון / אסקלציות / כל הלידים
 // ("תיקיות לפי גורם גיוס" עברה לדוחות — /reports?tab=sources)
@@ -26,29 +45,39 @@ async function LeadsTabs({ active, newCount }: { active: "queue" | "phone" | "es
     .eq("needs_human_attention", true);
   const escCount = escRaw ?? 0;
   const tabs = [
-    { key: "queue" as const, href: "/leads", label: `חדשים לטיפול${newCount > 0 ? ` (${newCount})` : ""}` },
-    { key: "phone" as const, href: "/leads?view=phone", label: "ראיון טלפון" },
-    { key: "escalations" as const, href: "/leads?view=escalations", label: `אסקלציות${escCount > 0 ? ` (${escCount})` : ""}` },
-    { key: "all" as const, href: "/leads?source=__all__", label: "כל הלידים" },
+    { key: "queue" as const, href: "/leads", label: "חדשים לטיפול", count: newCount },
+    { key: "phone" as const, href: "/leads?view=phone", label: "ראיון טלפון", count: 0 },
+    { key: "escalations" as const, href: "/leads?view=escalations", label: "אסקלציות", count: escCount },
+    { key: "all" as const, href: "/leads?source=__all__", label: "כל הלידים", count: 0 },
   ];
   return (
-    <div className="flex items-center gap-1 mb-5 bg-gray-100 rounded-lg p-1 w-fit">
-      {tabs.map((tab) => (
-        <Link
-          key={tab.key}
-          href={tab.href}
-          className={`px-4 py-2 rounded-md text-sm font-semibold transition-colors ${
-            active === tab.key
-              ? "bg-white text-gray-900 shadow-sm"
-              : "text-gray-500 hover:text-gray-800"
-          } ${tab.key === "queue" && newCount > 0 && active !== "queue" ? "text-blue-600" : ""} ${
-            tab.key === "escalations" && escCount > 0 && active !== "escalations" ? "text-red-600" : ""
-          }`}
-        >
-          {tab.label}
-        </Link>
-      ))}
-    </div>
+    <nav className="flex items-center gap-6 mb-5 border-b border-gray-200" aria-label="תצוגות לידים">
+      {tabs.map((tab) => {
+        const isActive = active === tab.key;
+        const alert = tab.key === "escalations" && escCount > 0;
+        return (
+          <Link
+            key={tab.key}
+            href={tab.href}
+            aria-current={isActive ? "page" : undefined}
+            className={`relative -mb-px flex items-center gap-2 pb-2.5 pt-1 text-[13px] font-medium border-b-2 transition-colors ${
+              isActive ? "border-gray-900 text-gray-900" : "border-transparent text-gray-500 hover:text-gray-800"
+            }`}
+          >
+            {tab.label}
+            {tab.count > 0 && (
+              <span
+                className={`min-w-5 h-5 px-1.5 inline-flex items-center justify-center rounded-md text-[11px] font-semibold tabular-nums ${
+                  alert ? "bg-red-50 text-red-700 ring-1 ring-red-200" : "bg-gray-100 text-gray-600"
+                }`}
+              >
+                {tab.count.toLocaleString("he-IL")}
+              </span>
+            )}
+          </Link>
+        );
+      })}
+    </nav>
   );
 }
 
@@ -108,7 +137,7 @@ export default async function LeadsPage({
       <div>
         <div className="flex items-center justify-between mb-6">
           <div>
-            <h1 className="text-2xl font-bold">אסקלציות</h1>
+            <h1 className="text-xl font-semibold text-gray-900 tracking-tight">אסקלציות</h1>
             <p className="text-sm text-gray-500 mt-0.5">שיחות שגובגט העביר לרכזת — גובגט מוקפא עד שתאשרו לו להמשיך</p>
           </div>
           <AddLeadDialog />
@@ -130,8 +159,8 @@ export default async function LeadsPage({
       <div>
         <div className="flex items-center justify-between mb-6">
           <div>
-            <h1 className="text-2xl font-bold">ראיון טלפון</h1>
-            <p className="text-sm text-gray-500 mt-0.5">שיחות סינון טלפוניות שגובגט תיאם — לביצוע ע"י הרכזות</p>
+            <h1 className="text-xl font-semibold text-gray-900 tracking-tight">ראיון טלפון</h1>
+            <p className="text-sm text-gray-500 mt-0.5">שיחות סינון טלפוניות שגובגט תיאם — לביצוע ע״י הרכזות</p>
           </div>
           <AddLeadDialog />
         </div>
@@ -195,6 +224,7 @@ export default async function LeadsPage({
     }
   }
   const myId = session?.user?.id ?? "00000000-0000-0000-0000-000000000000";
+  // eslint-disable-next-line react-hooks/purity -- server component, renders once per request
   const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
   const ownershipFilter = `assigned_to.is.null,assigned_at.lt.${cutoff},assigned_to.eq.${myId}`;
 
@@ -339,10 +369,23 @@ export default async function LeadsPage({
 
   const isNamedFolder = !isQueue && sourceParam !== "__all__";
 
+  // התור מסנן בשקט ל"ממתין לנציג". עם טווח תאריכים זה מטעה — "אוגוסט"
+  // נראה כמו כל הלידים של אוגוסט, אבל מוצגים רק אלה שעוד לא טופלו.
+  const isDefaultQueue = isQueue && statusFilter.length === 0;
+  const range = rangeLabel(dateFrom, dateTo);
+  const inRangeTotal = Object.values(statusCounts).reduce((n, c) => n + c, 0);
+  const allInRangeHref = (() => {
+    const p = new URLSearchParams();
+    for (const [k, v] of Object.entries(params)) if (v && k !== "page" && k !== "view") p.set(k, v);
+    p.set("source", "__all__");
+    return `/leads?${p.toString()}`;
+  })();
+  const title = isDefaultQueue ? folderLabel : isQueue ? "לידים לפי סטטוס" : folderLabel;
+
   return (
     <div>
-      <div className="flex items-center justify-between mb-6">
-        <div className="flex items-center gap-3">
+      <div className="flex items-start justify-between gap-4 mb-5">
+        <div className="flex items-center gap-3 min-w-0">
           {isNamedFolder && (
             <Link
               href="/reports?tab=sources"
@@ -354,33 +397,56 @@ export default async function LeadsPage({
               כל התיקיות
             </Link>
           )}
-          <h1 className="text-2xl font-bold">{folderLabel}</h1>
+          <div className="min-w-0">
+            <h1 className="text-xl font-semibold text-gray-900 tracking-tight">{title}</h1>
+            <p className="text-sm text-gray-500 mt-0.5">
+              {range ? <>נכנסו {range} · </> : null}
+              <span className="tabular-nums">{totalCount.toLocaleString("he-IL")}</span> לידים מוצגים
+            </p>
+          </div>
         </div>
-        <div className="flex items-center gap-3">
-          <span className="text-sm text-gray-500">{totalCount} לידים</span>
-          <AddLeadDialog />
-        </div>
+        <AddLeadDialog />
       </div>
       {!isNamedFolder && <LeadsTabs active={isQueue ? "queue" : "all"} newCount={newCount} />}
-      {isQueue && (
+
+      {isDefaultQueue && range && inRangeTotal > totalCount ? (
+        <div className="flex items-center justify-between gap-3 flex-wrap mb-4 px-4 py-2.5 rounded-lg border border-amber-200 bg-amber-50/60 text-[13px]">
+          <span className="text-amber-900">
+            מוצגים רק <b className="tabular-nums">{totalCount.toLocaleString("he-IL")}</b> לידים שעדיין ממתינים לנציג —
+            מתוך <b className="tabular-nums">{inRangeTotal.toLocaleString("he-IL")}</b> שנכנסו {range}.
+          </span>
+          <Link
+            href={allInRangeHref}
+            className="h-7 inline-flex items-center px-2.5 rounded-md bg-white border border-gray-300 text-gray-700 text-xs font-medium shadow-xs hover:bg-gray-50 transition-colors"
+          >
+            הצג את כל הלידים בטווח ←
+          </Link>
+        </div>
+      ) : isDefaultQueue ? (
         <p className="text-sm text-gray-500 -mt-2 mb-4">
-          כל ליד חדש שנכנס מופיע כאן למעלה. טיפלת? שנה סטטוס והוא יורד מהרשימה. כתום/אדום = ממתין יותר מדי.
+          ליד חדש מופיע כאן למעלה ויורד מהרשימה כשמשנים לו סטטוס. כתום/אדום = ממתין יותר מדי.
           {awaitingReply > 0 && (
             <>
               {" "}
               <span className="text-indigo-700 font-medium">
-                🤖 {awaitingReply} מתוכם כבר קיבלו הודעה מגובגט וממתינים לתשובה — הם ירדו מהרשימה רק כשיענו.
+                {awaitingReply} מתוכם כבר קיבלו הודעה מגובגט וממתינים לתשובה — הם ירדו מהרשימה רק כשיענו.
               </span>
             </>
           )}
         </p>
-      )}
+      ) : null}
+
       <Suspense fallback={null}>
-        <SearchInput />
+        <PipelineStrip statusCounts={statusCounts} />
       </Suspense>
-      <Suspense fallback={null}>
-        <FilterBar allTags={allTags} recruiters={recruiters} statusCounts={statusCounts} totalCount={totalCount} />
-      </Suspense>
+      <div className="mb-3 flex flex-col gap-2.5">
+        <Suspense fallback={null}>
+          <SearchInput />
+        </Suspense>
+        <Suspense fallback={null}>
+          <FilterBar allTags={allTags} recruiters={recruiters} statusCounts={statusCounts} totalCount={totalCount} />
+        </Suspense>
+      </div>
       <Suspense fallback={null}>
         <Pagination
           currentPage={currentPage}
@@ -390,7 +456,17 @@ export default async function LeadsPage({
           className="mb-4"
         />
       </Suspense>
-      <LeadsContent leads={typedLeads} recruiterNames={recruiterNames} />
+      <LeadsContent
+        leads={typedLeads}
+        recruiterNames={recruiterNames}
+        emptyReason={
+          searchQuery || statusFilter.length || tagFilter.length || subStatusFilter.length || handlerFilter.length || dateFrom || dateTo
+            ? "filtered"
+            : isDefaultQueue
+              ? "queue-clear"
+              : "none"
+        }
+      />
       <Suspense fallback={null}>
         <Pagination
           currentPage={currentPage}

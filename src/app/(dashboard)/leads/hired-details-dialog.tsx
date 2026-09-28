@@ -43,11 +43,17 @@ export function HiredDetailsDialog({
   const [selectedClientId, setSelectedClientId] = useState("");
   const [selectedJobId, setSelectedJobId] = useState("");
 
+  // Mark as fetching when dialog opens (adjusting state during render)
+  const [prevOpen, setPrevOpen] = useState(false);
+  if (open !== prevOpen) {
+    setPrevOpen(open);
+    if (open) setFetching(true);
+  }
+
   // Fetch clients and jobs when dialog opens
   useEffect(() => {
     if (!open) return;
     let cancelled = false;
-    setFetching(true);
 
     Promise.all([getActiveClients(), getOpenJobs()]).then(
       ([clientsResult, jobsResult]) => {
@@ -70,9 +76,10 @@ export function HiredDetailsDialog({
   }, [open]);
 
   // Reset position when client changes
-  useEffect(() => {
+  function handleClientChange(clientId: string) {
+    setSelectedClientId(clientId);
     setSelectedJobId("");
-  }, [selectedClientId]);
+  }
 
   const filteredJobs = selectedClientId
     ? jobs.filter((j) => j.client_id === selectedClientId)
@@ -107,7 +114,7 @@ export function HiredDetailsDialog({
             <select
               id="hired-client"
               value={selectedClientId}
-              onChange={(e) => setSelectedClientId(e.target.value)}
+              onChange={(e) => handleClientChange(e.target.value)}
               disabled={fetching}
               className="w-full rounded-md border border-gray-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent"
             >

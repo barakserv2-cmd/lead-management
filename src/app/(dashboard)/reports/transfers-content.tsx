@@ -159,12 +159,12 @@ export function TransfersContent({
     <div>
       <div className="flex flex-wrap items-end justify-between gap-3 mb-6">
         <div>
-          <h1 className="text-2xl font-bold">דוח העברות בין עבודות</h1>
+          <h1 className="text-xl font-semibold text-gray-900 tracking-tight">דוח העברות בין עבודות</h1>
           <p className="text-sm text-gray-500 mt-1">נרשם <b>אוטומטית</b> ברגע שעובד/ת מועסק/ת מסומן/ת אצל מעסיק אחר (מהכרטיס או מסטטוס &quot;התקבל&quot;) — כולל תקופות העבודה, כדי שהשכר ידע לצפות לדוח נוכחות משני מקומות. אפשר גם לרשום ידנית.</p>
         </div>
         <div className="flex gap-2">
           <a href={exportUrl} className="text-sm px-3 py-2 rounded-lg border border-gray-300 bg-white hover:bg-gray-50">⬇ ייצוא לאקסל</a>
-          <button type="button" onClick={() => setShowForm((v) => !v)} className="text-sm px-3 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700 font-semibold">
+          <button type="button" onClick={() => setShowForm((v) => !v)} className="text-sm px-3 py-2 rounded-lg bg-cyan-600 text-white hover:bg-cyan-700 font-medium">
             + רישום העברה
           </button>
         </div>
@@ -223,7 +223,7 @@ export function TransfersContent({
               <input value={reason} onChange={(e) => setReason(e.target.value)} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" placeholder="אופציונלי" />
             </div>
             <div className="flex items-end gap-2">
-              <button type="button" onClick={submit} disabled={saving} className="flex-1 text-sm px-3 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50 font-semibold">
+              <button type="button" onClick={submit} disabled={saving} className="flex-1 text-sm px-3 py-2 rounded-lg bg-cyan-600 text-white hover:bg-cyan-700 disabled:opacity-50 font-medium">
                 {saving ? "שומר…" : "שמור"}
               </button>
               <button type="button" onClick={() => setShowForm(false)} className="text-sm px-3 py-2 rounded-lg border border-gray-300">ביטול</button>
@@ -278,7 +278,7 @@ export function TransfersContent({
       {filtered.length === 0 ? (
         <div className="text-center py-16 text-gray-500">אין העברות להצגה.</div>
       ) : (
-        <div className="bg-white rounded-xl border shadow-sm overflow-x-auto">
+        <div className="bg-white rounded-xl border border-gray-200 overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
               <tr className="bg-gray-50 border-b text-right">

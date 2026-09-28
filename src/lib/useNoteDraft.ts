@@ -60,6 +60,7 @@ export function useNoteDraft(key: string, saved: string): NoteDraft {
   useEffect(() => {
     const stored = read(key);
     if (stored !== null && stored !== saved) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- localStorage is only readable after mount; reading it during render would break SSR hydration
       setValueState(stored);
       setRestored(true);
     }

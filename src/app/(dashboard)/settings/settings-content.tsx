@@ -84,7 +84,7 @@ function SettingsInner() {
 
   return (
     <div>
-      <h1 className="text-2xl font-bold mb-6">הגדרות</h1>
+      <h1 className="text-xl font-semibold text-gray-900 tracking-tight mb-6">הגדרות</h1>
       <div className="space-y-4">
         <Card>
           <CardHeader>
@@ -151,7 +151,7 @@ function SettingsInner() {
         </Card>
 
         <Link href="/settings/whatsapp">
-          <Card className="cursor-pointer hover:shadow-md transition-shadow">
+          <Card className="cursor-pointer hover:border-gray-300 hover:shadow-xs transition-colors">
             <CardHeader>
               <div className="flex items-center justify-between">
                 <div>
@@ -169,13 +169,13 @@ function SettingsInner() {
         </Link>
 
         <Link href="/settings/automation">
-          <Card className="cursor-pointer hover:shadow-md transition-shadow">
+          <Card className="cursor-pointer hover:border-gray-300 hover:shadow-xs transition-colors">
             <CardHeader>
               <div className="flex items-center justify-between">
                 <div>
                   <CardTitle>אוטומציה — מנוע החוקים</CardTitle>
                   <CardDescription>
-                    חוקי "מתי? על מי? מה עושים?" — תזכורות, דגלים והסלמות אוטומטיות.
+                    חוקי &quot;מתי? על מי? מה עושים?&quot; — תזכורות, דגלים והסלמות אוטומטיות.
                   </CardDescription>
                 </div>
                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5 text-gray-400">
@@ -187,7 +187,7 @@ function SettingsInner() {
         </Link>
 
         <Link href="/settings/bot">
-          <Card className="cursor-pointer hover:shadow-md transition-shadow">
+          <Card className="cursor-pointer hover:border-gray-300 hover:shadow-xs transition-colors">
             <CardHeader>
               <div className="flex items-center justify-between">
                 <div>
@@ -205,7 +205,7 @@ function SettingsInner() {
         </Link>
 
         <Link href="/settings/availability">
-          <Card className="cursor-pointer hover:shadow-md transition-shadow">
+          <Card className="cursor-pointer hover:border-gray-300 hover:shadow-xs transition-colors">
             <CardHeader>
               <div className="flex items-center justify-between">
                 <div>
@@ -223,7 +223,7 @@ function SettingsInner() {
         </Link>
 
         <Link href="/settings/closures">
-          <Card className="cursor-pointer hover:shadow-md transition-shadow">
+          <Card className="cursor-pointer hover:border-gray-300 hover:shadow-xs transition-colors">
             <CardHeader>
               <div className="flex items-center justify-between">
                 <div>
@@ -241,7 +241,7 @@ function SettingsInner() {
         </Link>
 
         <Link href="/settings/users">
-          <Card className="cursor-pointer hover:shadow-md transition-shadow">
+          <Card className="cursor-pointer hover:border-gray-300 hover:shadow-xs transition-colors">
             <CardHeader>
               <div className="flex items-center justify-between">
                 <div>

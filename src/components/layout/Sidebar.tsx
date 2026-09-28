@@ -21,24 +21,48 @@ import {
   Sun,
 } from "lucide-react";
 
-const NAV_ITEMS = [
-  // ראשון בכוונה: זה המסך שרכזת פותחת בבוקר במקום לחפש בחמישה דפים
-  { href: "/my-day", label: "היום שלי", icon: Sun },
-  { href: "/dashboard", label: "דשבורד", icon: LayoutDashboard },
-  { href: "/clients", label: "מעסיקים", icon: Building2 },
-  { href: "/jobs", label: "משרות", icon: Briefcase },
-  { href: "/leads", label: "לידים", icon: Users },
-  { href: "/today", label: "לידים של היום", icon: CalendarCheck },
-  { href: "/interviews", label: "ראיונות", icon: CalendarClock },
-  { href: "/campaigns", label: "אקסטרות", icon: CalendarDays },
-  { href: "/publishing", label: "פרסום בפייסבוק", icon: Megaphone },
-  { href: "/reports", label: "דוחות", icon: BarChart3 },
-  { href: "/autonomy", label: "מד אוטונומיה", icon: Gauge },
-  { href: "/channels", label: "ביצועי ערוצים", icon: Radar },
-  { href: "/survey", label: "שאלון משוב", icon: ClipboardList },
-  { href: "/feedback", label: "דיווח בעיות", icon: MessageSquareWarning },
-  { href: "/settings", label: "הגדרות", icon: Settings },
+// קבוצות לפי שאלה שהרכזת שואלת: מה לעשות עכשיו / על מה מגייסים /
+// איך הולך / הגדרות. היום שלי ראשון בכוונה — זה המסך של הבוקר.
+const NAV_GROUPS: { title: string | null; items: { href: string; label: string; icon: typeof Sun }[] }[] = [
+  {
+    title: null,
+    items: [
+      { href: "/my-day", label: "היום שלי", icon: Sun },
+      { href: "/leads", label: "לידים", icon: Users },
+      { href: "/today", label: "לידים של היום", icon: CalendarCheck },
+      { href: "/interviews", label: "ראיונות", icon: CalendarClock },
+    ],
+  },
+  {
+    title: "גיוס",
+    items: [
+      { href: "/clients", label: "מעסיקים", icon: Building2 },
+      { href: "/jobs", label: "משרות", icon: Briefcase },
+      { href: "/campaigns", label: "אקסטרות", icon: CalendarDays },
+      { href: "/publishing", label: "פרסום בפייסבוק", icon: Megaphone },
+    ],
+  },
+  {
+    title: "תובנות",
+    items: [
+      { href: "/dashboard", label: "דשבורד", icon: LayoutDashboard },
+      { href: "/reports", label: "דוחות", icon: BarChart3 },
+      { href: "/channels", label: "ביצועי ערוצים", icon: Radar },
+      { href: "/autonomy", label: "מד אוטונומיה", icon: Gauge },
+    ],
+  },
+  {
+    title: "מערכת",
+    items: [
+      { href: "/survey", label: "שאלון משוב", icon: ClipboardList },
+      { href: "/feedback", label: "דיווח בעיות", icon: MessageSquareWarning },
+      { href: "/settings", label: "הגדרות", icon: Settings },
+    ],
+  },
 ];
+
+/** Flat list — the header reads it to name the current page. */
+export const NAV_ITEMS = NAV_GROUPS.flatMap((g) => g.items);
 
 export default function Sidebar() {
   const pathname = usePathname();
@@ -65,45 +89,58 @@ export default function Sidebar() {
   }, [pathname]);
 
   return (
-    <aside className="w-64 min-h-screen bg-gradient-to-b from-[#0c1222] to-[#162032] text-white flex flex-col">
-      <div className="p-6 border-b border-white/[0.08]">
-        <h1 className="text-xl font-bold tracking-tight">ברק שירותים</h1>
-        <p className="text-sm text-white/60 mt-1">מערכת גיוס</p>
+    <aside className="w-60 shrink-0 h-screen sticky top-0 bg-gray-50 border-e border-gray-200 flex flex-col">
+      <div className="h-14 px-4 flex items-center gap-2.5 border-b border-gray-200">
+        <div className="w-7 h-7 rounded-md bg-gray-900 text-white flex items-center justify-center text-[13px] font-bold">
+          ב
+        </div>
+        <div className="leading-tight">
+          <div className="text-[13px] font-semibold text-gray-900">ברק שירותים</div>
+          <div className="text-[11px] text-gray-500">מערכת גיוס</div>
+        </div>
       </div>
-      <nav className="flex-1 p-4">
-        <ul className="space-y-1">
-          {NAV_ITEMS.map((item) => {
-            const isActive = pathname.startsWith(item.href);
-            const Icon = item.icon;
-            return (
-              <li key={item.href}>
-                <Link
-                  href={item.href}
-                  className={`flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${
-                    isActive
-                      ? "bg-white/10 text-cyan-400 border-r-2 border-cyan-400"
-                      : "text-white/60 hover:bg-white/[0.06] hover:text-white/90"
-                  }`}
-                >
-                  <Icon className="w-5 h-5" />
-                  <span>{item.label}</span>
-                  {item.href === "/feedback" && openReports > 0 && (
-                    <span
-                      className="mr-auto min-w-5 px-1.5 h-5 inline-flex items-center justify-center rounded-full bg-red-500 text-white text-[11px] font-bold tabular-nums"
-                      title={`${openReports} דיווחים ממתינים לטיפול`}
+      <nav className="flex-1 overflow-y-auto px-2 py-3 space-y-4">
+        {NAV_GROUPS.map((group, gi) => (
+          <div key={gi}>
+            {group.title && (
+              <div className="px-2.5 pb-1 text-[11px] font-medium text-gray-400">{group.title}</div>
+            )}
+            <ul className="space-y-px">
+              {group.items.map((item) => {
+                const isActive = pathname.startsWith(item.href);
+                const Icon = item.icon;
+                return (
+                  <li key={item.href}>
+                    <Link
+                      href={item.href}
+                      aria-current={isActive ? "page" : undefined}
+                      className={`group flex items-center gap-2.5 h-8 px-2.5 rounded-md text-[13px] transition-colors ${
+                        isActive
+                          ? "bg-white text-gray-900 font-medium shadow-xs ring-1 ring-gray-200"
+                          : "text-gray-600 hover:bg-gray-100 hover:text-gray-900"
+                      }`}
                     >
-                      {openReports}
-                    </span>
-                  )}
-                </Link>
-              </li>
-            );
-          })}
-        </ul>
+                      <Icon
+                        className={`w-4 h-4 shrink-0 ${isActive ? "text-cyan-600" : "text-gray-400 group-hover:text-gray-600"}`}
+                        strokeWidth={1.75}
+                      />
+                      <span className="truncate">{item.label}</span>
+                      {item.href === "/feedback" && openReports > 0 && (
+                        <span
+                          className="ms-auto min-w-5 px-1.5 h-5 inline-flex items-center justify-center rounded-md bg-red-50 text-red-700 ring-1 ring-red-200 text-[11px] font-semibold tabular-nums"
+                          title={`${openReports} דיווחים ממתינים לטיפול`}
+                        >
+                          {openReports}
+                        </span>
+                      )}
+                    </Link>
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
+        ))}
       </nav>
-      <div className="p-4 border-t border-white/[0.08]">
-        <p className="text-[11px] text-white/30 text-center">Powered by Barak</p>
-      </div>
     </aside>
   );
 }

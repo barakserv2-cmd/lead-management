@@ -140,7 +140,7 @@ export default async function TodayPage({
       {/* ═══ Header ═══ */}
       <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-3 mb-4">
         <div>
-          <h1 className="text-2xl font-bold text-slate-800">
+          <h1 className="text-xl font-semibold text-gray-900 tracking-tight text-slate-800">
             {isToday ? "לידים של היום" : isYesterday ? "לידים של אתמול" : "לידים לפי תאריך"}
           </h1>
           <p className="text-sm text-slate-500 mt-1">
@@ -293,7 +293,7 @@ export default async function TodayPage({
                           <div className="text-xs text-slate-500 truncate">
                             {r.job_title}
                             {r.job_title && r.location ? " · " : ""}
-                            {r.location && <span>📍 {r.location}</span>}
+                            {r.location && <span>{r.location}</span>}
                           </div>
                         )}
                       </div>

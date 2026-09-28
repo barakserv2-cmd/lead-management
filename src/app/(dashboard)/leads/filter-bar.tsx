@@ -115,16 +115,16 @@ function MultiSelectDropdown({
       <button
         type="button"
         onClick={() => setOpen(!open)}
-        className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-medium transition-all hover:border-gray-400 ${
+        className={`inline-flex items-center gap-1.5 h-8 px-2.5 rounded-md border text-xs font-medium shadow-xs transition-colors hover:bg-gray-50 ${
           selected.size > 0
             ? "border-cyan-300 bg-cyan-50 text-cyan-700"
-            : "border-gray-200 bg-white text-gray-600"
+            : "border-gray-300 bg-white text-gray-700"
         }`}
       >
         <FilterIcon />
         {label}
         {selected.size > 0 && (
-          <span className="bg-cyan-600 text-white text-[10px] font-bold rounded-full w-4 h-4 flex items-center justify-center">
+          <span className="bg-cyan-600 text-white text-[10px] font-bold rounded w-4 h-4 flex items-center justify-center">
             {selected.size}
           </span>
         )}
@@ -132,7 +132,7 @@ function MultiSelectDropdown({
       </button>
 
       {open && (
-        <div className="absolute z-50 mt-1 right-0 w-52 bg-white rounded-lg shadow-lg border border-gray-200 py-1 animate-in fade-in max-h-72 overflow-y-auto">
+        <div className="absolute z-50 mt-1 right-0 w-56 bg-white rounded-lg shadow-lg border border-gray-200 p-1 animate-in fade-in max-h-72 overflow-y-auto">
           {options.map((opt) => {
             const isSelected = selected.has(opt.value);
             return (
@@ -174,7 +174,6 @@ export function FilterBar({
   allTags,
   recruiters = [],
   statusCounts = {},
-  totalCount,
 }: {
   allTags: string[];
   recruiters?: { email: string; name: string; count?: number }[];
@@ -198,15 +197,18 @@ export function FilterBar({
   const [dateFrom, setDateFrom] = useState<string>(searchParams.get("from") ?? "");
   const [dateTo, setDateTo] = useState<string>(searchParams.get("to") ?? "");
 
-  // Sync from URL when searchParams change externally
-  useEffect(() => {
+  // Sync from URL when searchParams change externally (adjusted during render, not in an effect)
+  const searchKey = searchParams.toString();
+  const [prevSearchKey, setPrevSearchKey] = useState(searchKey);
+  if (searchKey !== prevSearchKey) {
+    setPrevSearchKey(searchKey);
     setSelectedStatuses(new Set(searchParams.get("statuses")?.split(",").filter(Boolean) ?? []));
     setSelectedTags(new Set(searchParams.get("tags")?.split(",").filter(Boolean) ?? []));
     setSelectedSubs(new Set(searchParams.get("sub")?.split(",").filter(Boolean) ?? []));
     setSelectedHandlers(new Set(searchParams.get("handler")?.split(",").filter(Boolean) ?? []));
     setDateFrom(searchParams.get("from") ?? "");
     setDateTo(searchParams.get("to") ?? "");
-  }, [searchParams]);
+  }
 
   function applyDates(from: string, to: string) {
     const params = new URLSearchParams(searchParams.toString());
@@ -336,24 +338,10 @@ export function FilterBar({
   const hasFilters = selectedStatuses.size > 0 || selectedSubs.size > 0 || selectedTags.size > 0 || selectedHandlers.size > 0 || !!dateFrom || !!dateTo;
 
   return (
-    <div className="mb-4">
+    <div>
       <div className="flex items-center gap-2 flex-wrap">
-        {/* מונה תוצאות — כמה לידים עונים על הסינון הנוכחי */}
-        {typeof totalCount === "number" && (
-          <span
-            className={`inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-bold tabular-nums ${
-              hasFilters
-                ? "bg-cyan-600 text-white"
-                : "bg-gray-100 text-gray-600"
-            }`}
-            title={hasFilters ? "מספר הלידים שעונים על הסינון" : "סך כל הלידים ברשימה"}
-          >
-            {totalCount.toLocaleString("he-IL")} לידים
-          </span>
-        )}
-
         <MultiSelectDropdown
-          label="סינון לפי סטטוס"
+          label="סטטוס"
           options={statusOptions}
           selected={selectedStatuses}
           onChange={handleStatusChange}
@@ -372,7 +360,7 @@ export function FilterBar({
         />
 
         <MultiSelectDropdown
-          label="סינון לפי תת-סטטוס"
+          label="תת-סטטוס"
           options={SUB_STATUS_OPTIONS.map((o) => ({ value: o.value, label: o.label }))}
           selected={selectedSubs}
           onChange={handleSubChange}
@@ -388,7 +376,7 @@ export function FilterBar({
         />
 
         <MultiSelectDropdown
-          label="סינון לפי רכזת"
+          label="רכזת"
           options={handlerOptions}
           selected={selectedHandlers}
           onChange={handleHandlerChange}
@@ -407,7 +395,7 @@ export function FilterBar({
 
         {tagOptions.length > 0 && (
           <MultiSelectDropdown
-            label="סינון לפי תגיות"
+            label="תגיות"
             options={tagOptions}
             selected={selectedTags}
             onChange={handleTagChange}
@@ -419,18 +407,19 @@ export function FilterBar({
           type="button"
           onClick={toggleStaleSort}
           title="מיין לפי מי שהכי מזמן לא יצרנו איתו קשר"
-          className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-xs transition-colors ${
+          className={`inline-flex items-center gap-1.5 h-8 px-2.5 rounded-md border text-xs font-medium shadow-xs transition-colors ${
             searchParams.get("sort") === "stale"
-              ? "border-amber-400 bg-amber-500 text-white font-semibold"
-              : "border-gray-200 bg-white text-gray-600 hover:border-amber-300"
+              ? "border-cyan-300 bg-cyan-50 text-cyan-700"
+              : "border-gray-300 bg-white text-gray-700 hover:bg-gray-50"
           }`}
         >
-          ⏱ הכי מזמן לא דיברנו
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-3.5 h-3.5"><circle cx="12" cy="12" r="10" /><path d="M12 6v6l4 2" /></svg>
+          הכי מזמן לא דיברנו
         </button>
 
         {/* Date search (by arrival date) */}
-        <div className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-xs ${
-          dateFrom || dateTo ? "border-cyan-300 bg-cyan-50 text-cyan-700" : "border-gray-200 bg-white text-gray-600"
+        <div className={`inline-flex items-center gap-1.5 h-8 px-2.5 rounded-md border text-xs shadow-xs ${
+          dateFrom || dateTo ? "border-cyan-300 bg-cyan-50 text-cyan-700" : "border-gray-300 bg-white text-gray-700"
         }`}>
           <span className="text-[11px] font-medium">תאריך:</span>
           <input
@@ -462,7 +451,8 @@ export function FilterBar({
           )}
         </div>
 
-        {/* Quick date presets */}
+        {/* Quick date presets — one segmented control */}
+        <div className="inline-flex items-center h-8 rounded-md border border-gray-200 bg-gray-100 p-0.5">
         {datePresets().map((p) => {
           const active = dateFrom === p.from && dateTo === p.to;
           return (
@@ -470,16 +460,18 @@ export function FilterBar({
               key={p.label}
               type="button"
               onClick={() => { setDateFrom(p.from); setDateTo(p.to); applyDates(p.from, p.to); }}
-              className={`px-2.5 py-1 rounded-full text-[11px] font-medium border transition-colors ${
+              aria-pressed={active}
+              className={`px-2.5 py-1 rounded-md text-[11px] font-medium transition-colors ${
                 active
-                  ? "border-cyan-400 bg-cyan-600 text-white"
-                  : "border-gray-200 bg-white text-gray-600 hover:border-cyan-300"
+                  ? "bg-white text-cyan-700 shadow-sm font-semibold"
+                  : "text-gray-600 hover:text-gray-900"
               }`}
             >
               {p.label}
             </button>
           );
         })}
+        </div>
 
         {hasFilters && (
           <>
@@ -488,7 +480,7 @@ export function FilterBar({
             {Array.from(selectedStatuses).map((s) => {
               const statusDef = STATUS_OPTIONS.find((st) => st.value === s);
               return (
-                <span key={`s-${s}`} className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-[11px] font-medium bg-cyan-50 text-cyan-700 border border-cyan-200">
+                <span key={`s-${s}`} className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-[11px] font-medium bg-cyan-50 text-cyan-700 border border-cyan-200">
                   <span className={`w-1.5 h-1.5 rounded-full ${statusDef?.dot ?? "bg-gray-400"}`} />
                   {statusDef?.label ?? s}
                   <span className="font-bold tabular-nums">({(statusCounts[s] ?? 0).toLocaleString("he-IL")})</span>
@@ -500,7 +492,7 @@ export function FilterBar({
             })}
 
             {Array.from(selectedSubs).map((s) => (
-              <span key={`sub-${s}`} className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-[11px] font-medium bg-violet-50 text-violet-700 border border-violet-200">
+              <span key={`sub-${s}`} className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-[11px] font-medium bg-violet-50 text-violet-700 border border-violet-200">
                 {s}
                 <button type="button" onClick={() => removeSub(s)} className="hover:text-red-600 transition-colors">
                   <XIcon />
@@ -509,7 +501,7 @@ export function FilterBar({
             ))}
 
             {Array.from(selectedHandlers).map((h) => (
-              <span key={`h-${h}`} className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-[11px] font-medium bg-emerald-50 text-emerald-700 border border-emerald-200">
+              <span key={`h-${h}`} className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-[11px] font-medium bg-emerald-50 text-emerald-700 border border-emerald-200">
                 {handlerLabel(h)}
                 <button type="button" onClick={() => removeHandler(h)} className="hover:text-red-600 transition-colors">
                   <XIcon />
@@ -518,7 +510,7 @@ export function FilterBar({
             ))}
 
             {Array.from(selectedTags).map((t) => (
-              <span key={`t-${t}`} className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-[11px] font-medium bg-amber-50 text-amber-700 border border-amber-200">
+              <span key={`t-${t}`} className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-[11px] font-medium bg-amber-50 text-amber-700 border border-amber-200">
                 {t}
                 <button type="button" onClick={() => removeTag(t)} className="hover:text-red-600 transition-colors">
                   <XIcon />

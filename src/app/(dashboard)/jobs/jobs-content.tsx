@@ -320,7 +320,7 @@ export function JobsContent({
       {/* ═══ Header ═══ */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
         <div>
-          <h1 className="text-2xl font-bold text-gray-800">משרות</h1>
+          <h1 className="text-xl font-semibold text-gray-900 tracking-tight text-gray-800">משרות</h1>
           <p className="text-sm text-gray-500">
             איוש מחושב חי מהלידים — מי שסומן &quot;התקבל&quot; / &quot;התחיל לעבוד&quot; על המשרה.
           </p>
@@ -385,7 +385,7 @@ export function JobsContent({
             <Users className="w-3.5 h-3.5" /> רק לא מאוישות
           </Chip>
           <Chip active={sortByPay} onClick={() => setSortByPay((v) => !v)} tone="emerald">
-            💰 שכר גבוה קודם
+            שכר גבוה קודם
           </Chip>
           <div
             className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full border text-xs ${

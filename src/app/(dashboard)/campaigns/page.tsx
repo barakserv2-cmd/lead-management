@@ -127,30 +127,37 @@ export default function ExtrasPage() {
   const [loading, setLoading] = useState(false);
   const [bulkImportOpen, setBulkImportOpen] = useState(false);
 
-  // --- Init ---
-  useEffect(() => { fetchCampaigns(); }, []);
-  useEffect(() => { if (selectedCampaign) fetchScheduleLeads(); }, [selectedCampaign]);
-
-  async function fetchCampaigns() {
-    const { data: camps } = await supabase.from('campaigns').select('*').order('start_date', { ascending: false });
-    if (camps && camps.length > 0) {
-      setCampaigns(camps);
-      if (!selectedCampaign) setSelectedCampaign(camps[0]);
-    }
+  // עדכוני ה-state קורים בתוך then (ולא אחרי await) כי הפונקציות נקראות מתוך useEffect
+  function fetchCampaigns() {
+    return supabase
+      .from('campaigns')
+      .select('*')
+      .order('start_date', { ascending: false })
+      .then(({ data: camps }) => {
+        if (camps && camps.length > 0) {
+          setCampaigns(camps);
+          if (!selectedCampaign) setSelectedCampaign(camps[0]);
+        }
+      });
   }
 
-  async function fetchScheduleLeads() {
-    const { data } = await supabase
+  function fetchScheduleLeads() {
+    return supabase
       .from('leads')
       .select('id, name, phone, email, status, job_title, hired_client, arrival_date')
       .not('hired_client', 'is', null)
-      .not('arrival_date', 'is', null);
-
-    const leads = (data ?? []) as ScheduleLead[];
-    setScheduleLeads(leads);
-    // Auto-expand all employers on fresh load
-    setExpandedEmployers(new Set(leads.map(l => l.hired_client)));
+      .not('arrival_date', 'is', null)
+      .then(({ data }) => {
+        const leads = (data ?? []) as ScheduleLead[];
+        setScheduleLeads(leads);
+        // Auto-expand all employers on fresh load
+        setExpandedEmployers(new Set(leads.map(l => l.hired_client)));
+      });
   }
+
+  // --- Init ---
+  useEffect(() => { fetchCampaigns(); }, []);
+  useEffect(() => { if (selectedCampaign) fetchScheduleLeads(); }, [selectedCampaign]);
 
   // ── Grouped data ───────────────────────────────────────────
 
@@ -181,11 +188,11 @@ export default function ExtrasPage() {
     <div className="p-6 max-w-[1400px] mx-auto dir-rtl font-sans text-gray-800">
 
       {/* HEADER */}
-      <div className="flex justify-between items-center mb-6 bg-white p-4 rounded-xl shadow-sm border border-gray-200">
+      <div className="flex justify-between items-center mb-6 bg-white p-4 rounded-xl border border-gray-200 border-gray-200">
         <div className="flex items-center gap-4">
           <div className="bg-purple-100 p-3 rounded-full text-purple-600"><Calendar size={24} /></div>
           <div>
-            <h1 className="text-2xl font-bold">{selectedCampaign.name}</h1>
+            <h1 className="text-xl font-semibold text-gray-900 tracking-tight">{selectedCampaign.name}</h1>
             <p className="text-sm text-gray-500">
               {employerGroups.length} מעסיקים &middot; {scheduleLeads.length} עובדים
             </p>
@@ -204,7 +211,7 @@ export default function ExtrasPage() {
           <button onClick={() => setBulkImportOpen(true)} className="bg-emerald-600 text-white px-4 py-2 rounded-lg font-bold hover:bg-emerald-700 flex items-center gap-2">
             <Upload size={18} /> ייבוא מ-Excel
           </button>
-          <button onClick={() => { setCampFormData({ name: '', start_date: '', end_date: '' }); setSelectedCampaign(null); setIsCampModalOpen(true); }} className="bg-purple-600 text-white px-4 py-2 rounded-lg font-bold hover:bg-purple-700 flex items-center gap-2">
+          <button onClick={() => { setCampFormData({ name: '', start_date: '', end_date: '' }); setSelectedCampaign(null); setIsCampModalOpen(true); }} className="bg-cyan-600 text-white px-4 py-2 rounded-lg font-medium hover:bg-cyan-700 flex items-center gap-2">
             <PlusCircle size={18} /> פרויקט חדש
           </button>
           <select className="border rounded p-2 bg-gray-50" value={selectedCampaign.id} onChange={(e) => { const c = campaigns.find(x => x.id === e.target.value); if (c) setSelectedCampaign(c); }}>
@@ -241,7 +248,7 @@ export default function ExtrasPage() {
           const isExpanded = expandedEmployers.has(group.employer);
 
           return (
-            <div key={group.employer} className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+            <div key={group.employer} className="bg-white rounded-xl border border-gray-200 border-gray-200 overflow-hidden">
               {/* ── Employer Header (clickable) ─── */}
               <button
                 onClick={() => toggleEmployer(group.employer)}

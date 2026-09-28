@@ -18,7 +18,7 @@ const QUICK_PROMPTS = [
 ];
 
 const WELCOME =
-  "היי! אני העוזר שלך במערכת 👋\nאני רואה את הלידים, המשרות והמעסיקים בזמן אמת ויכול להגיד לך מה חסר, מי מתאים, ומה כדאי לעשות עכשיו.";
+  "היי! אני העוזר שלך במערכת\nאני רואה את הלידים, המשרות והמעסיקים בזמן אמת ויכול להגיד לך מה חסר, מי מתאים, ומה כדאי לעשות עכשיו.";
 
 // ── Minimal markdown renderer: **bold**, [text](url), bullets, line breaks ──
 function renderInline(text: string, keyPrefix: string): ReactNode[] {
@@ -172,7 +172,7 @@ export function ChatWidget() {
           dir="rtl"
         >
           {/* Header */}
-          <div className="bg-gradient-to-l from-blue-600 to-blue-700 px-4 py-3 flex items-center justify-between flex-shrink-0">
+          <div className="bg-gray-900 px-4 py-3 flex items-center justify-between flex-shrink-0">
             <div className="flex items-center gap-2">
               <div className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center">
                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4 text-white">
@@ -271,7 +271,7 @@ export function ChatWidget() {
                 type="button"
                 onClick={() => send(input)}
                 disabled={!input.trim() || loading}
-                className="p-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors flex-shrink-0"
+                className="p-2 rounded-lg bg-cyan-600 text-white hover:bg-cyan-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors flex-shrink-0"
               >
                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4 rotate-180">
                   <path d="m22 2-7 20-4-9-9-4Z" /><path d="M22 2 11 13" />
@@ -287,7 +287,7 @@ export function ChatWidget() {
         type="button"
         onClick={() => setOpen((prev) => !prev)}
         title="העוזר של המגייסת"
-        className="fixed bottom-4 left-4 z-50 w-14 h-14 rounded-full bg-blue-600 hover:bg-blue-700 text-white shadow-lg hover:shadow-xl transition-all hover:scale-105 flex items-center justify-center"
+        className="fixed bottom-4 left-4 z-50 w-14 h-14 rounded-full bg-cyan-600 hover:bg-cyan-700 text-white shadow-lg transition-colors flex items-center justify-center"
       >
         {open ? (
           <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-6 h-6">

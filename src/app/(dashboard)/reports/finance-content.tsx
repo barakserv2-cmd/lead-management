@@ -89,7 +89,7 @@ export function FinanceContent({
   return (
     <div className="space-y-8" dir="rtl">
       <p className="text-xs bg-amber-50 border border-amber-200 text-amber-800 rounded-lg px-3 py-2 w-fit">
-        🔒 הלשונית הזו גלויה רק לך. רכזות ואדמיניות אחרות לא רואות אותה — האכיפה בצד השרת.
+        הלשונית הזו גלויה רק לך. רכזות ואדמיניות אחרות לא רואות אותה — האכיפה בצד השרת.
       </p>
 
       <div className="flex flex-wrap items-center gap-2 text-sm">
@@ -167,7 +167,7 @@ export function FinanceContent({
       <div>
         <h3 className="font-bold text-gray-900 mb-1">ROI פר ערוץ גיוס</h3>
         <p className="text-xs text-gray-500 mb-3">
-          הכנסה = השמות × דמי השמה. ערוץ בלי הוצאה מוזנת מציג "—" בעמודות העלות.
+          הכנסה = השמות × דמי השמה. ערוץ בלי הוצאה מוזנת מציג &quot;—&quot; בעמודות העלות.
         </p>
         <div className="bg-white border rounded-xl overflow-x-auto">
           <table className="w-full text-sm min-w-[720px]">
@@ -213,7 +213,7 @@ export function FinanceContent({
       <div>
         <h3 className="font-bold text-gray-900 mb-1">הזנת הוצאות חודשיות</h3>
         <p className="text-xs text-gray-500 mb-3">
-          כמה שילמת בחודש הזה על כל ערוץ (קמפיינים, מנוי AllJobs וכו'). שדה ריק = בלי שינוי.
+          כמה שילמת בחודש הזה על כל ערוץ (קמפיינים, מנוי AllJobs וכו׳). שדה ריק = בלי שינוי.
         </p>
         <div className="flex items-center gap-2 mb-3 text-sm">
           <span className="text-gray-500">חודש:</span>
