@@ -108,9 +108,10 @@
       if (text != null) n.textContent = text;
       return n;
     }
-    function payText(p) {
-      if (!p) return "שכר: בשיחה";
-      return /^[\d.\-+ ]+$/.test(p) ? "₪" + p.replace(/\s/g, "") + " לשעה" : "שכר: " + p;
+    function payText(j) {
+      if (!j.pay) return "שכר: בשיחה";
+      // הטווח מבודד כ-LTR כדי שהסימן ₪ לא ייפול באמצע ("40₪–45") בטקסט עברי
+      return "\u2066" + j.pay.replace("-", "–") + "\u2069 ₪ לשעה" + (j.payBonus ? " + תוספות" : "");
     }
     function render() {
       board.textContent = "";
@@ -131,7 +132,7 @@
         (j.requirements || []).forEach(function (r) { tags.appendChild(el("span", "tag", r)); });
         card.appendChild(tags);
         var foot = el("div", "job-foot");
-        foot.appendChild(el("span", "pay", payText(j.pay)));
+        foot.appendChild(el("span", "pay", payText(j)));
         var go = el("a", "btn btn-primary btn-small", "אני רוצה את המשרה");
         go.href = cfg.whatsapp ? waHref("היי, אשמח לפרטים על המשרה: " + j.title) : "/?role=" + encodeURIComponent(j.title) + "#apply";
         foot.appendChild(go);
