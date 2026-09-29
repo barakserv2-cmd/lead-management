@@ -293,7 +293,7 @@ async function runPlacementCare(admin: ReturnType<typeof getAdmin>): Promise<Run
   summary.succeeded = care.checkinsSent + care.guaranteeAlerts;
   summary.failed = care.failed;
   summary.details.push(
-    `בדיקות שלומות: ${care.checkinsSent} · התראות אחריות: ${care.guaranteeAlerts}`
+    `בדיקות שלומות: ${care.checkinsSent} · התראות אחריות: ${care.guaranteeAlerts} · דגלי אחריות שפגו נוקו: ${care.expiredFlagsCleared}`
   );
   return summary;
 }

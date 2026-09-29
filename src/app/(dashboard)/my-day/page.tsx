@@ -4,6 +4,7 @@ import { getSupabaseAdmin } from "@/lib/api-auth";
 import { FOLLOW_UP } from "@/lib/constants";
 import { MyReminders } from "../today/my-reminders";
 import { LeadStatus, STATUS_LABELS, type LeadStatusValue } from "@/lib/stateMachine";
+import { attentionKind } from "@/lib/attention";
 
 // "היום שלי" — רשימת עבודה אחת לרכזת.
 //
@@ -296,8 +297,20 @@ export default async function MyDayPage() {
   const pastIds = new Set(pastInterviews.map((l) => l.id as string));
 
   // אותה משימה מוצגת פעם אחת: ראיון שעבר קודם לדגל
-  const attention = (attnRes.data ?? []).filter((l) => !pastIds.has(l.id as string));
-  const attentionIds = new Set(attention.map((l) => l.id as string));
+  const allAttention = (attnRes.data ?? []).filter((l) => !pastIds.has(l.id as string));
+  const attentionIds = new Set(allAttention.map((l) => l.id as string));
+  // דחוף (מלווה ההגעה: מתלבט, החבר התחרט, לא עונה) — בלוק משלו למעלה, החדש
+  // ראשון. השאר נשארים בבלוק הרגיל, מהישן לחדש.
+  const urgent = allAttention
+    .filter((l) => attentionKind(l.attention_reason as string | null) === "urgent")
+    .sort(
+      (a, b) =>
+        new Date((b.needs_attention_at as string) ?? 0).getTime() -
+        new Date((a.needs_attention_at as string) ?? 0).getTime()
+    );
+  const attention = allAttention.filter(
+    (l) => attentionKind(l.attention_reason as string | null) !== "urgent"
+  );
 
   const quiet = (quietRes.data ?? [])
     .map((l) => ({ ...l, lastTouch: (l.last_contact_at ?? l.created_at) as string }))
@@ -329,6 +342,7 @@ export default async function MyDayPage() {
   const openCount = (openRes.data ?? []).length;
   const actionable =
     escalations.length +
+    urgent.length +
     interviews.length +
     pastInterviews.length +
     attention.length +
@@ -371,6 +385,33 @@ export default async function MyDayPage() {
                         : `לפני ${daysSince(l.human_attention_raised_at as string)} ימים`}
                     </span>
                   )}
+                </>
+              }
+            />
+          ))}
+        </Block>
+
+        <Block
+          title="🚩 דחוף — מועמד בדרך לאילת או בימים הראשונים"
+          count={urgent.length}
+          hint="מלווה ההגעה זיהה בעיה — להתקשר עכשיו, כשעוד אפשר להציל"
+          border="border-red-300"
+          head="bg-red-50 text-red-900"
+        >
+          {urgent.map((l) => (
+            <LeadRow
+              key={l.id}
+              id={l.id as string}
+              name={l.name as string | null}
+              phone={l.phone as string | null}
+              meta={
+                <>
+                  <span className="text-red-700">
+                    {String(l.attention_reason ?? "").replace(/^🚩\s*/, "")}
+                  </span>
+                  {" · "}
+                  {statusLabel(l.status as string)}
+                  {isUnowned(l.handled_by) && <UnownedTag />}
                 </>
               }
             />

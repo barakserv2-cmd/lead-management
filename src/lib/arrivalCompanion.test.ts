@@ -6,6 +6,8 @@ import {
   touchMessage,
   whenLabel,
   arrivalCompanionEnabledFor,
+  planFirstDayTouch,
+  firstDayMessage,
   type PlanInput,
   type TouchType,
 } from "./arrivalCompanion";
@@ -125,5 +127,39 @@ describe("arrivalCompanionEnabledFor", () => {
     expect(arrivalCompanionEnabledFor("0529999999")).toBe(false);
     process.env.ARRIVAL_COMPANION_MODE = "live";
     expect(arrivalCompanionEnabledFor("0529999999")).toBe(true);
+  });
+});
+
+describe("first days at work", () => {
+  it("asks how the first day went one or two days after starting, in daytime, not on Shabbat", () => {
+    const base = { hourNow: 12, weekday: 2, sent: false };
+    expect(planFirstDayTouch({ ...base, daysSinceStart: 1 })).toBe(true);
+    expect(planFirstDayTouch({ ...base, daysSinceStart: 2 })).toBe(true);
+    expect(planFirstDayTouch({ ...base, daysSinceStart: 0 })).toBe(false);
+    expect(planFirstDayTouch({ ...base, daysSinceStart: 3 })).toBe(false);
+    expect(planFirstDayTouch({ ...base, daysSinceStart: 1, sent: true })).toBe(false);
+    expect(planFirstDayTouch({ ...base, daysSinceStart: 1, weekday: 6 })).toBe(false);
+    expect(planFirstDayTouch({ ...base, daysSinceStart: 1, hourNow: 21 })).toBe(false);
+  });
+
+  it("names the employer in the first-day message", () => {
+    expect(firstDayMessage({ name: "דני כהן", hired_client: "אסטרל" })).toContain("היום הראשון באסטרל");
+  });
+
+  it("recognises a new worker who wants to leave", () => {
+    expect(detectArrivalSignals("אני חוזר הביתה, זה לא בשבילי", "first_days").risk).toBe("cancelling");
+    expect(detectArrivalSignals("לא מגיע מחר לעבודה", "first_days").risk).toBe("cancelling");
+    expect(detectArrivalSignals("הדירה מלוכלכת ואין מזגן", "first_days").risk).toBe("hesitant");
+  });
+
+  it("does not read travel talk before arrival as leaving", () => {
+    expect(detectArrivalSignals("האוטובוס עוזב ב-8 בבוקר").risk).toBe("none");
+  });
+
+  it("writes a first-days reason with the day number", () => {
+    const s = detectArrivalSignals("רוצה לעזוב", "first_days");
+    const r = signalReason(s, "דני", "רוצה לעזוב", { kind: "first_days", day: 2 });
+    expect(r).toContain("ביום 2 לעבודה");
+    expect(r?.startsWith("🚩")).toBe(true);
   });
 });

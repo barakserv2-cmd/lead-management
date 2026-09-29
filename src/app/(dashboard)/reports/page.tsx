@@ -14,6 +14,7 @@ import { ArrivalContent } from "./arrival-content";
 import { computeAnalytics, computeFinance } from "@/lib/analytics";
 import { computeGuaranteeReport } from "@/lib/postPlacement";
 import { computeRetention } from "@/lib/retention";
+import { computeEmploymentCheck } from "@/lib/employmentCheck";
 import { computeArrivals } from "@/lib/arrival";
 import { isFinanceUser } from "@/lib/finance";
 import { computeSourceFolders } from "@/lib/sourceFolders";
@@ -147,8 +148,8 @@ export default async function ReportsPage({
     const report = await computeArrivals(supabase);
     content = <ArrivalContent data={report} />;
   } else if (tab === "retention") {
-    const report = await computeRetention(supabase);
-    content = <RetentionContent data={report} />;
+    const [report, check] = await Promise.all([computeRetention(supabase), computeEmploymentCheck(supabase)]);
+    content = <RetentionContent data={report} check={check} />;
   } else if (tab === "finance") {
     const analytics = await computeAnalytics(supabase, fromIso, toIso);
     const finance = await computeFinance(supabase, fromIso, toIso, analytics.sources);
