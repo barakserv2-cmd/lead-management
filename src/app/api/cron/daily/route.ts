@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient as createServerClient } from "@supabase/supabase-js";
 import { businessAccount, sendWhatsAppMessage } from "@/lib/whatsappService";
 import { runPostPlacementCare } from "@/lib/postPlacement";
+import { runArrivalCompanion } from "@/lib/arrivalCompanionRun";
 
 // Vercel cron pings this URL every hour at :30 (see vercel.json).
 // Guarded by CRON_SECRET so it can't be hit anonymously from outside.
@@ -295,6 +296,27 @@ async function runPlacementCare(admin: ReturnType<typeof getAdmin>): Promise<Run
   return summary;
 }
 
+// ── Rule 5: מלווה ההגעה ─────────────────────────────────────
+// נקודות המגע וחלונות השעות מוגדרים ב-arrivalCompanion.ts (planTouch).
+// כבוי עד ARRIVAL_COMPANION_MODE=live או רשימת פיילוט.
+async function runArrivalCompanionRule(admin: ReturnType<typeof getAdmin>): Promise<RunSummary> {
+  const summary: RunSummary = {
+    rule: "arrival_companion",
+    attempted: 0,
+    succeeded: 0,
+    failed: 0,
+    details: [],
+  };
+  const res = await runArrivalCompanion(admin);
+  summary.attempted = res.sent + res.failed;
+  summary.succeeded = res.sent;
+  summary.failed = res.failed;
+  summary.details.push(
+    `נשלחו: ${res.sent} · דגלי "לא ענה": ${res.silentFlags} · לא בפיילוט: ${res.skippedDisabled}`
+  );
+  return summary;
+}
+
 // ── Orchestrator ────────────────────────────────────────────
 async function runDailyCron() {
   const admin = getAdmin();
@@ -303,6 +325,7 @@ async function runDailyCron() {
     runStaleClaimCleanup(admin),
     runWeeklyDigest(admin),
     runPlacementCare(admin),
+    runArrivalCompanionRule(admin),
   ]);
   return { ok: true, ran_at: new Date().toISOString(), rules: results };
 }
