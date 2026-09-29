@@ -132,6 +132,7 @@ export async function POST(req: NextRequest) {
     // Send via WhatsApp if lead has a phone number
     let whatsappSent = false;
     let whatsappError: string | null = null;
+    let windowClosed = false;
     if (lead.phone) {
       const result = await sendWhatsAppMessage(lead.phone, message.trim(), sender);
       whatsappSent = result.success;
@@ -153,6 +154,7 @@ export async function POST(req: NextRequest) {
         await forwardReplyToMachine(lead.phone, message.trim(), "human");
       }
       if (!result.success) {
+        windowClosed = result.windowClosed === true;
         whatsappError = result.error ?? "שליחה נכשלה";
         console.error(
           `[Manual Send] WhatsApp send failed for lead ${leadId}:`,
@@ -163,6 +165,21 @@ export async function POST(req: NextRequest) {
 
     // כישלון וואטסאפ הוא לא הצלחה שקטה — הרכזת חייבת לדעת שההודעה
     // לא הגיעה למועמד (למשל כשהחיבור ל-GreenAPI נפל).
+    // חלון 24 השעות נסגר — זו לא תקלת חיבור. 29.09: חושן ניסתה לכתוב
+    // למועמדת שכתבה לאחרונה לפני יומיים וקיבלה "הוואטסאפ שלך מנותק",
+    // בזמן שהמספר שלה עבד וקלט הודעות באותה שעה בדיוק.
+    if (lead.phone && !whatsappSent && windowClosed) {
+      return NextResponse.json({
+        success: false,
+        savedToChat: true,
+        windowClosed: true,
+        error:
+          "ההודעה נשמרה בצ'אט אבל לא נשלחה — המועמד/ת לא כתבו לך ב-24 השעות האחרונות, " +
+          "ומטא מאפשרת רק תבנית מאושרת. אפשר לשלוח תבנית מהכפתור שליד, להתקשר, " +
+          "או לכתוב מאפליקציית WhatsApp Business בטלפון.",
+      });
+    }
+
     if (lead.phone && !whatsappSent) {
       // Name the real reason. A candidate with no WhatsApp on that number
       // (test leads, landlines, typos) is not a connection problem — telling
