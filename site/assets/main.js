@@ -95,7 +95,7 @@
 
   // ── לוח המשרות: נטען חי מה-CRM ──
   var board = document.getElementById("jobs-board");
-  if (board && cfg.crmUrl) {
+  if (board) {
     var status = document.getElementById("jobs-status");
     var chips = document.getElementById("jobs-chips");
     var limit = Number(board.getAttribute("data-limit")) || 0;
@@ -126,6 +126,7 @@
         if (j.urgent) top.appendChild(el("span", "badge", "דחוף"));
         card.appendChild(top);
         var tags = el("div", "tags");
+        if (j.count > 1) tags.appendChild(el("span", "tag", j.count + " משרות"));
         tags.appendChild(el("span", "tag", "כולל מגורים"));
         (j.requirements || []).forEach(function (r) { tags.appendChild(el("span", "tag", r)); });
         card.appendChild(tags);
@@ -157,17 +158,27 @@
       });
     }
 
-    fetch(cfg.crmUrl.replace(/\/$/, "") + "/api/public/jobs")
-      .then(function (r) { return r.ok ? r.json() : { jobs: [] }; })
-      .catch(function () { return { jobs: [] }; })
-      .then(function (d) {
-        all = d.jobs || [];
-        var section = document.getElementById("live-jobs");
-        if (!all.length) { if (section && section.hasAttribute("data-optional")) section.hidden = true; else if (status) status.textContent = "לא הצלחנו לטעון את המשרות כרגע. כתבו לנו ונספר לכם מה פתוח."; return; }
-        if (section) section.hidden = false;
-        renderChips();
-        render();
-      });
+    function show(d) {
+      all = d.jobs || [];
+      var section = document.getElementById("live-jobs");
+      if (!all.length) {
+        if (section && section.hasAttribute("data-optional")) section.hidden = true;
+        else if (status) status.textContent = "לא הצלחנו לטעון את המשרות כרגע. כתבו לנו ונספר לכם מה פתוח.";
+        return;
+      }
+      if (section) section.hidden = false;
+      renderChips();
+      render();
+    }
+
+    // בלי CRM מחובר (תצוגה מקדימה) משתמשים ברשימה שב-config, אם יש
+    if (!cfg.crmUrl) show({ jobs: cfg.jobs || [] });
+    else {
+      fetch(cfg.crmUrl.replace(/\/$/, "") + "/api/public/jobs")
+        .then(function (r) { return r.ok ? r.json() : { jobs: [] }; })
+        .catch(function () { return { jobs: [] }; })
+        .then(show);
+    }
   }
 
   var year = document.getElementById("year");

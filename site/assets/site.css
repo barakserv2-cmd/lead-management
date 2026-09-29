@@ -184,3 +184,6 @@ ul{margin:0;padding:0}
 @media (max-width:900px){.dock{display:block}}
 .mt{margin-top:10px}
 .section.flush-top{padding-top:0}
+.jobs-toolbar:empty{display:none}
+.jobs-toolbar:empty+.grid{margin-top:0}
+@media (max-width:900px){.page-hero .deco-sun{width:72px;top:-26px;inset-inline-end:-26px}}

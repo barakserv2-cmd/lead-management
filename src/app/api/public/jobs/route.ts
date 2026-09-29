@@ -1,16 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/api-auth";
 import { isAllowedOrigin } from "@/lib/publicLead";
+import { toPublicJobs, type JobRow } from "@/lib/publicJobs";
 
-// המשרות הפתוחות לאתר הציבורי (site/). רק שדות שמותר לפרסם: בלי שם
-// המעסיק ובלי notes (שם יש מידע פנימי). נשמר במטמון 5 דקות ב-CDN.
-
-const CLIENT_TYPE_LABEL: Record<string, string> = {
-  Hotel: "מלונאות",
-  Restaurant: "מסעדנות",
-  Construction: "בנייה",
-  Other: "אחר",
-};
+// המשרות הפתוחות לאתר הציבורי (site/). בלי שם המעסיק ובלי notes (שם יש
+// מידע פנימי) — החלטת סער: שם מעסיק מוסתר, שכר מוצג. במטמון 5 דקות ב-CDN.
 
 function cors(origin: string | null): Record<string, string> {
   if (!isAllowedOrigin(origin, process.env.PUBLIC_SITE_ORIGINS)) return {};
@@ -27,11 +21,11 @@ export async function GET(request: NextRequest) {
     const db = getSupabaseAdmin();
     const { data: jobs, error } = await db
       .from("jobs")
-      .select("id, title, location, pay_rate, requirements, urgent, client_id, created_at")
+      .select("title, location, pay_rate, requirements, urgent, client_id")
       .eq("status", "Open")
       .order("urgent", { ascending: false })
       .order("created_at", { ascending: false })
-      .limit(60);
+      .limit(300);
     if (error) throw new Error(error.message);
 
     const clientIds = [...new Set((jobs ?? []).map((j) => j.client_id).filter(Boolean))];
@@ -40,18 +34,16 @@ export async function GET(request: NextRequest) {
       : { data: [] as { id: string; type: string | null }[] };
     const typeOf = new Map((clients ?? []).map((c) => [c.id, c.type as string | null]));
 
-    const out = (jobs ?? []).map((j) => ({
-      id: j.id,
+    const rows: JobRow[] = (jobs ?? []).map((j) => ({
       title: j.title,
-      location: j.location || "אילת",
-      pay: j.pay_rate || null,
-      requirements: (j.requirements ?? []).slice(0, 4),
-      urgent: !!j.urgent,
-      sector: CLIENT_TYPE_LABEL[typeOf.get(j.client_id) ?? ""] ?? null,
-      posted: j.created_at,
+      location: j.location,
+      pay_rate: j.pay_rate,
+      requirements: j.requirements,
+      urgent: j.urgent,
+      client_type: j.client_id ? typeOf.get(j.client_id) ?? null : null,
     }));
 
-    return NextResponse.json({ jobs: out }, { headers });
+    return NextResponse.json({ jobs: toPublicJobs(rows) }, { headers });
   } catch (err) {
     console.error("[public/jobs]", err instanceof Error ? err.message : err);
     return NextResponse.json({ jobs: [] }, { status: 500, headers });
