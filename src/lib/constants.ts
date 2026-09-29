@@ -43,6 +43,8 @@ export const MACHINE_LEAD_SOURCES = [
   "ייבוא Excel",
   "אקסטרות",
   "וואטסאפ ישיר",
+  // הטופס של האתר הסטטי החדש (site/) דרך /api/public/lead, בלי UTM ממומן
+  "אתר חדש",
   // ישן: נכתב על ידי זרימת סינון קודמת שכבר לא רצה, אבל יש לידים עם הערך.
   "whatsapp_screening",
 ] as const;
