@@ -13,6 +13,7 @@ import {
 import { normalizeEmployerName } from "@/lib/employerNormalization";
 import { logAudit } from "@/lib/audit";
 import { setMachineConversationMode } from "@/lib/machineBridge";
+import { isClosedStatus } from "@/lib/attention";
 import {
   isEmploymentEndReason,
   employmentEndReasonLabel,
@@ -58,6 +59,20 @@ export interface ChangeStatusInput {
 }
 
 const GUBGET_EMAIL = "gubget@eilatjobs.com";
+
+/** סיבת הדגל הנוכחי, או null אם אין דגל פתוח. */
+async function currentAttention(
+  supabase: ReturnType<typeof getSupabase>,
+  leadId: string
+): Promise<string | null> {
+  const { data } = await supabase
+    .from("leads")
+    .select("needs_attention, attention_reason")
+    .eq("id", leadId)
+    .maybeSingle();
+  if (!data?.needs_attention) return null;
+  return (data.attention_reason as string | null) || "ללא סיבה";
+}
 
 export interface ChangeStatusResult {
   success: boolean;
@@ -119,6 +134,16 @@ export async function changeLeadStatus(input: ChangeStatusInput): Promise<Change
   // A human moving the lead is now driving it: Gubget stays silent until a
   // recruiter explicitly hands the conversation back ("החזר לגובגט").
   if (actor === "human") updateData.bot_paused = true;
+
+  // סגירת ליד מכבה את הדגל "דורש תשומת לב" — ההחלטה כבר התקבלה. בלי זה
+  // נצברו 255 דגלים על לידים סגורים (29/09) והדגל הפסיק להגיד משהו.
+  // הסיבה נשמרת ביומן (7b) כדי שלא תיעלם.
+  const clearedAttention = isClosedStatus(newStatus) ? await currentAttention(supabase, leadId) : null;
+  if (clearedAttention) {
+    updateData.needs_attention = false;
+    updateData.needs_attention_at = null;
+    updateData.attention_reason = null;
+  }
 
   // Status-specific field updates
   // "נדחה" ו"לא התקבל" חולקים את אותו שדה סיבה — שניהם סגירה של מועמד,
@@ -293,6 +318,12 @@ export async function changeLeadStatus(input: ChangeStatusInput): Promise<Change
     journalRows.push({
       event_type: newStatus === LeadStatus.NO_SHOW ? "לא הגיע" : "ביטל הגעה",
       event_text: `סיבה: ${noArrivalReasonLabel(extra.noArrivalReason)}` + (naNotes ? ` — ${naNotes}` : ""),
+    });
+  }
+  if (clearedAttention) {
+    journalRows.push({
+      event_type: "דגל נוקה",
+      event_text: `הליד נסגר (${newStatus}) — הדגל "דורש תשומת לב" כובה. הסיבה שהייתה: ${clearedAttention}`,
     });
   }
   if (extra?.interviewNotes) journalRows.push({ event_type: "ראיון", event_text: `הערות ראיון: ${extra.interviewNotes}` });

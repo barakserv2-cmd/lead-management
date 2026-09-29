@@ -4,7 +4,8 @@ import { getSupabaseAdmin } from "@/lib/api-auth";
 import { FOLLOW_UP } from "@/lib/constants";
 import { MyReminders } from "../today/my-reminders";
 import { LeadStatus, STATUS_LABELS, type LeadStatusValue } from "@/lib/stateMachine";
-import { attentionKind } from "@/lib/attention";
+// ליד סגור לא צריך טיפול גם אם נשאר עליו דגל ישן — אותה רשימה שמכבה דגלים בסגירה
+import { attentionKind, CLOSED_STATUSES } from "@/lib/attention";
 
 // "היום שלי" — רשימת עבודה אחת לרכזת.
 //
@@ -35,18 +36,6 @@ const QUIET_STATUSES: string[] = [
   LeadStatus.CONTACTED,
   LeadStatus.SCREENING_IN_PROGRESS,
   LeadStatus.FIT_FOR_INTERVIEW,
-];
-
-/** ליד סגור לא צריך טיפול גם אם נשאר עליו דגל ישן. */
-const CLOSED_STATUSES: string[] = [
-  LeadStatus.REJECTED,
-  LeadStatus.NOT_SUITABLE,
-  LeadStatus.LOST_CONTACT,
-  LeadStatus.INVALID_PHONE,
-  LeadStatus.NOT_ACCEPTED,
-  LeadStatus.NO_SHOW,
-  LeadStatus.CANCELLED_ARRIVAL,
-  LeadStatus.EMPLOYMENT_ENDED,
 ];
 
 /** ליד בלי רכזת אחראית — נקבע ע"י גובגט או ע"י המועמד עצמו. */

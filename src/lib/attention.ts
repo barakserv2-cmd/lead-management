@@ -12,7 +12,29 @@
 //   guarantee — "⏳ תקופת האחריות ...": תזכורת; מתנקה לבד כשהאחריות עוברת.
 //   normal    — כל השאר.
 
+import { LeadStatus } from "./stateMachine";
+
 export type AttentionKind = "urgent" | "guarantee" | "normal";
+
+/**
+ * סטטוסים סגורים. מעבר לאחד מהם מכבה את הדגל — הרכזת כבר טיפלה והחליטה.
+ * דגל שנדלק *אחרי* הסגירה (למשל "פנייה חוזרת" של מועמד שנסגר והגיש שוב)
+ * נשאר: זה אות חדש, לא שארית.
+ */
+export const CLOSED_STATUSES: string[] = [
+  LeadStatus.REJECTED,
+  LeadStatus.NOT_SUITABLE,
+  LeadStatus.LOST_CONTACT,
+  LeadStatus.INVALID_PHONE,
+  LeadStatus.NOT_ACCEPTED,
+  LeadStatus.NO_SHOW,
+  LeadStatus.CANCELLED_ARRIVAL,
+  LeadStatus.EMPLOYMENT_ENDED,
+];
+
+export function isClosedStatus(status: string | null | undefined): boolean {
+  return !!status && CLOSED_STATUSES.includes(status);
+}
 
 export const URGENT_PREFIX = "🚩";
 export const GUARANTEE_PREFIX = "⏳ תקופת האחריות";

@@ -1,5 +1,17 @@
 import { describe, it, expect } from "vitest";
-import { attentionKind, isExpiredGuaranteeFlag } from "./attention";
+import { attentionKind, isExpiredGuaranteeFlag, isClosedStatus } from "./attention";
+
+describe("isClosedStatus", () => {
+  it("treats final outcomes as closed and the live pipeline as open", () => {
+    for (const s of ["NOT_SUITABLE", "LOST_CONTACT", "REJECTED", "NOT_ACCEPTED", "NO_SHOW", "CANCELLED_ARRIVAL", "EMPLOYMENT_ENDED", "INVALID_PHONE"]) {
+      expect(isClosedStatus(s)).toBe(true);
+    }
+    for (const s of ["NEW_LEAD", "CONTACTED", "INTERVIEW_BOOKED", "POSTPONED_ARRIVAL", "ARRIVED", "HIRED", "STARTED"]) {
+      expect(isClosedStatus(s)).toBe(false);
+    }
+    expect(isClosedStatus(null)).toBe(false);
+  });
+});
 
 describe("attentionKind", () => {
   it("classifies by the reason prefix", () => {
