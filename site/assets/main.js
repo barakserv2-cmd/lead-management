@@ -110,7 +110,7 @@
     }
     function payText(p) {
       if (!p) return "שכר: בשיחה";
-      return /^[\d.\-+ ]+$/.test(p) ? "₪" + p.replace(/\s/g, "") + " לשעה" : p;
+      return /^[\d.\-+ ]+$/.test(p) ? "₪" + p.replace(/\s/g, "") + " לשעה" : "שכר: " + p;
     }
     function render() {
       board.textContent = "";
