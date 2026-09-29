@@ -156,6 +156,9 @@ export interface ArrivalSignals {
   comesWithFriend: boolean | null;
 }
 
+/** לפני ההגעה, או בימים הראשונים בעבודה (שם רוב העזיבות קורות — 0–3 ימים). */
+export type SignalPhase = { kind: "arrival" } | { kind: "first_days"; day: number };
+
 // גבולות מילה ידניים — \b לא עובד על אותיות עבריות, ובלעדיהם "אח" נתפס בתוך "אחרי".
 // מותרת ו' החיבור בתחילת המילה ("והחבר").
 const FRIEND =
@@ -172,6 +175,20 @@ const CANCELLING = new RegExp(
     "ביטלתי",
     "מצאתי\\s+עבודה",
     "כבר\\s+לא\\s+רלוונטי",
+    "לא\\s+מתאים\\s+לי",
+  ].join("|")
+);
+
+// רק אחרי תחילת העבודה — לפני ההגעה "האוטובוס עוזב ב-8" היה נתפס כביטול
+const LEAVING = new RegExp(
+  [
+    "(?<![א-ת])עוזב(?:ת|ים)?(?![א-ת])",
+    "רוצה\\s+לעזוב",
+    "חוזר(?:ת|ים)?\\s+הביתה",
+    "לא\\s+נשאר(?:ת|ים)?",
+    "התפטר(?:תי)?",
+    "לא\\s+מתאים\\s+לי",
+    "לא\\s+(?:מגיע|מגיעה|אגיע)\\s+(?:מחר|לעבודה|למשמרת)",
   ].join("|")
 );
 
@@ -187,6 +204,10 @@ const HESITANT = new RegExp(
     "אחשוב",
     "התחרט(?:תי|נו)?",
     "קרה\\s+משהו",
+    // קשיים בימים הראשונים
+    "קשה\\s+לי",
+    "לא\\s+מסתדר(?:ת)?",
+    "(?:דירה|מגורים|חדר)[^.!?\\n]{0,25}(?:מלוכלך|מלוכלכת|לא\\s+נקי|אין\\s+מזגן|מזגן\\s+לא|גרוע|נורא|זוועה)",
   ].join("|")
 );
 
@@ -198,42 +219,104 @@ const FRIEND_BACKED_OUT = new RegExp(
 const WITH_FRIEND = new RegExp(`(?:עם|יחד\\s+עם)\\s+${FRIEND}|נגיע\\s+(?:ביחד|שניים)|אנחנו\\s+שניים|מגיעים\\s+שניים`);
 const ALONE = /(?:^|\s)לבד(?:\s|$|[.!?,])/;
 
-export function detectArrivalSignals(text: string): ArrivalSignals {
+export function detectArrivalSignals(text: string, phase: SignalPhase["kind"] = "arrival"): ArrivalSignals {
   const t = text.replace(/\s+/g, " ").trim();
   const friendBackedOut = FRIEND_BACKED_OUT.test(t);
   // "החבר שלי לא מגיע" הוא ביטול של החבר, לא של המועמד — בודקים ביטול בלי המשפט הזה
   const own = friendBackedOut ? t.replace(new RegExp(FRIEND_BACKED_OUT.source, "g"), " ") : t;
   let risk: ArrivalRisk = "none";
-  if (CANCELLING.test(own)) risk = "cancelling";
+  const quitting = phase === "first_days" ? LEAVING : CANCELLING;
+  if (quitting.test(own)) risk = "cancelling";
   else if (HESITANT.test(t) || friendBackedOut) risk = "hesitant";
   // "החבר התחרט, אני מגיע לבד" — עדיין מגיע, אבל כדאי שרכזת תדע
   const comesWithFriend = friendBackedOut || ALONE.test(t) ? false : WITH_FRIEND.test(t) ? true : null;
   return { risk, friendBackedOut, comesWithFriend };
 }
 
-export function signalReason(s: ArrivalSignals, name: string | null, text: string): string | null {
+export function signalReason(
+  s: ArrivalSignals,
+  name: string | null,
+  text: string,
+  phase: SignalPhase = { kind: "arrival" }
+): string | null {
   if (s.risk === "none" && !s.friendBackedOut) return null;
   const who = name ?? "המועמד/ת";
+  const quote = `"${text.slice(0, 80)}"`;
+  if (phase.kind === "first_days") {
+    const what = s.risk === "cancelling" ? "נראה שרוצה לעזוב" : s.friendBackedOut ? "החבר/ה עזב/ה" : "מתקשה";
+    return `🚩 מלווה ההגעה: ${who} — ביום ${phase.day} לעבודה ${what}. ${quote} — כדאי להתקשר היום`;
+  }
   const what = s.friendBackedOut
     ? "החבר/ה שהיה אמור/ה להגיע התחרט/ה"
     : s.risk === "cancelling"
       ? "נראה שמבטל/ת את ההגעה"
       : "מתלבט/ת לגבי ההגעה";
-  return `🚩 מלווה ההגעה: ${who} — ${what}. "${text.slice(0, 80)}" — כדאי להתקשר עכשיו`;
+  return `🚩 מלווה ההגעה: ${who} — ${what}. ${quote} — כדאי להתקשר עכשיו`;
+}
+
+// ── First days at work ──────────────────────────────────────
+
+/** כמה ימים מתחילת העבודה המלווה עדיין מקשיב לתשובות. */
+export const FIRST_DAYS_WINDOW = 7;
+
+/**
+ * הודעת "איך היה היום הראשון" — יום או יומיים אחרי ההתחלה (יומיים כדי לתפוס
+ * התחלה ביום שישי). בדיקת השלומות של יום 3 (postPlacement) נשארת כמו שהיא.
+ */
+export function planFirstDayTouch(p: { daysSinceStart: number; hourNow: number; weekday: number; sent: boolean }): boolean {
+  if (p.sent || p.weekday === 6) return false;
+  if (p.hourNow < DAYTIME_START || p.hourNow >= DAYTIME_END) return false;
+  return p.daysSinceStart === 1 || p.daysSinceStart === 2;
+}
+
+export function firstDayMessage(lead: { name: string | null; hired_client: string | null }): string {
+  const n = firstName(lead.name);
+  const at = lead.hired_client ? ` ב${lead.hired_client}` : "";
+  return (
+    `${n ? `היי ${n}` : "היי"} 👋 כאן ברק שירותים. איך היה היום הראשון${at}?\n` +
+    `הכל בסדר עם המגורים והמשמרות? אם משהו לא מסתדר, כתוב/י לי ונטפל בזה מהר 🙏`
+  );
+}
+
+function daysSince(date: string, now: Date): number {
+  const today = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Jerusalem" }).format(now);
+  return Math.round(
+    (new Date(`${today}T00:00:00Z`).getTime() - new Date(`${date.slice(0, 10)}T00:00:00Z`).getTime()) / 86_400_000
+  );
 }
 
 /**
- * נקרא מה-webhook על הודעה נכנסת מליד בחלון ההגעה. best-effort: כל כשל
- * כאן לא עוצר את עיבוד ההודעה.
+ * נקרא מה-webhook על הודעה נכנסת. פועל על מועמד בדרך לראיון באילת, ועל עובד
+ * בשבוע הראשון שלו בעבודה. best-effort: כל כשל כאן לא עוצר את עיבוד ההודעה.
  */
 export async function applyArrivalSignals(
   db: SupabaseClient,
   lead: { id: string; name: string | null; status: string | null },
   text: string
 ): Promise<void> {
-  if (!lead.status || !ARRIVAL_WINDOW_STATUSES.includes(lead.status)) return;
-  const s = detectArrivalSignals(text);
-  const reason = signalReason(s, lead.name, text);
+  if (!lead.status) return;
+  const preArrival = ARRIVAL_WINDOW_STATUSES.includes(lead.status);
+  const working = lead.status === LeadStatus.HIRED || lead.status === LeadStatus.STARTED;
+  if (!preArrival && !working) return;
+
+  const { data: cur, error } = await db
+    .from("leads")
+    .select("comes_with_friend, start_date")
+    .eq("id", lead.id)
+    .maybeSingle();
+  if (error) return;
+
+  let phase: SignalPhase = { kind: "arrival" };
+  if (working) {
+    const start = cur?.start_date as string | null;
+    if (!start) return;
+    const day = daysSince(start, new Date());
+    if (day < 0 || day > FIRST_DAYS_WINDOW) return;
+    phase = { kind: "first_days", day };
+  }
+
+  const s = detectArrivalSignals(text, phase.kind);
+  const reason = signalReason(s, lead.name, text, phase);
   const updates: Record<string, unknown> = {};
 
   if (reason) {
@@ -241,12 +324,10 @@ export async function applyArrivalSignals(
     updates.needs_attention_at = new Date().toISOString();
     updates.attention_reason = reason;
   }
-  if (s.comesWithFriend !== null) {
-    // לא דורסים מה שהרכזת כבר סימנה — חוץ מ"החבר התחרט", שמשנה את המצב בפועל
-    const { data: cur, error } = await db.from("leads").select("comes_with_friend").eq("id", lead.id).maybeSingle();
-    if (!error && (cur?.comes_with_friend == null || s.friendBackedOut)) {
-      updates.comes_with_friend = s.comesWithFriend;
-    }
+  // "עם חבר / לבד" רלוונטי רק לפני ההגעה. לא דורסים מה שהרכזת כבר סימנה —
+  // חוץ מ"החבר התחרט", שמשנה את המצב בפועל.
+  if (phase.kind === "arrival" && s.comesWithFriend !== null && (cur?.comes_with_friend == null || s.friendBackedOut)) {
+    updates.comes_with_friend = s.comesWithFriend;
   }
   if (Object.keys(updates).length === 0) return;
 

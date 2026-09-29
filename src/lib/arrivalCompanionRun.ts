@@ -6,14 +6,16 @@ import { businessAccount, sendWhatsAppMessage } from "@/lib/whatsappService";
 import {
   ARRIVAL_WINDOW_STATUSES,
   arrivalCompanionEnabledFor,
+  firstDayMessage,
+  planFirstDayTouch,
   planTouch,
   touchMessage,
   whenLabel,
   type TouchType,
 } from "@/lib/arrivalCompanion";
+import { LeadStatus } from "@/lib/stateMachine";
 
 const SILENT_AFTER_HOURS = 24;
-
 
 interface WindowLead {
   id: string;
@@ -47,9 +49,77 @@ function dayDiff(from: string, to: string): number {
   );
 }
 
+/**
+ * "איך היה היום הראשון?" — יום-יומיים אחרי תחילת העבודה. רוב העזיבות שנרשמו
+ * קרו תוך 0–3 ימים (29/09), כלומר לפני בדיקת השלומות של יום 3.
+ */
+async function runFirstDayTouches(
+  db: SupabaseClient,
+  now: { date: string; hour: number; weekday: number },
+  summary: CompanionSummary
+): Promise<void> {
+  const from = new Date(`${now.date}T00:00:00Z`);
+  from.setUTCDate(from.getUTCDate() - 2);
+  const { data, error } = await db
+    .from("leads")
+    .select("id, name, phone, start_date, hired_client, do_not_contact")
+    .in("status", [LeadStatus.HIRED, LeadStatus.STARTED])
+    .not("phone", "is", null)
+    .gte("start_date", from.toISOString().slice(0, 10))
+    .lt("start_date", now.date)
+    .limit(300);
+  if (error || !data) return;
+
+  const leads = (
+    data as { id: string; name: string | null; phone: string | null; start_date: string; hired_client: string | null; do_not_contact: boolean | null }[]
+  ).filter((l) => !l.do_not_contact && arrivalCompanionEnabledFor(l.phone));
+  if (leads.length === 0) return;
+
+  const keys = leads.map((l) => `arrival:first_day:${l.id}:${l.start_date.slice(0, 10)}`);
+  const { data: done } = await db.from("cron_reminders").select("occurrence_key").in("occurrence_key", keys);
+  const sentKeys = new Set((done ?? []).map((r) => String(r.occurrence_key)));
+  const account = businessAccount();
+
+  for (const lead of leads) {
+    const key = `arrival:first_day:${lead.id}:${lead.start_date.slice(0, 10)}`;
+    const go = planFirstDayTouch({
+      daysSinceStart: dayDiff(lead.start_date.slice(0, 10), now.date),
+      hourNow: now.hour,
+      weekday: now.weekday,
+      sent: sentKeys.has(key),
+    });
+    if (!go) continue;
+
+    const message = firstDayMessage(lead);
+    const res = await sendWhatsAppMessage(lead.phone!, message, account, { automated: true });
+    if (res.blocked === "quiet_hours") continue;
+    await db.from("cron_reminders").insert({
+      lead_id: lead.id,
+      reminder_type: "arrival_first_day",
+      occurrence_key: key,
+      payload: { start_date: lead.start_date },
+      success: res.success,
+      error: res.error ?? null,
+    });
+    if (res.success) {
+      summary.sent++;
+      await db.from("messages").insert({ lead_id: lead.id, role: "recruiter", content: message, sent_by: "מלווה ההגעה" });
+      await db.from("lead_events").insert({
+        lead_id: lead.id,
+        event_type: "ליווי הגעה",
+        event_text: "נשלחה הודעת \"איך היה היום הראשון\"",
+        created_by: "מלווה ההגעה",
+      });
+    } else {
+      summary.failed++;
+    }
+  }
+}
+
 export async function runArrivalCompanion(db: SupabaseClient): Promise<CompanionSummary> {
   const summary: CompanionSummary = { sent: 0, failed: 0, silentFlags: 0, skippedDisabled: 0 };
   const now = israelNow();
+  await runFirstDayTouches(db, now, summary);
   const horizon = new Date(`${now.date}T00:00:00Z`);
   horizon.setUTCDate(horizon.getUTCDate() + 8);
 

@@ -12,6 +12,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { getAccountForEmail, sendWhatsAppMessage, businessAccount } from "@/lib/whatsappService";
 import { LeadStatus } from "@/lib/stateMachine";
+import { GUARANTEE_PREFIX, GUARANTEE_FLAG_TTL_DAYS } from "@/lib/attention";
 
 // 60 ו-90: רוב העובדים עוזבים אחרי חודש עד שלושה ("מיצו", מצאו תנאים טובים
 // יותר, אילת לא התאימה). הבדיקה ביום 60 מציעה מעבר פנימי לפני שמחליטים לעזוב.
@@ -88,6 +89,23 @@ export interface CareSummary {
   checkinsSent: number;
   guaranteeAlerts: number;
   failed: number;
+  expiredFlagsCleared: number;
+}
+
+/**
+ * מכבה התראות "תקופת האחריות נגמרת" שהאחריות שלהן כבר עברה. הן מתריעות
+ * שבוע לפני הסוף; אחרי זה הן רק רעש שמסתיר דגלים אמיתיים (ראו lib/attention).
+ */
+async function clearExpiredGuaranteeFlags(db: SupabaseClient): Promise<number> {
+  const cutoff = new Date(Date.now() - GUARANTEE_FLAG_TTL_DAYS * 86_400_000).toISOString();
+  const { data } = await db
+    .from("leads")
+    .update({ needs_attention: false, needs_attention_at: null, attention_reason: null })
+    .eq("needs_attention", true)
+    .like("attention_reason", `${GUARANTEE_PREFIX}%`)
+    .lt("needs_attention_at", cutoff)
+    .select("id");
+  return data?.length ?? 0;
 }
 
 /** ימי אחריות אפקטיביים פר-מלון: דריסה בטבלת clients או ברירת המחדל. */
@@ -106,7 +124,8 @@ async function guaranteeDaysMap(
 }
 
 export async function runPostPlacementCare(db: SupabaseClient): Promise<CareSummary> {
-  const summary: CareSummary = { checkinsSent: 0, guaranteeAlerts: 0, failed: 0 };
+  const summary: CareSummary = { checkinsSent: 0, guaranteeAlerts: 0, failed: 0, expiredFlagsCleared: 0 };
+  summary.expiredFlagsCleared = await clearExpiredGuaranteeFlags(db);
   const today = israelToday();
   const leads = await placedLeads(db);
   if (leads.length === 0) return summary;

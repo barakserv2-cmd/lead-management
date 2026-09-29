@@ -1,6 +1,8 @@
 // לשונית "שימור" — כמה זמן עובדים נשארים, לפי ערוץ ולפי מעסיק, ולמה עוזבים.
 // החישוב ב-src/lib/retention.ts.
 
+import Link from "next/link";
+import { CHECK_REASON_LABELS, type CheckItem } from "@/lib/employmentCheck";
 import {
   SURVIVAL_DAYS,
   type RetentionGroup,
@@ -90,13 +92,54 @@ function GroupTable({ title, keyLabel, groups }: { title: string; keyLabel: stri
   );
 }
 
-export function RetentionContent({ data }: { data: RetentionReport }) {
+function EmploymentCheck({ items }: { items: CheckItem[] }) {
+  if (items.length === 0) return null;
+  return (
+    <section className="space-y-2">
+      <h2 className="text-sm font-semibold text-gray-800">לבדוק: עדיין עובדים? ({items.length})</h2>
+      <p className="text-xs text-gray-500">
+        עובדים שמסומנים פעילים אבל יש סימן שאולי לא הגיעו או כבר עזבו. מי שעובד — לסמן &quot;התחיל לעבוד&quot;;
+        מי שעזב — &quot;סיום העסקה&quot; עם סיבה. בלי זה הדוח למטה מציג תמונה אופטימית מדי.
+      </p>
+      <div className="bg-white border border-amber-200 rounded-xl overflow-x-auto">
+        <table className="w-full text-sm min-w-[620px]">
+          <thead>
+            <tr className="bg-amber-50 text-xs text-amber-900">
+              <th className="text-right px-4 py-2">עובד/ת</th>
+              <th className="text-right px-3 py-2">מעסיק</th>
+              <th className="text-right px-3 py-2">התחיל</th>
+              <th className="text-right px-3 py-2">למה לבדוק</th>
+            </tr>
+          </thead>
+          <tbody>
+            {items.map((i) => (
+              <tr key={i.id} className="border-t">
+                <td className="px-4 py-2">
+                  <Link href={`/leads/${i.id}`} className="text-cyan-700 hover:underline font-medium">
+                    {i.name ?? "—"}
+                  </Link>
+                </td>
+                <td className="px-3 py-2 text-gray-600">{i.hired_client ?? "—"}</td>
+                <td className="px-3 py-2 tabular-nums text-gray-600">לפני {i.daysSinceStart} ימים</td>
+                <td className="px-3 py-2 text-amber-800">{i.reasons.map((r) => CHECK_REASON_LABELS[r]).join(" · ")}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  );
+}
+
+export function RetentionContent({ data, check = [] }: { data: RetentionReport; check?: CheckItem[] }) {
   const t = data.totals;
   const totalExits = data.reasons.reduce((s, r) => s + r.count, 0);
   const missingReason = data.reasons.find((r) => r.code === null)?.count ?? 0;
 
   return (
     <div className="space-y-6" dir="rtl">
+      <EmploymentCheck items={check} />
+
       <div className="flex flex-wrap gap-3">
         <Tile label="עובדים פעילים כעת" value={String(data.activeNow)} hint={data.upcoming ? `ועוד ${data.upcoming} שעוד לא התחילו` : undefined} />
         <Tile label="התחילו לעבוד בשנה האחרונה" value={String(t.started)} />
