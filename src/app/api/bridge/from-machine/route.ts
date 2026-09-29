@@ -21,6 +21,19 @@ import { completeLeadReminders } from "@/lib/reminders";
 
 const GUBGET_EMAIL = "gubget@eilatjobs.com";
 
+/** שמות שהם בעצם "אין שם": ריק, מציין מקום, או מספר טלפון בתור שם. */
+const PLACEHOLDER_NAMES = new Set([
+  "לא ידוע", "לא ידועה", "ללא שם", "ללא שם ללא שם", "אנונימי", "מועמד", "מועמדת",
+  "unknown", "candidate", "test", "בדיקה",
+]);
+
+export function isPlaceholderName(name: string | null | undefined): boolean {
+  const n = (name ?? "").trim();
+  if (!n) return true;
+  if (PLACEHOLDER_NAMES.has(n.toLowerCase())) return true;
+  return /^[\d\s+\-()]+$/.test(n);
+}
+
 /**
  * הרכזות שמקבלות מועמדים שגובגט העביר לאדם. רשימה בסביבה (מופרדת בפסיקים)
  * כדי שאפשר יהיה להוסיף או להוריד רכזת בלי שינוי קוד.
@@ -121,7 +134,11 @@ export async function POST(req: NextRequest) {
     leadId = existing.id;
     currentStatus = existing.status;
     const patch: Record<string, unknown> = {};
-    if (body.name && !existing.name) patch.name = body.name;
+    // "לא ידוע" הוא מציין מקום, לא שם. כשגובגט מצליח לקבל שם אמיתי בשיחה
+    // הוא מחליף את המציין, אבל לעולם לא שם אמיתי שכבר קיים (29.09).
+    if (body.name && isPlaceholderName(existing.name) && !isPlaceholderName(body.name)) {
+      patch.name = body.name;
+    }
     // claim as גובגט only when no human already owns it
     if (!existing.handled_by) patch.handled_by = GUBGET_EMAIL;
     if (Object.keys(patch).length > 0) {
