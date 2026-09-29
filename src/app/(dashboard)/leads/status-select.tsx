@@ -13,7 +13,14 @@ import {
   getAllowedTransitions,
   type LeadStatusValue,
 } from "@/lib/stateMachine";
-import { SUB_STATUSES, NO_ANSWER_3, NOT_AVAILABLE_NOW, SENT_TO_INTERVIEW, FOLLOW_UP } from "@/lib/constants";
+import {
+  SUB_STATUSES,
+  NO_ANSWER_3,
+  NOT_AVAILABLE_NOW,
+  SENT_TO_INTERVIEW,
+  FOLLOW_UP,
+  noArrivalReasonLabel,
+} from "@/lib/constants";
 
 const SUB_STATUS_DIALOG_CONFIG: Partial<Record<LeadStatusValue, SubStatusPickerConfig>> = {
   [LeadStatus.CONTACTED]: {
@@ -32,7 +39,8 @@ const SUB_STATUS_DIALOG_CONFIG: Partial<Record<LeadStatusValue, SubStatusPickerC
 };
 import { InterviewScheduleDialog } from "./interview-schedule-dialog";
 import { HiredConfirmDialog } from "./hired-confirm-dialog";
-import { EmploymentEndDialog } from "./employment-end-dialog";
+import { EmploymentEndDialog, type EmploymentEndData } from "./employment-end-dialog";
+import { NoArrivalDialog, type NoArrivalData } from "./no-arrival-dialog";
 import { SubStatusPickerDialog, type SubStatusPickerConfig } from "./sub-status-picker-dialog";
 import { RejectionReasonDialog } from "./rejection-reason-dialog";
 import { StartWorkDialog } from "./start-work-dialog";
@@ -49,11 +57,15 @@ const DATE_EDITABLE_STATUSES = new Set<string>([
 // עריכת תאריך בלבד, בלי מעבר סטטוס — changeLeadStatus יוצא מוקדם כשהסטטוס
 // לא משתנה, אז הכתיבה עוברת דרך ה-PATCH של כרטיס הליד (כולל audit).
 async function patchLeadDate(leadId: string, field: string, value: string): Promise<string | null> {
+  return patchLeadFields(leadId, { [field]: value });
+}
+
+async function patchLeadFields(leadId: string, fields: Record<string, string>): Promise<string | null> {
   try {
     const res = await fetch(`/api/leads/${leadId}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ [field]: value }),
+      body: JSON.stringify(fields),
     });
     if (!res.ok) {
       const data = (await res.json().catch(() => ({}))) as { error?: string };
@@ -115,6 +127,8 @@ export function StatusSelect({
   const [showHiredDialog, setShowHiredDialog] = useState(false);
   const [showEmploymentEndDialog, setShowEmploymentEndDialog] = useState(false);
   const [showRejectionDialog, setShowRejectionDialog] = useState(false);
+  // "לא הגיע" / "ביטל הגעה" — איזה מהשניים נבחר, כשהדיאלוג פתוח
+  const [noArrivalTarget, setNoArrivalTarget] = useState<LeadStatusValue | null>(null);
   const [showStartWorkDialog, setShowStartWorkDialog] = useState(false);
   const [callbackFor, setCallbackFor] = useState<string | null>(null);
   // "מעקב" מחייב מועד; "לא זמין במיידי" רק מציע אותו
@@ -234,6 +248,12 @@ export function StatusSelect({
       return;
     }
 
+    // Intercept NO_SHOW / CANCELLED_ARRIVAL — a structured reason is mandatory
+    if (newStatus === LeadStatus.NO_SHOW || newStatus === LeadStatus.CANCELLED_ARRIVAL) {
+      setNoArrivalTarget(newStatus);
+      return;
+    }
+
     // Intercept CONTACTED / NOT_SUITABLE — require a sub-status
     if (newStatus === LeadStatus.CONTACTED || newStatus === LeadStatus.NOT_SUITABLE) {
       setSubStatusDialog({ open: true, targetStatus: newStatus as LeadStatusValue });
@@ -336,19 +356,23 @@ export function StatusSelect({
     }
   }
 
-  async function handleEmploymentEndConfirm(data: { employmentEndDate: string }) {
+  async function handleEmploymentEndConfirm(data: EmploymentEndData) {
     setLoading(true);
 
-    // כבר "סיום העסקה" — רק מתקנים את התאריך
+    // כבר "סיום העסקה" — רק מתקנים את התאריך והסיבה
     if (status === LeadStatus.EMPLOYMENT_ENDED) {
-      const error = await patchLeadDate(leadId, "employment_end_date", data.employmentEndDate);
+      const error = await patchLeadFields(leadId, {
+        employment_end_date: data.employmentEndDate,
+        employment_end_reason: data.employmentEndReason,
+        employment_end_notes: data.employmentEndNotes,
+      });
       setLoading(false);
       if (error) {
         setToast({ message: error, type: "error" });
         return;
       }
       setShowEmploymentEndDialog(false);
-      setToast({ message: "תאריך סיום ההעסקה עודכן", type: "success" });
+      setToast({ message: "פרטי סיום ההעסקה עודכנו", type: "success" });
       router.refresh();
       return;
     }
@@ -358,7 +382,11 @@ export function StatusSelect({
       newStatus: LeadStatus.EMPLOYMENT_ENDED,
       userId: "user",
       notes: `סיום העסקה בתאריך ${data.employmentEndDate}`,
-      extra: { employmentEndDate: data.employmentEndDate },
+      extra: {
+        employmentEndDate: data.employmentEndDate,
+        employmentEndReason: data.employmentEndReason,
+        employmentEndNotes: data.employmentEndNotes,
+      },
     });
 
     setLoading(false);
@@ -433,6 +461,32 @@ export function StatusSelect({
     setStatus(LeadStatus.NOT_ACCEPTED);
     setSubStatus(null);
     setToast({ message: "נשמר — לא התקבל", type: "success" });
+  }
+
+  async function handleNoArrivalConfirm(data: NoArrivalData) {
+    const target = noArrivalTarget;
+    if (!target) return;
+    setLoading(true);
+
+    const result = await changeLeadStatus({
+      leadId,
+      newStatus: target,
+      userId: "user",
+      notes: `${STATUS_LABELS[target]}: ${noArrivalReasonLabel(data.noArrivalReason)}`,
+      extra: { noArrivalReason: data.noArrivalReason, noArrivalNotes: data.noArrivalNotes },
+    });
+
+    setLoading(false);
+
+    if (!result.success) {
+      setToast({ message: result.error ?? "שגיאה בעדכון", type: "error" });
+      return;
+    }
+
+    setNoArrivalTarget(null);
+    setStatus(target);
+    setSubStatus(null);
+    setToast({ message: `${STATUS_LABELS[target]} — נשמר`, type: "success" });
   }
 
   async function handleSubStatusConfirm(chosenSub: string) {
@@ -675,6 +729,16 @@ export function StatusSelect({
               editOnly={status === LeadStatus.EMPLOYMENT_ENDED}
               onConfirm={handleEmploymentEndConfirm}
               onCancel={() => setShowEmploymentEndDialog(false)}
+              loading={loading}
+            />
+          )}
+
+          {noArrivalTarget && (
+            <NoArrivalDialog
+              title={STATUS_LABELS[noArrivalTarget]}
+              leadName={leadName}
+              onConfirm={handleNoArrivalConfirm}
+              onCancel={() => setNoArrivalTarget(null)}
               loading={loading}
             />
           )}

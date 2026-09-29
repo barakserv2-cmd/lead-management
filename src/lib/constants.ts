@@ -145,6 +145,83 @@ export const INTERVIEW_REJECTION_REASONS = [
   "אחר",
 ] as const;
 
+// ── Employment end reasons ("סיום העסקה") ──────────────────
+// הקוד נשמר ב-leads.employment_end_reason. planned = סיום טבעי (השלים
+// תקופה / התגייס) — לא נספר כעזיבה מוקדמת בדוח השימור.
+
+export const EMPLOYMENT_END_REASONS = [
+  { code: "completed_term", label: "השלים את התקופה", planned: true },
+  { code: "army_draft", label: "התגייס לצבא", planned: true },
+  { code: "burned_out", label: "מיצה / רצה לחזור הביתה", planned: false },
+  { code: "eilat_not_for_me", label: "אילת לא התאימה לו", planned: false },
+  { code: "better_offer", label: "מצא עבודה עם תנאים טובים יותר", planned: false },
+  { code: "went_direct", label: "עבר לעבוד ישירות אצל המעסיק", planned: false },
+  { code: "employer_ended", label: "המעסיק סיים את ההעסקה", planned: false },
+  { code: "housing", label: "בעיה במגורים", planned: false },
+  { code: "personal", label: "סיבה אישית / משפחתית", planned: false },
+  { code: "never_started", label: "לא התחיל לעבוד בפועל", planned: false },
+  { code: "other", label: "אחר", planned: false },
+] as const;
+
+export type EmploymentEndReason = (typeof EMPLOYMENT_END_REASONS)[number]["code"];
+
+export function isEmploymentEndReason(v: unknown): v is EmploymentEndReason {
+  return EMPLOYMENT_END_REASONS.some((r) => r.code === v);
+}
+
+export function employmentEndReasonLabel(code: string | null | undefined): string {
+  if (!code) return "לא צוין";
+  return EMPLOYMENT_END_REASONS.find((r) => r.code === code)?.label ?? code;
+}
+
+// ── Candidate segment ("סוג מועמד") ────────────────────────
+// מי שבא עם מטרה ותאריך נשאר יותר — הפילוח הזה מאפשר לבדוק את זה בדוחות.
+
+export const CANDIDATE_SEGMENTS = [
+  { code: "boarding_pre_army", label: "בוגר פנימייה / לפני גיוס" },
+  { code: "preferred_work", label: "חייל משוחרר — עבודה מועדפת" },
+  { code: "post_army", label: "אחרי צבא" },
+  { code: "oleh", label: "עולה חדש" },
+  { code: "seasonal", label: "עובד עונתי" },
+  { code: "older", label: "מבוגר" },
+  { code: "other", label: "אחר" },
+] as const;
+
+export type CandidateSegment = (typeof CANDIDATE_SEGMENTS)[number]["code"];
+
+export function isCandidateSegment(v: unknown): v is CandidateSegment {
+  return CANDIDATE_SEGMENTS.some((s) => s.code === v);
+}
+
+export function candidateSegmentLabel(code: string | null | undefined): string {
+  if (!code) return "לא סומן";
+  return CANDIDATE_SEGMENTS.find((s) => s.code === code)?.label ?? code;
+}
+
+// ── No-arrival reasons ("לא הגיע" / "ביטל הגעה") ───────────
+
+export const NO_ARRIVAL_REASONS = [
+  { code: "personal", label: "קרה משהו אישי" },
+  { code: "not_for_me", label: "החליט שזה לא מתאים לו" },
+  { code: "friend_backed_out", label: "החבר שהיה אמור להגיע התחרט" },
+  { code: "found_other_job", label: "מצא עבודה אחרת" },
+  { code: "travel_or_money", label: "נסיעה / כסף" },
+  { code: "housing", label: "מגורים" },
+  { code: "unreachable", label: "לא עונה" },
+  { code: "other", label: "אחר" },
+] as const;
+
+export type NoArrivalReason = (typeof NO_ARRIVAL_REASONS)[number]["code"];
+
+export function isNoArrivalReason(v: unknown): v is NoArrivalReason {
+  return NO_ARRIVAL_REASONS.some((r) => r.code === v);
+}
+
+export function noArrivalReasonLabel(code: string | null | undefined): string {
+  if (!code) return "לא צוין";
+  return NO_ARRIVAL_REASONS.find((r) => r.code === code)?.label ?? code;
+}
+
 // ── Conversation Mode enums ─────────────────────────────────
 
 export const INTERACTION_TYPES = {

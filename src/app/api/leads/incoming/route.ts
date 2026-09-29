@@ -49,6 +49,7 @@ export async function GET(request: NextRequest) {
     .select(
       "id, created_at, name, phone, email, age, location, experience, job_title, source, status, sub_status, " +
       "rejection_reason, hired_client, hired_position, start_date, arrival_date, interview_date, " +
+      "candidate_segment, comes_with_friend, companion_name, " +
       "interview_notes, followup_notes, notes, tags, screening_score, screening_motivation_score, " +
       "screening_fit_score, screening_availability_score, screening_experience_score, extracted_availability, " +
       "extracted_salary_expectation, extracted_location_pref, extracted_interests, needs_attention, " +

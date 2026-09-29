@@ -1,0 +1,129 @@
+import { describe, it, expect, afterEach } from "vitest";
+import {
+  planTouch,
+  detectArrivalSignals,
+  signalReason,
+  touchMessage,
+  whenLabel,
+  arrivalCompanionEnabledFor,
+  type PlanInput,
+  type TouchType,
+} from "./arrivalCompanion";
+
+function plan(over: Partial<PlanInput>): TouchType | null {
+  return planTouch({
+    daysAhead: 3,
+    interviewHour: 10,
+    hourNow: 12,
+    sent: new Set(),
+    sentToday: new Set(),
+    weekday: 2,
+    ...over,
+  });
+}
+
+describe("planTouch", () => {
+  it("confirms an interview booked two or more days ahead, once", () => {
+    expect(plan({ daysAhead: 5 })).toBe("confirm");
+    expect(plan({ daysAhead: 5, sent: new Set(["confirm"]) })).toBeNull();
+  });
+
+  it("checks travel two days before when the confirmation went out earlier", () => {
+    expect(plan({ daysAhead: 2, sent: new Set(["confirm"]) })).toBe("travel_check");
+    expect(plan({ daysAhead: 2, sent: new Set(["confirm", "travel_check"]) })).toBeNull();
+  });
+
+  it("sends at most one proactive message a day", () => {
+    const today = new Set<TouchType>(["confirm"]);
+    expect(plan({ daysAhead: 2, sent: today, sentToday: today })).toBeNull();
+  });
+
+  it("leaves the day before to the existing 16:30 reminder", () => {
+    expect(plan({ daysAhead: 1 })).toBeNull();
+  });
+
+  it("sends the morning message only between 08:00 and 10:00 and only for late interviews", () => {
+    expect(plan({ daysAhead: 0, hourNow: 8, interviewHour: 13 })).toBe("day_of");
+    expect(plan({ daysAhead: 0, hourNow: 8, interviewHour: null })).toBe("day_of");
+    expect(plan({ daysAhead: 0, hourNow: 8, interviewHour: 9 })).toBeNull();
+    expect(plan({ daysAhead: 0, hourNow: 11, interviewHour: 13 })).toBeNull();
+  });
+
+  it("stays quiet outside daytime hours and on Shabbat", () => {
+    expect(plan({ hourNow: 21 })).toBeNull();
+    expect(plan({ hourNow: 9 })).toBeNull();
+    expect(plan({ weekday: 6 })).toBeNull();
+  });
+});
+
+describe("detectArrivalSignals", () => {
+  it("spots a candidate cancelling", () => {
+    expect(detectArrivalSignals("סליחה אני לא אגיע").risk).toBe("cancelling");
+    expect(detectArrivalSignals("מצאתי עבודה במרכז").risk).toBe("cancelling");
+  });
+
+  it("spots hesitation", () => {
+    expect(detectArrivalSignals("אני עוד לא בטוח").risk).toBe("hesitant");
+    expect(detectArrivalSignals("אפשר לדחות לשבוע הבא?").risk).toBe("hesitant");
+  });
+
+  it("recognises a friend backing out without treating it as the candidate cancelling", () => {
+    const s = detectArrivalSignals("החבר שלי לא מגיע, אני עדיין בא");
+    expect(s.friendBackedOut).toBe(true);
+    expect(s.risk).toBe("hesitant");
+    expect(s.comesWithFriend).toBe(false);
+  });
+
+  it("reads whether they come alone or with someone", () => {
+    expect(detectArrivalSignals("מגיע עם החברה שלי").comesWithFriend).toBe(true);
+    expect(detectArrivalSignals("אני מגיע לבד").comesWithFriend).toBe(false);
+    expect(detectArrivalSignals("סבבה תודה").comesWithFriend).toBeNull();
+  });
+
+  it("does not see a brother inside unrelated words", () => {
+    const s = detectArrivalSignals("אחרי זה אני יוצא לתחנה, הכל טוב");
+    expect(s.friendBackedOut).toBe(false);
+    expect(s.risk).toBe("none");
+    expect(signalReason(s, "דני", "…")).toBeNull();
+  });
+
+  it("builds a recruiter-facing reason", () => {
+    const r = signalReason(detectArrivalSignals("החבר התחרט"), "דני", "החבר התחרט");
+    expect(r).toContain("דני");
+    expect(r).toContain("התחרט");
+  });
+});
+
+describe("messages", () => {
+  const lead = { name: "דני כהן", interview_date: "2026-10-01T10:00:00+00:00", comes_with_friend: null };
+
+  it("formats the interview time in Israel wall-clock", () => {
+    expect(whenLabel(lead.interview_date)).toBe("ביום חמישי 1.10 בשעה 10:00");
+  });
+
+  it("asks about a friend only when it is still unknown, and about travel two days before", () => {
+    const m = touchMessage("confirm", lead, 2);
+    expect(m).toContain("היי דני");
+    expect(m).toContain("חבר/ה");
+    expect(m).toContain("כרטיס");
+    const known = touchMessage("confirm", { ...lead, comes_with_friend: false }, 5);
+    expect(known).not.toContain("חבר/ה");
+    expect(known).not.toContain("כרטיס");
+  });
+});
+
+describe("arrivalCompanionEnabledFor", () => {
+  afterEach(() => {
+    delete process.env.ARRIVAL_COMPANION_MODE;
+    delete process.env.ARRIVAL_COMPANION_TEST_PHONES;
+  });
+
+  it("is off by default and on for pilot phones", () => {
+    expect(arrivalCompanionEnabledFor("0501234567")).toBe(false);
+    process.env.ARRIVAL_COMPANION_TEST_PHONES = "050-1234567";
+    expect(arrivalCompanionEnabledFor("+972501234567")).toBe(true);
+    expect(arrivalCompanionEnabledFor("0529999999")).toBe(false);
+    process.env.ARRIVAL_COMPANION_MODE = "live";
+    expect(arrivalCompanionEnabledFor("0529999999")).toBe(true);
+  });
+});

@@ -5,6 +5,7 @@ import { useState, useMemo } from "react";
 import type { Lead } from "@/types/leads";
 import { StatusSelect } from "../../leads/status-select";
 import { LeadStatus, type LeadStatusValue } from "@/lib/stateMachine";
+import { employmentEndReasonLabel } from "@/lib/constants";
 
 // בדוח המועסקים מציגים רק את שלושת מצבי ההעסקה
 const HIRED_REPORT_STATUSES: LeadStatusValue[] = [
@@ -271,6 +272,14 @@ export function HiredContent({
                     {lead.employment_end_date ? (
                       <span className="text-slate-600 font-medium">
                         {new Date(lead.employment_end_date).toLocaleDateString("he-IL")}
+                        {lead.status === LeadStatus.EMPLOYMENT_ENDED && (
+                          <span
+                            className={`block text-xs font-normal ${lead.employment_end_reason ? "text-gray-500" : "text-amber-600"}`}
+                            title={lead.employment_end_notes ?? undefined}
+                          >
+                            {employmentEndReasonLabel(lead.employment_end_reason)}
+                          </span>
+                        )}
                       </span>
                     ) : (
                       <span className="text-gray-300">—</span>

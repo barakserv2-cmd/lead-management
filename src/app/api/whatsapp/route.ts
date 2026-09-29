@@ -11,6 +11,7 @@ import { isOptOutMessage, OPT_OUT_CONFIRMATION } from "@/lib/sendGate";
 import { botModeForPhone } from "@/lib/botConfig";
 import { sendBookingLinkToLead } from "@/lib/bookingSend";
 import { analyzeWhatsappMessage, type WhatsAppNLU } from "@/lib/ai/parseWhatsappMessage";
+import { applyArrivalSignals, arrivalCompanionEnabledFor } from "@/lib/arrivalCompanion";
 import {
   createLeadFromPublication,
   matchPublication,
@@ -357,6 +358,15 @@ export async function POST(req: NextRequest) {
         if (Object.keys(updates).length > 0) {
           await supabase.from("leads").update(updates).eq("id", lead.id);
         }
+      }
+
+      // 4. מלווה ההגעה: מועמד בדרך לראיון באילת שכותב "לא בטוח" / "החבר
+      // התחרט" — דגל ספציפי לרכזת (דורס את סיבת ה-NLU הכללית), ורישום
+      // "עם חבר / לבד". best-effort — לא עוצר את עיבוד ההודעה.
+      if (arrivalCompanionEnabledFor(phone)) {
+        await applyArrivalSignals(supabase, lead, messageText).catch((err) =>
+          console.error(`[WhatsApp Webhook] arrival signals failed for lead ${lead.id}:`, err)
+        );
       }
     }
 
