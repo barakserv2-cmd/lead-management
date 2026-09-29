@@ -36,6 +36,10 @@ Vercel מחובר ל-GitHub ופורס את `main` לפרודקשן לבד, תו
 נרשמות ב-GitHub, ולכן אף אחד לא ראה מאיפה הן באות. כשהכל עובר דרך main —
 הפרודקשן תמיד שווה ל-main, ואין דרך להעלות גרסה ישנה בטעות.
 
+גם ה-build עצמו אוכף את זה: `scripts/guard-production-build.mjs` רץ לפני
+`next build` בכל build של פרודקשן, שואל את GitHub אם הקומיט מכיל את כל main,
+ומפיל את ה-build אם לא (או אם הקומיט בכלל לא נדחף). האתר החי לא מתחלף.
+
 אסור גם `vercel deploy --prod`, `vercel promote` או "Redeploy" על פריסה של
 ענף. אם צריך לשחזר — Promote בלוח של Vercel **רק** לפריסה של הקומיט האחרון
 ב-main.
