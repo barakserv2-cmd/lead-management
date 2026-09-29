@@ -121,6 +121,7 @@ function lastUpdate(lead: Lead, now: number): { label: string; when: string; cla
 // (אסקלציה מגובגט, או ליד חדש שממתין מעל יום), כתום = מתחיל להתעכב.
 function urgency(lead: Lead, now: number): { color: string | null; title: string } {
   if (lead.needs_human_attention) return { color: "#ef4444", title: "גובגט העביר לרכזת — ממתין לטיפול" };
+  if (lead.needs_attention) return { color: "#f59e0b", title: lead.attention_reason ?? "דורש תשומת לב" };
   if (lead.status === "NEW_LEAD") {
     const hours = (now - new Date(lead.created_at).getTime()) / 3_600_000;
     if (hours >= 24) return { color: "#ef4444", title: "ממתין לנציג יותר מיום" };

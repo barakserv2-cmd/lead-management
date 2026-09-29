@@ -89,7 +89,9 @@ async function runInterviewReminders(admin: ReturnType<typeof getAdmin>): Promis
     const { data: leads } = await admin
       .from("leads")
       .select("id, name, phone, interview_date, interview_type")
-      .eq("status", "INTERVIEW_BOOKED")
+      // "דחה הגעה" שומר את המועד החדש ב-interview_date אבל נשאר בסטטוס הזה —
+      // בלעדיו מי שדחה לא קיבל תזכורת לפני המועד החדש
+      .in("status", ["INTERVIEW_BOOKED", "POSTPONED_ARRIVAL"])
       .not("phone", "is", null)
       .gte("interview_date", dayStart.toISOString())
       .lt("interview_date", dayEnd.toISOString());

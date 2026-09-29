@@ -28,6 +28,46 @@ function getSupabaseAdmin() {
   );
 }
 
+const RETURNING_EVENT = "פנייה חוזרת";
+
+/**
+ * מועמד שכבר יש לו כרטיס הגיש שוב (מודעה אחרת / אותה מודעה) או התקשר שוב.
+ * נרשם ביומן הליד ומסומן "דורש תשומת לב" — פעם אחת ביממה לכל היותר, כי
+ * אותו מייל נסרק שוב בכל ריצה עד שהוא יוצא מחלון ה-24 שעות.
+ */
+async function noteReturningCandidate(
+  supabase: ReturnType<typeof getSupabaseAdmin>,
+  leadId: string,
+  info: { kind: "call" | "application"; detail: string }
+): Promise<void> {
+  const since = new Date(Date.now() - 24 * 3600_000).toISOString();
+  const { data: recent } = await supabase
+    .from("lead_events")
+    .select("id")
+    .eq("lead_id", leadId)
+    .eq("event_type", RETURNING_EVENT)
+    .gte("created_at", since)
+    .limit(1);
+  if (recent && recent.length > 0) return;
+
+  const reason =
+    info.kind === "call" ? "מועמד קיים התקשר שוב" : "מועמד קיים הגיש מועמדות שוב";
+  await supabase.from("lead_events").insert({
+    lead_id: leadId,
+    event_type: RETURNING_EVENT,
+    event_text: info.detail ? `${reason}: ${info.detail}` : reason,
+    created_by: "סורק המיילים",
+  });
+  await supabase
+    .from("leads")
+    .update({
+      needs_attention: true,
+      needs_attention_at: new Date().toISOString(),
+      attention_reason: reason,
+    })
+    .eq("id", leadId);
+}
+
 // Who may trigger a scrape:
 //   * Vercel cron  → Authorization: Bearer <CRON_SECRET> (Vercel adds it)
 //   * the settings page "סנכרון" button → signed-in recruiter session
@@ -206,6 +246,15 @@ async function handleFetchEmails(req: NextRequest) {
             );
             summary.duplicates++;
             summary.details.push(`Duplicate (phone ${phone}): ${name}`);
+            // מועמד קיים שהגיש שוב / התקשר שוב — עד עכשיו נבלע בלי זכר, כולל
+            // שיחה שלא נענתה ממועמד קיים. נרשם ביומן ומסומן "דורש תשומת לב".
+            // המייל נסרק שוב כל 2 דקות במשך יממה, ולכן לכל היותר רישום אחד ביום.
+            await noteReturningCandidate(supabase, existingByPhone[0].id as string, {
+              kind: maskyooCall ? "call" : "application",
+              detail: maskyooCall
+                ? notes ?? ""
+                : [email.subject, job_title].filter(Boolean).join(" · "),
+            });
             // Do NOT mark as read — lead emails must stay unread in the inbox.
             // Dedup is by original_email_id, so re-scanning is safe.
             continue;
