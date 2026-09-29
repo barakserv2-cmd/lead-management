@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { lookup } from "node:dns/promises";
 import { isIP } from "node:net";
-import { createClient } from "@/lib/supabase/server";
+import { getAuthedUser } from "@/lib/api-auth";
 
 // גרירה של תמונה מדף אינטרנט (וואטסאפ ווב, ג'ימייל, דרייב…) לא מוסרת קובץ
 // אלא כתובת בלבד, והדפדפן חוסם משיכה שלה מהצד שלנו (CORS). הנתיב הזה מושך
@@ -57,8 +57,7 @@ async function assertPublicHost(hostname: string): Promise<void> {
 }
 
 export async function POST(request: NextRequest) {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const user = await getAuthedUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   let body: { url?: string };

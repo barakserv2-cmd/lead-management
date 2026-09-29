@@ -11,6 +11,7 @@
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { getAccountForEmail, sendWhatsAppMessage, businessAccount } from "@/lib/whatsappService";
+import { isTemporaryBlock } from "@/lib/sendGate";
 import { LeadStatus } from "@/lib/stateMachine";
 import { GUARANTEE_PREFIX, GUARANTEE_FLAG_TTL_DAYS } from "@/lib/attention";
 
@@ -157,6 +158,9 @@ export async function runPostPlacementCare(db: SupabaseClient): Promise<CareSumm
     if (done.has(c.key)) continue;
     const message = checkinMessage(c.day, c.lead.name, c.lead.hired_client);
     const res = await sendWhatsAppMessage(c.lead.phone!, message, sender, { automated: true });
+    // נחסם זמנית (לילה, שבת/חג) — לא רושמים: רישום כאן נחשב "כבר נשלח",
+    // ובדיקת השלומות לא הייתה יוצאת גם כשהחלון נפתח שוב.
+    if (isTemporaryBlock(res.blocked)) continue;
     await db.from("cron_reminders").insert({
       lead_id: c.lead.id,
       reminder_type: `checkin_day${c.day}`,
@@ -180,7 +184,7 @@ export async function runPostPlacementCare(db: SupabaseClient): Promise<CareSumm
         event_text: `נשלחה בדיקת שלומות יום ${c.day} להעסקה`,
         created_by: owner,
       });
-    } else if (res.blocked !== "quiet_hours") {
+    } else {
       summary.failed++;
     }
   }

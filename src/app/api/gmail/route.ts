@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { normalizePhone } from "@/lib/phone";
 import { createClient } from "@supabase/supabase-js";
-import { createClient as createCookieClient } from "@/lib/supabase/server";
 import { logAudit } from "@/lib/audit";
 import {
   fetchUnreadEmails,
@@ -14,6 +13,8 @@ import {
 import { parseEmailWithAI } from "@/lib/ai/parse-email";
 import { LEAD_STATUSES } from "@/lib/constants";
 import { enqueueWelcome, runWelcomeBatch } from "@/lib/whatsappWelcome";
+import { getAuthedUser } from "@/lib/api-auth";
+import { hasCronSecret } from "@/lib/secrets";
 
 // Let the run finish instead of being cut off mid-batch — a truncated run left
 // newer lead emails un-ingested. Pro allows up to 300s.
@@ -74,11 +75,9 @@ async function noteReturningCandidate(
 // Anything else is rejected. Previously this was fully public.
 async function authorize(req: NextRequest): Promise<{ ok: true; actor: string } | { ok: false }> {
   const secret = process.env.CRON_SECRET;
-  const header = req.headers.get("authorization") ?? "";
-  if (secret && header === `Bearer ${secret}`) return { ok: true, actor: "cron" };
+  if (secret && hasCronSecret(req)) return { ok: true, actor: "cron" };
   try {
-    const supabase = await createCookieClient();
-    const { data: { user } } = await supabase.auth.getUser();
+    const user = await getAuthedUser();
     if (user) return { ok: true, actor: user.email ?? "user" };
   } catch {
     /* no session */

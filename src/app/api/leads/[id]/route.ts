@@ -7,6 +7,7 @@ import { normalizePhone } from "@/lib/phone";
 import { findLeadByPhone, duplicatePhonePayload, isPhoneUniqueViolation } from "@/lib/leadPhoneGuard";
 import { normalizeEmployerName } from "@/lib/employerNormalization";
 import { isEmploymentEndReason, isCandidateSegment } from "@/lib/constants";
+import { getAuthedUser } from "@/lib/api-auth";
 
 // עדכון פרטי מועמד מחלון העריכה הצף. fetch+API ולא server action —
 // הדפוס הקבוע בפרויקט (Next 16 מפיל טפסים דרך server actions).
@@ -60,7 +61,7 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const user = await getAuthedUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const { id: leadId } = await params;
@@ -83,7 +84,7 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const user = await getAuthedUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const { id: leadId } = await params;

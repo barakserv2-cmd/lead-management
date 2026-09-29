@@ -7,6 +7,7 @@ import {
   anonymizeLead,
   privacyAdmin,
 } from "@/lib/privacy";
+import { hasCronSecret } from "@/lib/secrets";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -22,10 +23,7 @@ export const maxDuration = 300;
 // Guarded by CRON_SECRET (same pattern as /api/cron/daily).
 
 function isAuthorized(req: NextRequest): boolean {
-  const secret = process.env.CRON_SECRET;
-  if (!secret) return true; // local dev
-  const header = req.headers.get("authorization") ?? "";
-  return header === `Bearer ${secret}`;
+  return hasCronSecret(req);
 }
 
 export async function GET(req: NextRequest) {

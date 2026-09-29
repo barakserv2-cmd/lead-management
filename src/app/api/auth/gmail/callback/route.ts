@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { google } from "googleapis";
 import { createClient } from "@supabase/supabase-js";
 import { createOAuth2Client } from "@/lib/gmail";
+import { getAuthedUser } from "@/lib/api-auth";
+import { GMAIL_STATE_COOKIE, stateMatches } from "../state";
 
 function getSupabase() {
   return createClient(
@@ -15,6 +17,19 @@ export async function GET(request: NextRequest) {
   const code = url.searchParams.get("code");
   const error = url.searchParams.get("error");
   const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+  const fail = (message: string) => {
+    const res = NextResponse.redirect(`${baseUrl}/settings?gmail_error=${encodeURIComponent(message)}`);
+    res.cookies.delete({ name: GMAIL_STATE_COOKIE, path: "/api/auth/gmail" });
+    return res;
+  };
+
+  // רק אדמין שהתחיל את החיבור מהמסך הזה (state תואם לעוגייה) יכול להחליף
+  // את התיבה שממנה נקלטים לידים.
+  const user = await getAuthedUser();
+  if (!user?.isAdmin) return fail("רק אדמין יכול לחבר את תיבת הלידים");
+  if (!stateMatches(url.searchParams.get("state"), request.cookies.get(GMAIL_STATE_COOKIE)?.value)) {
+    return fail("החיבור פג או לא התחיל מהמסך הזה — נסו שוב");
+  }
 
   if (error) {
     return NextResponse.redirect(
@@ -56,7 +71,9 @@ export async function GET(request: NextRequest) {
       })
       .eq("id", 1);
 
-    return NextResponse.redirect(`${baseUrl}/settings?gmail_connected=true`);
+    const ok = NextResponse.redirect(`${baseUrl}/settings?gmail_connected=true`);
+    ok.cookies.delete({ name: GMAIL_STATE_COOKIE, path: "/api/auth/gmail" });
+    return ok;
   } catch (err) {
     console.error("[Gmail OAuth] Callback error:", err);
     const message = err instanceof Error ? err.message : "Unknown error";

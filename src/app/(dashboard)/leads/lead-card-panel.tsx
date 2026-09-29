@@ -87,7 +87,7 @@ function useAISummary(lead: Lead | null, open: boolean) {
       const res = await fetch("/api/ai/lead-summary", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ lead: leadData }),
+        body: JSON.stringify({ leadId: leadData.id }),
       });
       if (!res.ok) throw new Error("Failed to fetch summary");
       const data = await res.json();

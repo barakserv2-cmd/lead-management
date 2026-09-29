@@ -9,6 +9,7 @@ import { normalizeEmployerName, type NormalizationResult } from "@/lib/employerN
 import { logAudit, diffFields } from "@/lib/audit";
 import { findLeadByPhone, isPhoneUniqueViolation, DUPLICATE_PHONE_MESSAGE } from "@/lib/leadPhoneGuard";
 import { normalizePhone } from "@/lib/phone";
+import { requireRecruiter } from "@/lib/api-auth";
 
 function getSupabase() {
   return createServerClient(
@@ -18,6 +19,7 @@ function getSupabase() {
 }
 
 export async function getStatusHistory(leadId: string) {
+  await requireRecruiter();
   const { data, error } = await getSupabase()
     .from("lead_status_history")
     .select("*")
@@ -29,6 +31,7 @@ export async function getStatusHistory(leadId: string) {
 }
 
 export async function updateLeadSubStatus(leadId: string, subStatus: string | null) {
+  await requireRecruiter();
   // תת-סטטוס נקבע אחרי ניסיון חיוג ("אין מענה 1/2/3", "מעקב") — זו נקודת
   // הזמן היחידה שמתעדת את הניסיון, ולכן היא מעדכנת גם את מועד הקשר האחרון.
   const { error } = await getSupabase()
@@ -48,6 +51,7 @@ export async function updateLeadSubStatus(leadId: string, subStatus: string | nu
 }
 
 export async function getActiveClients() {
+  await requireRecruiter();
   const { data, error } = await getSupabase()
     .from("clients")
     .select("id, name")
@@ -59,6 +63,7 @@ export async function getActiveClients() {
 }
 
 export async function getOpenJobs() {
+  await requireRecruiter();
   const { data, error } = await getSupabase()
     .from("jobs")
     .select("id, title, client_id, pay_rate, urgent, clients(name)")
@@ -70,6 +75,7 @@ export async function getOpenJobs() {
 }
 
 export async function getLeadNotes(leadId: string) {
+  await requireRecruiter();
   const { data, error } = await getSupabase()
     .from("leads")
     .select("notes")
@@ -81,6 +87,7 @@ export async function getLeadNotes(leadId: string) {
 }
 
 export async function updateLeadNotes(leadId: string, notes: string) {
+  await requireRecruiter();
   const supabase = getSupabase();
   const { error } = await supabase
     .from("leads")
@@ -118,6 +125,7 @@ export async function updateLeadPreferences(
   leadId: string,
   preferences: Record<string, unknown>
 ) {
+  await requireRecruiter();
   const { error } = await getSupabase()
     .from("leads")
     .update({ preferences })
@@ -129,33 +137,10 @@ export async function updateLeadPreferences(
   return { error: error?.message ?? null };
 }
 
-export async function updateLeadField(
-  leadId: string,
-  field: string,
-  value: string
-) {
-  const supabase = getSupabase();
-  const { data: before } = await supabase
-    .from("leads")
-    .select(field)
-    .eq("id", leadId)
-    .maybeSingle();
-
-  const { error } = await supabase
-    .from("leads")
-    .update({ [field]: value })
-    .eq("id", leadId);
-
-  if (!error) {
-    const changes = diffFields(before as Record<string, unknown> | null, { [field]: value });
-    if (changes) await logAudit({ action: "update", leadId, changes });
-  }
-  return { error: error?.message ?? null };
-}
-
 // ── Interaction Logs ────────────────────────────────────────
 
 export async function getInteractionLogs(leadId: string) {
+  await requireRecruiter();
   const { data, error } = await getSupabase()
     .from("interaction_logs")
     .select("*")
@@ -173,6 +158,7 @@ export async function createInteractionLog(
   outcome: string,
   notes: string
 ) {
+  await requireRecruiter();
   const { data, error } = await getSupabase()
     .from("interaction_logs")
     .insert({ lead_id: leadId, type, outcome, notes: notes || null })
@@ -186,6 +172,7 @@ export async function createInteractionLog(
 // ── Reminders ───────────────────────────────────────────────
 
 export async function getActiveReminders(leadId: string) {
+  await requireRecruiter();
   const { data, error } = await getSupabase()
     .from("reminders")
     .select("*")
@@ -203,6 +190,7 @@ export async function createReminder(
   dueDate: string,
   priority: string
 ) {
+  await requireRecruiter();
   const { data, error } = await getSupabase()
     .from("reminders")
     .insert({ lead_id: leadId, title, due_date: dueDate, priority })
@@ -214,6 +202,7 @@ export async function createReminder(
 }
 
 export async function completeReminder(reminderId: string) {
+  await requireRecruiter();
   const { error } = await getSupabase()
     .from("reminders")
     .update({ is_completed: true })
@@ -227,6 +216,7 @@ export async function completeReminder(reminderId: string) {
  * Called from client components to show normalization feedback.
  */
 export async function normalizeEmployer(name: string): Promise<NormalizationResult> {
+  await requireRecruiter();
   return normalizeEmployerName(name);
 }
 
@@ -245,6 +235,7 @@ export async function updateLeadDetails(
     hired_client?: string;
   }
 ) {
+  await requireRecruiter();
   const ageNum = details.age ? parseInt(details.age, 10) : null;
 
   // Normalize employer name if provided
@@ -313,43 +304,68 @@ export async function updateLeadDetails(
   return { error: error?.message ?? null, normalizedEmployer: hiredClient, duplicate: undefined as { id: string; name: string | null } | undefined };
 }
 
-// ── Clear arrival dates (dev tool) ──────────────────────────
+// ── Delete the extras import ─────────────────────────────────
+// מוחק רק מה שייבוא האקסטרות יצר ושלא נגעו בו מאז: מקור "אקסטרות",
+// עדיין "מתאים לראיון", בלי היסטוריית סטטוס ובלי הודעות. קודם נמחק כל ליד
+// שהמקור שלו *מכיל* "Excel" או "אקסטרות" — כולל ייבוא רגיל ("ייבוא Excel")
+// ועובדים קיימים שהייבוא דרס — עם כל המידע המקושר (מקדמות, מסמכים חתומים).
 
-export async function clearAllArrivalDates(): Promise<{ cleared: number; error: string | null }> {
-  const supabase = getSupabase();
-  const { data, error } = await supabase
-    .from("leads")
-    .update({ arrival_date: null })
-    .not("arrival_date", "is", null)
-    .select("id");
+// לא export: קובץ "use server" רשאי לייצא רק פונקציות async
+const EXTRAS_SOURCE = "אקסטרות";
 
-  if (error) return { cleared: 0, error: error.message };
-  await logAudit({ action: "update", entity: "leads_bulk", meta: { op: "clearAllArrivalDates", count: data?.length ?? 0 } });
-  revalidatePath("/leads");
-  return { cleared: data?.length ?? 0, error: null };
-}
-
-// ── NUKE: Delete all Excel/extras imported leads ─────────────
-
-export async function nukeAllExtrasLeads(): Promise<{ deleted: number; error: string | null }> {
+export async function nukeAllExtrasLeads(): Promise<{ deleted: number; kept: number; error: string | null }> {
+  const actor = await requireRecruiter({ admin: true });
   const supabase = getSupabase();
 
-  // Delete leads whose source matches any Excel/extras import tag
-  const { data, error } = await supabase
+  const { data: candidates, error: selErr } = await supabase
     .from("leads")
-    .delete()
-    .or("source.ilike.%Excel%,source.ilike.%אקסטרות%")
-    .select("id");
+    .select("id")
+    .eq("source", EXTRAS_SOURCE)
+    .eq("status", LeadStatus.FIT_FOR_INTERVIEW)
+    .limit(5000);
+  if (selErr) return { deleted: 0, kept: 0, error: selErr.message };
 
-  if (error) return { deleted: 0, error: error.message };
+  const ids = (candidates ?? []).map((r) => r.id as string);
+  const touched = new Set<string>();
+  for (let i = 0; i < ids.length; i += 100) {
+    const chunk = ids.slice(i, i + 100);
+    const [hist, msgs] = await Promise.all([
+      supabase.from("lead_status_history").select("lead_id").in("lead_id", chunk).limit(1000),
+      supabase.from("messages").select("lead_id").in("lead_id", chunk).limit(1000),
+    ]);
+    if (hist.error || msgs.error) {
+      return { deleted: 0, kept: 0, error: (hist.error ?? msgs.error)!.message };
+    }
+    // תשובה מלאה (1,000 שורות) עלולה להיות חתוכה — אז לא יודעים בוודאות מי
+    // נקי, ושומרים את כל הקבוצה. עדיף לא למחוק מאשר למחוק מועמד שטופל.
+    if ((hist.data?.length ?? 0) >= 1000 || (msgs.data?.length ?? 0) >= 1000) {
+      for (const id of chunk) touched.add(id);
+      continue;
+    }
+    for (const r of [...(hist.data ?? []), ...(msgs.data ?? [])]) touched.add(r.lead_id as string);
+  }
+
+  const doomed = ids.filter((id) => !touched.has(id));
+  let deleted = 0;
+  for (let i = 0; i < doomed.length; i += 100) {
+    const { data, error } = await supabase
+      .from("leads")
+      .delete()
+      .in("id", doomed.slice(i, i + 100))
+      .select("id");
+    if (error) return { deleted, kept: touched.size, error: error.message };
+    deleted += data?.length ?? 0;
+  }
+
   await logAudit({
     action: "delete",
     entity: "leads_bulk",
-    meta: { op: "nukeAllExtrasLeads", count: data?.length ?? 0, ids: (data ?? []).map((d) => d.id) },
+    actor: actor.email,
+    meta: { op: "nukeAllExtrasLeads", count: deleted, kept: touched.size, ids: doomed },
   });
   revalidatePath("/leads");
   revalidatePath("/campaigns");
-  return { deleted: data?.length ?? 0, error: null };
+  return { deleted, kept: touched.size, error: null };
 }
 
 // ── Bulk Import ─────────────────────────────────────────────
@@ -376,10 +392,19 @@ export interface BulkImportResult {
 
 const CHUNK_SIZE = 50;
 
+// שדות שייבוא רשאי להשלים בליד קיים — רק כשהם ריקים אצלו. תאריך ההגעה
+// הוא חריג: הוא מה שהרשימה באה לקבוע (לוח האקסטרות מסנן לפיו), ולכן ערך
+// חדש מהקובץ מחליף ישן — אבל תא ריק לא מוחק.
+const FILLABLE_FIELDS = ["email", "job_title", "location", "arrival_date"] as const;
+const REPLACE_WHEN_GIVEN: ReadonlySet<string> = new Set(["arrival_date"]);
+type FillableField = (typeof FILLABLE_FIELDS)[number];
+type ExistingLead = { id: string; phone: string } & Record<FillableField, string | null>;
+
 export async function bulkImportLeads(
   rows: BulkImportRow[],
   options?: { source?: string }
 ): Promise<BulkImportResult> {
+  await requireRecruiter();
   const supabase = getSupabase();
   const source = options?.source ?? "ייבוא Excel";
   const result: BulkImportResult = {
@@ -450,17 +475,24 @@ export async function bulkImportLeads(
 
   // ── 3. Check which real phones already exist (batch query) ─
   const realPhones = validRows.filter(v => !v.isDummy).map(v => v.phone!);
-  const existingPhones = new Set<string>();
+  const existing = new Map<string, ExistingLead>();
 
   for (let i = 0; i < realPhones.length; i += CHUNK_SIZE) {
     const phoneChunk = realPhones.slice(i, i + CHUNK_SIZE);
     if (phoneChunk.length === 0) continue;
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from("leads")
-      .select("phone")
+      .select(`id, phone, ${FILLABLE_FIELDS.join(", ")}`)
       .in("phone", phoneChunk);
-    data?.forEach((r: { phone: string }) => { if (r.phone) existingPhones.add(r.phone); });
+    // בלי לדעת מי כבר קיים אי אפשר לייבא בבטחה — עוצרים במקום לנחש
+    if (error) {
+      result.errors.push(`בדיקת טלפונים קיימים: ${error.message}`);
+      result.skipped = result.total;
+      return result;
+    }
+    (data as unknown as ExistingLead[] | null)?.forEach((r) => { if (r.phone) existing.set(r.phone, r); });
   }
+  const existingPhones = new Set(existing.keys());
 
   // ── 4. Build payloads ──────────────────────────────────────
   interface LeadPayload {
@@ -535,11 +567,38 @@ export async function bulkImportLeads(
     console.log("[bulkImport] sample:", { name: anySample.name, phone: anySample.phone, hired_client: anySample.hired_client, arrival_date: anySample.arrival_date });
   }
 
-  // ── 5. Merge ALL payloads into one array ────────────────────
-  // No-phone records get a unique dummy phone so they can go through the same upsert path
+  // ── 5. Existing candidates: fill blanks (+ new arrival date) ─
+  // ליד שכבר קיים לא נדרס: לא סטטוס, לא מקור, לא שם ולא מעסיק. קודם ה-upsert
+  // החזיר עובד ב"התחיל לעבוד" ל"מתאים לראיון", החליף את המקור ל"אקסטרות",
+  // מחק לו אימייל ומיקום ורשם "מעבר עבודה" פיקטיבי — בלי היסטוריית סטטוס.
+  for (const p of dedupUpdate) {
+    const current = existing.get(p.phone);
+    if (!current) continue;
+    const patch: Record<string, string> = {};
+    for (const f of FILLABLE_FIELDS) {
+      const incoming = p[f];
+      const have = current[f];
+      const empty = have === null || have === undefined || String(have).trim() === "";
+      if (incoming && (empty || (REPLACE_WHEN_GIVEN.has(f) && incoming !== have))) {
+        patch[f] = incoming;
+      }
+    }
+    if (Object.keys(patch).length === 0) { result.updated++; continue; }
+    const { error } = await supabase.from("leads").update(patch).eq("id", current.id);
+    if (error) {
+      result.errors.push(`עדכון ${p.phone}: ${error.message}`);
+      result.skipped++;
+    } else {
+      result.updated++;
+    }
+  }
+
+  // ── 6. New candidates: insert, never overwrite ─────────────
+  // No-phone records get a unique dummy phone so they can go through the same path.
+  // ignoreDuplicates = ON CONFLICT DO NOTHING: טלפון שנוצר בין הבדיקה להכנסה
+  // לא נדרס.
   const allPayloads = [
     ...finalNew,
-    ...dedupUpdate,
     ...noPhoneInserts.map(r => ({
       ...r,
       phone: `no-phone-${crypto.randomUUID()}`,
@@ -547,7 +606,6 @@ export async function bulkImportLeads(
   ];
 
   for (let i = 0; i < allPayloads.length; i += CHUNK_SIZE) {
-    // ULTIMATE SAFETY NET: guarantee status + phone on EVERY record
     const safeChunk = allPayloads.slice(i, i + CHUNK_SIZE).map(lead => ({
       ...lead,
       status: lead.status || LeadStatus.FIT_FOR_INTERVIEW,
@@ -555,26 +613,23 @@ export async function bulkImportLeads(
     }));
 
     try {
-      const { error } = await supabase
+      const { data, error } = await supabase
         .from("leads")
-        .upsert(safeChunk, { onConflict: "phone" });
+        .upsert(safeChunk, { onConflict: "phone", ignoreDuplicates: true })
+        .select("id");
 
       if (error) {
-        console.error(`[bulkImport] upsert chunk error:`, error.message);
-        result.errors.push(`Upsert: ${error.message}`);
+        console.error(`[bulkImport] insert chunk error:`, error.message);
+        result.errors.push(`Insert: ${error.message}`);
         result.skipped += safeChunk.length;
       } else {
-        for (const rec of safeChunk) {
-          if (existingPhones.has(rec.phone)) {
-            result.updated++;
-          } else {
-            result.imported++;
-          }
-        }
+        const inserted = data?.length ?? 0;
+        result.imported += inserted;
+        result.skipped += safeChunk.length - inserted;
       }
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
-      result.errors.push(`Upsert: ${msg}`);
+      result.errors.push(`Insert: ${msg}`);
       result.skipped += safeChunk.length;
     }
   }

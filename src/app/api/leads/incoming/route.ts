@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getMessageScope, scopeFilter } from "@/lib/messageVisibility";
-import { createClient } from "@/lib/supabase/server";
 import { createClient as createServerClient } from "@supabase/supabase-js";
+import { getAuthedUser } from "@/lib/api-auth";
 
 // הודעות נכנסות ממועמדים מאז חותמת זמן נתונה — מזין את ההקפצה
 // האוטומטית של חלון הצ'אט בעמוד הלידים.
@@ -14,8 +14,7 @@ function getAdmin() {
 }
 
 export async function GET(request: NextRequest) {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const user = await getAuthedUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const since = request.nextUrl.searchParams.get("since");

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/api-auth";
 import { normalizePhone } from "@/lib/phone";
+import { hasMachineKey } from "@/lib/secrets";
 
 /**
  * GET /api/bridge/lead-summary?phone=... — a NEUTRAL, structured summary of a
@@ -10,8 +11,7 @@ import { normalizePhone } from "@/lib/phone";
  * x-machine-key. (Privacy: תיקון 13 — minimal, purpose-limited.)
  */
 export async function GET(req: NextRequest) {
-  const key = req.headers.get("x-machine-key");
-  if (!key || key !== process.env.MACHINE_BRIDGE_KEY) {
+  if (!hasMachineKey(req)) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
   const phone = normalizePhone(req.nextUrl.searchParams.get("phone") ?? "");

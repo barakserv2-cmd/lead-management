@@ -2,6 +2,7 @@
 
 import { createClient as createServerClient } from "@supabase/supabase-js";
 import { revalidatePath } from "next/cache";
+import { requireRecruiter } from "@/lib/api-auth";
 
 function getAdmin() {
   return createServerClient(
@@ -11,6 +12,7 @@ function getAdmin() {
 }
 
 export async function clearLeadAttention(leadId: string): Promise<{ success: boolean; error?: string }> {
+  await requireRecruiter();
   const admin = getAdmin();
   const { error } = await admin
     .from("leads")

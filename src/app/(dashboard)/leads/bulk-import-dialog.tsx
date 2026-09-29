@@ -696,7 +696,7 @@ export function BulkImportDialog({ open, onClose, source }: BulkImportDialogProp
               <div className="flex items-center gap-3 text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg px-4 py-3">
                 <CheckCircleIcon />
                 <span className="text-sm font-semibold">
-                  {result.imported} חדשים יובאו{result.updated > 0 ? `, ${result.updated} עודכנו` : ""} בהצלחה!
+                  {result.imported} חדשים יובאו{result.updated > 0 ? `, ${result.updated} כבר היו במערכת ונשארו כמו שהם` : ""}
                 </span>
               </div>
 
@@ -707,7 +707,7 @@ export function BulkImportDialog({ open, onClose, source }: BulkImportDialogProp
                 </div>
                 <div className="bg-gray-50 rounded-lg px-4 py-3 text-center">
                   <p className="text-2xl font-bold text-blue-600">{result.updated}</p>
-                  <p className="text-xs text-gray-500 mt-1">עודכנו</p>
+                  <p className="text-xs text-gray-500 mt-1">קיימים (לא נדרסו; עודכן תאריך הגעה)</p>
                 </div>
                 <div className="bg-gray-50 rounded-lg px-4 py-3 text-center">
                   <p className="text-2xl font-bold text-cyan-600">{result.normalized}</p>

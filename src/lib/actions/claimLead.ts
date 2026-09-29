@@ -3,6 +3,7 @@
 import { createClient as createServerClient } from "@supabase/supabase-js";
 import { createClient as createCookieClient } from "@/lib/supabase/server";
 import { revalidatePath } from "next/cache";
+import { requireRecruiter } from "@/lib/api-auth";
 
 // Service-role admin client (bypasses RLS for the actual write)
 function getAdmin() {
@@ -42,6 +43,7 @@ async function getCurrentUser(): Promise<{ id: string; name: string } | null> {
  * and the lock is still fresh (within 24h).
  */
 export async function claimLead(leadId: string): Promise<ClaimResult> {
+  await requireRecruiter();
   const user = await getCurrentUser();
   if (!user) return { success: false, error: "לא מחובר" };
 
@@ -96,6 +98,7 @@ export async function claimLead(leadId: string): Promise<ClaimResult> {
  * Release a lead back to the general pool. Allowed only by the owner.
  */
 export async function releaseLead(leadId: string): Promise<ClaimResult> {
+  await requireRecruiter();
   const user = await getCurrentUser();
   if (!user) return { success: false, error: "לא מחובר" };
 

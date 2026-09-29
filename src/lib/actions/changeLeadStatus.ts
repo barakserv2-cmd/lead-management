@@ -1,4 +1,7 @@
-"use server";
+// לא "use server": הפונקציה נקראת רק מקוד שרת (נתיבי API, קרונים, הבוט).
+// כ-server action היא הייתה נגישה ב-POST ישיר, עם userId שהקורא בוחר —
+// כלומר כל אחד יכול היה לשנות סטטוס ולהתחזות לכל שחקן (ועדת בחינה, 29/09).
+// הממשק משנה סטטוס דרך /api/leads/change-status, שמזהה את המשתמש מה-session.
 
 import { createClient as createServerClient } from "@supabase/supabase-js";
 import { revalidatePath } from "next/cache";

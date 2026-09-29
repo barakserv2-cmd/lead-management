@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient as createServerClient } from "@supabase/supabase-js";
-import { requireAdmin } from "@/lib/api-auth";
+import { exactILike, requireAdmin } from "@/lib/api-auth";
 
 // קביעת/איפוס סיסמה למשתמש מערכת מתוך מסך המשתמשים.
 // אם למשתמש עוד אין חשבון התחברות (טבלת user_profiles היא תצוגה בלבד) —
@@ -40,7 +40,7 @@ export async function POST(request: NextRequest) {
   const { data: profile } = await admin
     .from("user_profiles")
     .select("id, email")
-    .ilike("email", email)
+    .ilike("email", exactILike(email))
     .limit(1)
     .maybeSingle();
 

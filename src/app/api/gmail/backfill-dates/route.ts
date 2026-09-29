@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getGmailClient } from "@/lib/gmail";
 import { getSupabaseAdmin } from "@/lib/api-auth";
+import { hasCronSecret } from "@/lib/secrets";
 
 // One-time backfill: existing email leads were stored without the email's send
 // date, so they sort by ingestion time (wrong — old backlog emails float up).
@@ -17,9 +18,7 @@ const BATCH = 40; // Gmail gets per invocation
 const CONCURRENCY = 8;
 
 function authorized(req: NextRequest): boolean {
-  const secret = process.env.CRON_SECRET;
-  if (!secret) return true; // local/curl when unset
-  return req.headers.get("authorization") === `Bearer ${secret}`;
+  return hasCronSecret(req);
 }
 
 export async function GET(req: NextRequest) {

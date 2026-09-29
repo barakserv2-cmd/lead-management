@@ -15,6 +15,7 @@ function getAdmin() {
 
 import { LEAD_DOC_TYPES, type LeadDocType, type LeadDocument } from "@/lib/leadDocTypes";
 import { cancelPendingForDocs } from "@/lib/signatureSend";
+import { requireRecruiter } from "@/lib/api-auth";
 
 /**
  * Upload a single document for a lead. Replaces any existing doc of the same
@@ -25,6 +26,7 @@ export async function uploadLeadDocument(formData: FormData): Promise<{
   error?: string;
   document?: LeadDocument;
 }> {
+  await requireRecruiter();
   const leadId = String(formData.get("leadId") ?? "");
   const docType = String(formData.get("docType") ?? "") as LeadDocType;
   const file = formData.get("file") as File | null;
@@ -113,6 +115,7 @@ export async function uploadLeadDocument(formData: FormData): Promise<{
 }
 
 export async function getLeadDocuments(leadId: string): Promise<LeadDocument[]> {
+  await requireRecruiter();
   const admin = getAdmin();
   const { data, error } = await admin
     .from("lead_documents")
@@ -126,6 +129,7 @@ export async function getLeadDocuments(leadId: string): Promise<LeadDocument[]> 
 }
 
 export async function signLeadDocument(docId: string): Promise<{ url: string | null; error?: string }> {
+  await requireRecruiter();
   const admin = getAdmin();
   const { data: doc } = await admin
     .from("lead_documents")
@@ -141,6 +145,7 @@ export async function signLeadDocument(docId: string): Promise<{ url: string | n
 }
 
 export async function deleteLeadDocument(docId: string): Promise<{ success: boolean; error?: string }> {
+  await requireRecruiter();
   const admin = getAdmin();
   const { data: doc } = await admin
     .from("lead_documents")

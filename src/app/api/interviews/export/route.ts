@@ -5,8 +5,7 @@
 // ============================================================
 
 import { NextRequest, NextResponse } from "next/server";
-import { createClient as createSessionClient } from "@/lib/supabase/server";
-import { getSupabaseAdmin } from "@/lib/api-auth";
+import { getSupabaseAdmin, getAuthedUser } from "@/lib/api-auth";
 import { buildInterviewsWorkbook, fmtReportDate } from "@/lib/reports/interviewsXlsx";
 import { INTERVIEW_REPORT_SELECT, leadToReportRow } from "@/lib/reports/interviewsReportRow";
 
@@ -14,10 +13,7 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 export async function GET(req: NextRequest) {
-  const session = await createSessionClient();
-  const {
-    data: { user },
-  } = await session.auth.getUser();
+  const user = await getAuthedUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const date = req.nextUrl.searchParams.get("date");

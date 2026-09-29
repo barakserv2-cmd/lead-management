@@ -12,6 +12,7 @@
 
 import { createClient as createServerClient } from "@supabase/supabase-js";
 import { getAccountForEmail } from "@/lib/whatsappService";
+import { exactILike } from "@/lib/api-auth";
 
 const ADMIN_ROLE = "אדמין";
 
@@ -44,7 +45,7 @@ export async function getMessageScope(
   const lower = email.toLowerCase();
 
   const [{ data: profile }, personal] = await Promise.all([
-    admin().from("user_profiles").select("role").ilike("email", lower).maybeSingle(),
+    admin().from("user_profiles").select("role").ilike("email", exactILike(lower)).maybeSingle(),
     getAccountForEmail(lower),
   ]);
 

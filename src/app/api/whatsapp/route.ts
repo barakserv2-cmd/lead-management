@@ -17,6 +17,7 @@ import {
   matchPublication,
   recordResponse,
 } from "@/lib/fbInbound";
+import { safeEqual } from "@/lib/secrets";
 
 function getSupabase() {
   return createServerClient(
@@ -40,7 +41,7 @@ export async function POST(req: NextRequest) {
     if (expectedToken) {
       const auth = req.headers.get("authorization") ?? "";
       const got = auth.startsWith("Bearer ") ? auth.slice(7) : auth;
-      if (got !== expectedToken) {
+      if (!safeEqual(got, expectedToken)) {
         console.warn("[WhatsApp Webhook] rejected: bad or missing webhook token");
         return NextResponse.json({ error: "unauthorized" }, { status: 401 });
       }

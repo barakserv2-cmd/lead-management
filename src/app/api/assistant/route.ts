@@ -7,8 +7,8 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
-import { createClient } from "@/lib/supabase/server";
 import { assistantTools } from "@/lib/assistant/tools";
+import { getAuthedUser } from "@/lib/api-auth";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -49,10 +49,7 @@ type IncomingMessage = { role: "user" | "assistant"; content: string };
 export async function POST(req: NextRequest) {
   try {
     // ── Auth: only logged-in dashboard users ──
-    const supabase = await createClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
+    const user = await getAuthedUser();
     if (!user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }

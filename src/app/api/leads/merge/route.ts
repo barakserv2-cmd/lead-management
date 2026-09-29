@@ -1,14 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
-import { getSupabaseAdmin } from "@/lib/api-auth";
+import { getSupabaseAdmin, getAuthedUser } from "@/lib/api-auth";
 import { logAudit } from "@/lib/audit";
 
 // Merge two duplicate lead cards into one (see merge_leads() in migration 00043).
 // Winner = the card further along the pipeline; the loser is deleted after all
 // its child rows (history, events, notes, messages, …) move to the winner.
 export async function POST(request: NextRequest) {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const user = await getAuthedUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   let body: { leadId?: string; duplicateId?: string };

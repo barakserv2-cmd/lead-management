@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/api-auth";
 import { normalizePhone } from "@/lib/phone";
+import { hasMachineKey } from "@/lib/secrets";
 
 /**
  * GET /api/bridge/lead-check?phone=... — the machine (גובגט) asks, before
@@ -13,8 +14,7 @@ const TERMINAL = ["REJECTED", "LOST_CONTACT", "NOT_SUITABLE", "INVALID_PHONE", "
 const GUBGET = "gubget@eilatjobs.com";
 
 export async function GET(req: NextRequest) {
-  const key = req.headers.get("x-machine-key");
-  if (!key || key !== process.env.MACHINE_BRIDGE_KEY) {
+  if (!hasMachineKey(req)) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
   const phone = normalizePhone(req.nextUrl.searchParams.get("phone") ?? "");

@@ -3,7 +3,6 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import Link from "next/link";
 import { ReminderDialog } from "./reminder-dialog";
-import { sendMessage } from "@/lib/actions/sendMessage";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { LeadStatus, type LeadStatusValue } from "@/lib/stateMachine";
@@ -122,26 +121,6 @@ export function ChatHistory({
     }
   }, [messages]);
 
-  // AI screening flow (existing)
-  async function handleScreeningSend(text: string) {
-    const tempUserMsg: Message = {
-      id: "temp-user-" + Date.now(),
-      role: "user",
-      content: text,
-      created_at: new Date().toISOString(),
-    };
-    setMessages((prev) => [...prev, tempUserMsg]);
-
-    const result = await sendMessage(leadId, text);
-
-    if (result.success) {
-      await fetchMessages();
-    } else {
-      setError(result.error ?? "שגיאה בשליחת ההודעה");
-      setMessages((prev) => prev.filter((m) => m.id !== tempUserMsg.id));
-    }
-  }
-
   // Manual recruiter send (new)
   async function handleManualSend(text: string) {
     const tempMsg: Message = {
@@ -186,11 +165,7 @@ export function ChatHistory({
     setSending(true);
     setInputText("");
 
-    if (isScreening) {
-      await handleScreeningSend(text);
-    } else {
-      await handleManualSend(text);
-    }
+    await handleManualSend(text);
 
     setSending(false);
   }
@@ -213,7 +188,7 @@ export function ChatHistory({
         {messages.length === 0 ? (
           <div className="flex items-center justify-center h-full text-sm text-gray-400">
             {isScreening
-              ? "אין הודעות עדיין. שלח הודעה כדי להתחיל סינון."
+              ? "אין הודעות עדיין. הבוט מנהל את הסינון."
               : "אין הודעות עדיין. שלח הודעה למועמד/ת."}
           </div>
         ) : (
@@ -330,11 +305,12 @@ export function ChatHistory({
         </div>
       )}
 
-      {/* Take-over bar: in screening the box only SIMULATES the candidate.
-          A recruiter who wants to message for real takes over here. */}
+      {/* Take-over bar: while the bot screens there is no input box. The old
+          box "simulated the candidate": the recruiter's text was saved as the
+          candidate's message, forwarded to גובגט and could move the lead. */}
       {canSend && isScreening && (
         <div className="flex items-center justify-between gap-2 px-4 py-2 bg-amber-50 border-t border-amber-100 text-xs text-amber-800">
-          <span>הבוט מנהל את הסינון — התיבה מסמלצת מועמד. כדי לכתוב למועמד/ת באמת:</span>
+          <span>הבוט מנהל את הסינון. כדי לכתוב למועמד/ת:</span>
           <Button onClick={takeOver} disabled={takingOver} size="sm" variant="outline" className="h-7 px-3 text-xs flex-shrink-0">
             {takingOver ? "..." : "קח שליטה"}
           </Button>
@@ -342,13 +318,8 @@ export function ChatHistory({
       )}
 
       {/* Input area */}
-      {canSend && (
+      {canSend && !isScreening && (
       <div className="flex gap-2 pt-3 px-4 pb-3 border-t border-gray-100">
-        {isScreening && (
-          <span className="self-center text-[9px] text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded font-medium flex-shrink-0">
-            AI
-          </span>
-        )}
         <Input
           value={inputText}
           onChange={(e) => setInputText(e.target.value)}
@@ -358,7 +329,7 @@ export function ChatHistory({
               handleSend();
             }
           }}
-          placeholder={isScreening ? "סמלץ הודעת מועמד..." : "כתוב הודעה למועמד/ת..."}
+          placeholder="כתוב הודעה למועמד/ת..."
           disabled={sending}
           dir="rtl"
           className="flex-1"

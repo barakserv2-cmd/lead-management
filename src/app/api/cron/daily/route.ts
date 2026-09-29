@@ -3,6 +3,8 @@ import { createClient as createServerClient } from "@supabase/supabase-js";
 import { businessAccount, sendWhatsAppMessage } from "@/lib/whatsappService";
 import { runPostPlacementCare } from "@/lib/postPlacement";
 import { runArrivalCompanion } from "@/lib/arrivalCompanionRun";
+import { hasCronSecret } from "@/lib/secrets";
+import { isTemporaryBlock, restPeriodAt, REST_ENDS_HOUR } from "@/lib/sendGate";
 
 // Vercel cron pings this URL every hour at :30 (see vercel.json).
 // Guarded by CRON_SECRET so it can't be hit anonymously from outside.
@@ -65,6 +67,12 @@ async function runInterviewReminders(admin: ReturnType<typeof getAdmin>): Promis
   const afterStart = hour > SEND_START_HOUR || (hour === SEND_START_HOUR && minute >= SEND_START_MINUTE);
   if (!afterStart || hour >= SEND_END_HOUR) {
     summary.details.push(`מחוץ לחלון השליחה (${hour}:${String(minute).padStart(2, "0")}) — תזכורות יוצאות בין 16:30 ל-22:00`);
+    return summary;
+  }
+  // שבת/חג: שער השליחה חוסם עד 20:00, והריצות של 20:30 ו-21:30 ישלחו.
+  const rest = restPeriodAt();
+  if (rest) {
+    summary.details.push(`${rest} — התזכורות יישלחו אחרי ${REST_ENDS_HOUR}:00`);
     return summary;
   }
 
@@ -138,6 +146,13 @@ async function runInterviewReminders(admin: ReturnType<typeof getAdmin>): Promis
       const sendRes = await sendWhatsAppMessage(lead.phone as string, message, businessAccount(), {
         automated: true,
       });
+
+      // חסימה זמנית — לא רושמים, כדי שהריצה הבאה בחלון תשלח. רישום כאן היה
+      // נחשב "כבר נשלח" וחוסם את התזכורת עד הראיון.
+      if (isTemporaryBlock(sendRes.blocked)) {
+        summary.details.push(`נדחה: ${lead.name} — ${sendRes.error}`);
+        continue;
+      }
 
       // Save the message to the lead's history too
       if (sendRes.success) {
@@ -333,11 +348,7 @@ async function runDailyCron() {
 }
 
 function isAuthorized(req: NextRequest): boolean {
-  // Local / curl test: allow if no CRON_SECRET configured.
-  const secret = process.env.CRON_SECRET;
-  if (!secret) return true;
-  const header = req.headers.get("authorization") ?? "";
-  return header === `Bearer ${secret}`;
+  return hasCronSecret(req);
 }
 
 export async function GET(req: NextRequest) {

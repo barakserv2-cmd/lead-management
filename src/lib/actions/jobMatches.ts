@@ -1,6 +1,7 @@
 "use server";
 
 import { createClient as createServerClient } from "@supabase/supabase-js";
+import { requireRecruiter } from "@/lib/api-auth";
 
 function getAdmin() {
   return createServerClient(
@@ -27,10 +28,11 @@ export interface JobMatch {
  * the `match_candidates_for_job` Postgres function.
  */
 export async function getJobMatches(jobId: string, limit = 20): Promise<JobMatch[]> {
+  await requireRecruiter();
   const admin = getAdmin();
   const { data, error } = await admin.rpc("match_candidates_for_job", {
     p_job_id: jobId,
-    p_limit: limit,
+    p_limit: Math.min(Math.max(1, Math.floor(limit) || 20), 100),
   });
   if (error) {
     console.error("[getJobMatches]", error);

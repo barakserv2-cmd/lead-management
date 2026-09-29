@@ -1,14 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient as createServerClient } from "@supabase/supabase-js";
-import { createClient as createCookieClient } from "@/lib/supabase/server";
 import { getMessageScope } from "@/lib/messageVisibility";
+import { getAuthedUser } from "@/lib/api-auth";
 
 // DELETE /api/reminders/[id] → cancel a pending reminder (own; admin: any)
 export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const c = await createCookieClient();
-  const { data: { user } } = await c.auth.getUser();
-  const email = user?.email?.toLowerCase() ?? null;
+  const user = await getAuthedUser();
+  const email = user?.email ?? null;
   if (!email) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const scope = await getMessageScope(email);
 

@@ -121,6 +121,16 @@ export function closureFor(dateStr: string): ClosureInfo {
   return OPEN;
 }
 
+/**
+ * שם החג (יום טוב) בתאריך לועזי לפי הלוח העברי בלבד, או null.
+ * בלי הסגירות הידניות: אלה ימים שהמשרד סגור, לא ימים שבהם אסור לשלוח
+ * הודעות. משמש את שער השליחה (שבת וחגים).
+ */
+export function yomTovName(dateStr: string): string | null {
+  const { day, month } = hebrewDate(dateStr);
+  return CLOSED[month]?.[day] ?? null;
+}
+
 /** קיצור: האם אסור לקבוע כלום ביום הזה. */
 export function isClosedDay(dateStr: string): boolean {
   return closureFor(dateStr).closed;

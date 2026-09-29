@@ -1,11 +1,10 @@
 import { NextResponse } from "next/server";
 import { createClient as createServerClient } from "@supabase/supabase-js";
-import { createClient as createCookieClient } from "@/lib/supabase/server";
+import { getAuthedUser } from "@/lib/api-auth";
 
 // GET — רשימת תבניות המסמכים הפעילות לשליחה לחתימה
 export async function GET() {
-  const cookieClient = await createCookieClient();
-  const { data: { user } } = await cookieClient.auth.getUser();
+  const user = await getAuthedUser();
   if (!user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }

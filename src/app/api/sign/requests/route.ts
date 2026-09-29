@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient as createServerClient } from "@supabase/supabase-js";
-import { createClient as createCookieClient } from "@/lib/supabase/server";
+import { getAuthedUser } from "@/lib/api-auth";
 
 function getAdmin() {
   return createServerClient(
@@ -11,8 +11,7 @@ function getAdmin() {
 
 // GET ?leadId=... — כל בקשות החתימה של ליד (לדשבורד)
 export async function GET(req: NextRequest) {
-  const cookieClient = await createCookieClient();
-  const { data: { user } } = await cookieClient.auth.getUser();
+  const user = await getAuthedUser();
   if (!user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }

@@ -2,11 +2,22 @@ import { NextRequest, NextResponse } from "next/server";
 import OpenAI from "openai";
 import type { Lead } from "@/types/leads";
 import { STATUS_LABELS } from "@/lib/stateMachine";
+import { getAuthedUser, getSupabaseAdmin } from "@/lib/api-auth";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
+// הנתיב היה פתוח בלי התחברות וקיבל אובייקט ליד מהדפדפן: כל אחד יכול היה
+// להריץ שיחות על חשבון ה-OpenAI של החברה. עכשיו: רק רכזת, רק לפי מזהה,
+// והליד נטען בשרת. טלפון ואימייל לא נשלחים — הסיכום לא צריך אותם.
+const SUMMARY_COLUMNS =
+  "id, name, job_title, location, experience, age, source, status, sub_status, rejection_reason, " +
+  "hired_client, hired_position, interview_date, interview_notes, screening_score, notes, tags, created_at";
+
 export async function POST(request: NextRequest) {
+  const user = await getAuthedUser();
+  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
   try {
     const apiKey = process.env.OPENAI_API_KEY;
     if (!apiKey) {
@@ -16,10 +27,18 @@ export async function POST(request: NextRequest) {
       );
     }
     const openai = new OpenAI({ apiKey });
-    const { lead } = (await request.json()) as { lead: Lead };
-
-    if (!lead || !lead.id) {
-      return NextResponse.json({ error: "Missing lead data" }, { status: 400 });
+    const body = (await request.json().catch(() => ({}))) as { leadId?: string; lead?: { id?: string } };
+    const leadId = body.leadId ?? body.lead?.id;
+    if (!leadId) {
+      return NextResponse.json({ error: "Missing lead id" }, { status: 400 });
+    }
+    const { data: lead } = await getSupabaseAdmin()
+      .from("leads")
+      .select(SUMMARY_COLUMNS)
+      .eq("id", leadId)
+      .maybeSingle<Lead>();
+    if (!lead) {
+      return NextResponse.json({ error: "Lead not found" }, { status: 404 });
     }
 
     const statusLabel = STATUS_LABELS[lead.status] ?? lead.status;
@@ -28,8 +47,6 @@ export async function POST(request: NextRequest) {
 
 Lead data:
 - Name: ${lead.name}
-- Phone: ${lead.phone ?? "N/A"}
-- Email: ${lead.email ?? "N/A"}
 - Job title: ${lead.job_title ?? "N/A"}
 - Location: ${lead.location ?? "N/A"}
 - Experience: ${lead.experience ?? "N/A"}
