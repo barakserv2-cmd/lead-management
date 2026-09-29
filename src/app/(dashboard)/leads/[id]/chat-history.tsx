@@ -57,6 +57,8 @@ function DeliveryTicks({ status }: { status: Message["delivery_status"] }) {
 interface SenderInfo {
   connected: boolean;
   state?: string;
+  /** cloud = הערוץ הרשמי (360dialog/מטא); greenapi = מכשיר מקושר */
+  provider?: string;
   phone?: string | null;
   label?: string | null;
   /** כשאין מספר משלך: המספר שההודעות יוצאות ממנו */
@@ -112,6 +114,10 @@ export function ChatHistory({
   const [humanTakeover, setHumanTakeover] = useState(false);
   const [takingOver, setTakingOver] = useState(false);
   const botManaged = leadStatus === LeadStatus.SCREENING_IN_PROGRESS && !humanTakeover;
+  // מספר בערוץ הרשמי עובד כל עוד מטא לא חסמה אותו. בדיקת מצב שלא הצליחה
+  // ("unknown") היא תקלה בבדיקה, לא נתק — ואסור שתיראה לרכזת כמו מספר מת.
+  const senderOk =
+    sender?.provider === "cloud" ? sender?.state !== "blocked" : sender?.state === "authorized";
 
   // Determines if a message is outgoing (from our side: AI or recruiter)
   const isOutgoing = (role: string) => role === "assistant" || role === "recruiter";
@@ -421,13 +427,13 @@ export function ChatHistory({
             className={`inline-block w-1.5 h-1.5 rounded-full ${
               !sender.connected
                 ? "bg-gray-300"
-                : sender.state === "authorized"
+                : senderOk
                   ? "bg-green-500"
                   : "bg-amber-500"
             }`}
           />
           {sender.connected ? (
-            sender.state === "authorized" ? (
+            senderOk ? (
               <span>
                 שולח מהוואטסאפ שלך
                 {sender.phone && (
@@ -436,6 +442,9 @@ export function ChatHistory({
                   </span>
                 )}
               </span>
+            ) : sender.provider === "cloud" ? (
+              // ערוץ רשמי: אין מה "לחבר", רק מטא יכולה לחסום
+              <span className="text-amber-600">המספר שלך חסום על ידי מטא — צריך לפנות לתמיכה</span>
             ) : (
               <Link href="/settings/whatsapp" className="hover:underline text-amber-600">
                 הוואטסאפ שלך מנותק — לחץ לחיבור

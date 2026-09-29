@@ -48,12 +48,13 @@ interface Row {
   is_active: boolean;
   last_state: string | null;
   created_at: string;
+  provider: string | null;
 }
 
 async function loadRow(email: string): Promise<Row | null> {
   const { data } = await admin()
     .from("whatsapp_accounts")
-    .select("instance_id, api_token, phone, label, is_active, last_state, created_at")
+    .select("instance_id, api_token, phone, label, is_active, last_state, created_at, provider")
     .eq("user_email", email)
     .maybeSingle();
   return (data as Row | null) ?? null;
@@ -67,6 +68,10 @@ function publicView(row: Row, state: string, qr: string | null = null) {
     label: row.label,
     state,
     qr,
+    // בערוץ הרשמי אין מכשיר שמתחבר או מתנתק, ולכן המסך לא אמור להציע
+    // "לחץ לחיבור" (29.09: חושן ראתה "הוואטסאפ שלך מנותק" בזמן שהמספר
+    // שלה עבד והודעות נכנסו ויצאו).
+    provider: row.provider === "cloud" ? "cloud" : "greenapi",
     createdAt: row.created_at,
   };
 }
