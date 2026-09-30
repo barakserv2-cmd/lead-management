@@ -3,10 +3,17 @@
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import type { Lead } from "@/types/leads";
-import { STATUS_LABELS, type LeadStatusValue } from "@/lib/stateMachine";
+import { STATUS_LABELS, LeadStatus, type LeadStatusValue } from "@/lib/stateMachine";
 import { attentionKind } from "@/lib/attention";
+
+/** תווית קצרה לסוג הראיון, לשורה בטבלה */
+const INTERVIEW_TYPE_SHORT: Record<string, string> = {
+  phone: "טלפוני",
+  in_person: "פרונטלי",
+  video: "וידאו",
+};
 import { StatusSelect } from "./status-select";
-import { LeadWindowManager } from "./lead-mini-windows";
+import { openLeadWindow } from "@/lib/leadWindows";
 import { BulkWhatsAppDialog } from "./bulk-whatsapp-dialog";
 import { BulkImportDialog } from "./bulk-import-dialog";
 import { LeadCardPanel } from "./lead-card-panel";
@@ -107,7 +114,14 @@ function contactChip(iso: string | null, now: number): { classes: string; label:
 // אחר לגמרי מ"אין מענה 2" לבדו.
 function lastUpdate(lead: Lead, now: number): { label: string; when: string; classes: string } {
   const at = lead.sub_status_at ?? lead.handled_at ?? lead.last_contact_at;
-  const label = lead.sub_status ?? STATUS_LABELS[lead.status as LeadStatusValue] ?? lead.status;
+  // "ראיון נקבע" לבד לא אומר לרכזת אם מישהו מגיע למשרד או שצריך להתקשר.
+  // 23.09: גובגט קובע ראיונות טלפוניים, ומועמדת יצאה למשרד כי כולם —
+  // היא, והרכזות שראו את השורה הזו — הבינו "ראיון" כפגישה.
+  const booked =
+    lead.status === LeadStatus.INTERVIEW_BOOKED && lead.interview_type
+      ? `${STATUS_LABELS[LeadStatus.INTERVIEW_BOOKED]} · ${INTERVIEW_TYPE_SHORT[lead.interview_type]}`
+      : null;
+  const label = lead.sub_status ?? booked ?? STATUS_LABELS[lead.status as LeadStatusValue] ?? lead.status;
   if (!at) return { label, when: "—", classes: "text-slate-400" };
 
   const days = Math.floor((now - new Date(at).getTime()) / 86_400_000);
@@ -157,28 +171,16 @@ export function LeadsContent({
 }) {
   // נלכד פעם אחת — Date.now() בכל שורה אינו טהור ומחזיר ערכים לא יציבים
   const [nowMs] = useState(() => Date.now());
-  const [openLeadIds, setOpenLeadIds] = useState<string[]>([]);
+  // החלונות עצמם מרונדרים בלייאאוט (LeadDock) — כאן רק פותחים
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [waDialogOpen, setWaDialogOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
   const [panelLeadId, setPanelLeadId] = useState<string | null>(null);
 
-  // הקפצת צ'אט על הודעה נכנסת: לידים שהגיעו מהפולר (גם אם אינם בעמוד
-  // הנוכחי), וסימון חלונות שנפתחו בגלל הודעה — ייפתחו על טאב הצ'אט.
-  const [incomingLeads, setIncomingLeads] = useState<Lead[]>([]);
-  const [chatFirstIds, setChatFirstIds] = useState<Set<string>>(new Set());
   const sinceRef = useRef<string>(new Date().toISOString());
   const seenMsgIds = useRef<Set<string>>(new Set());
 
   const panelLead = panelLeadId ? leads.find((l) => l.id === panelLeadId) ?? null : null;
-
-  function openLeadWindow(id: string) {
-    setOpenLeadIds((prev) => {
-      if (prev.includes(id)) return prev; // already open
-      if (prev.length >= 4) return [...prev.slice(1), id]; // evict oldest
-      return [...prev, id];
-    });
-  }
 
   // ── פולר הודעות נכנסות: מקפיץ את חלון הצ'אט של המועמד ─────────
   useEffect(() => {
@@ -198,16 +200,17 @@ export function LeadsContent({
           seenMsgIds.current.add(item.message.id);
           sinceRef.current = item.message.created_at;
 
-          // ליד שלא נמצא בעמוד הנוכחי — נוסיף אותו למאגר החלונות
-          setIncomingLeads((prev) =>
-            prev.some((l) => l.id === item.lead.id) || leads.some((l) => l.id === item.lead.id)
-              ? prev
-              : [...prev, item.lead]
-          );
-          setChatFirstIds((prev) => new Set(prev).add(item.lead.id));
-          openLeadWindow(item.lead.id);
+          // הרציף שולף את הליד בעצמו, גם אם אינו בעמוד הנוכחי.
+          // auto: אם מישהו מקליד עכשיו — לא נחטוף לו את המסך.
+          const opened = openLeadWindow(item.lead.id, { chatFirst: true, auto: true });
+          const leadId = item.lead.id;
           toast.info(`הודעה חדשה מ${item.lead.name}`, {
             description: item.message.content.slice(0, 60),
+            duration: opened ? 4000 : 15000,
+            // לא נפתח כי הרכזת באמצע משהו — ההודעה מחכה לה, עם כפתור
+            action: opened
+              ? undefined
+              : { label: "פתח", onClick: () => openLeadWindow(leadId, { chatFirst: true }) },
           });
         }
       } catch {
@@ -222,10 +225,6 @@ export function LeadsContent({
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [leads]);
-
-  function closeLeadWindow(id: string) {
-    setOpenLeadIds((prev) => prev.filter((x) => x !== id));
-  }
 
   const allSelected = leads.length > 0 && selectedIds.size === leads.length;
 
@@ -533,15 +532,6 @@ export function LeadsContent({
       </div>
 
       {tableView}
-      <LeadWindowManager
-        leads={[...leads, ...incomingLeads]}
-        openLeadIds={openLeadIds}
-        chatFirstIds={chatFirstIds}
-        recruiterNames={recruiterNames}
-        onOpenLead={openLeadWindow}
-        onCloseLead={closeLeadWindow}
-      />
-
       <BulkWhatsAppDialog
         open={waDialogOpen}
         onOpenChange={setWaDialogOpen}

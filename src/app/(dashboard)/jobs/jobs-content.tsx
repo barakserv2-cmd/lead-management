@@ -325,10 +325,19 @@ export function JobsContent({
             איוש מחושב חי מהלידים — מי שסומן &quot;התקבל&quot; / &quot;התחיל לעבוד&quot; על המשרה.
           </p>
         </div>
-        <Button onClick={() => openAdd()} className="gap-1.5">
-          <Plus className="w-4 h-4" />
-          משרה חדשה
-        </Button>
+        <div className="flex items-center gap-2">
+          {/* משרה בלי דרישות היא משרה שגובגט לא יודע לתאר למועמד */}
+          <Link
+            href="/jobs/requirements"
+            className="text-sm font-semibold text-cyan-700 hover:text-cyan-900 hover:underline whitespace-nowrap"
+          >
+            מילוי דרישות
+          </Link>
+          <Button onClick={() => openAdd()} className="gap-1.5">
+            <Plus className="w-4 h-4" />
+            משרה חדשה
+          </Button>
+        </div>
       </div>
 
       {/* ═══ KPIs ═══ */}

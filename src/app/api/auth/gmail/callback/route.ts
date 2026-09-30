@@ -3,7 +3,7 @@ import { google } from "googleapis";
 import { createClient } from "@supabase/supabase-js";
 import { createOAuth2Client } from "@/lib/gmail";
 import { getAuthedUser } from "@/lib/api-auth";
-import { GMAIL_STATE_COOKIE, stateMatches } from "../state";
+import { verifyOAuthState } from "@/lib/oauthState";
 
 function getSupabase() {
   return createClient(
@@ -17,18 +17,24 @@ export async function GET(request: NextRequest) {
   const code = url.searchParams.get("code");
   const error = url.searchParams.get("error");
   const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
-  const fail = (message: string) => {
-    const res = NextResponse.redirect(`${baseUrl}/settings?gmail_error=${encodeURIComponent(message)}`);
-    res.cookies.delete({ name: GMAIL_STATE_COOKIE, path: "/api/auth/gmail" });
-    return res;
-  };
 
-  // רק אדמין שהתחיל את החיבור מהמסך הזה (state תואם לעוגייה) יכול להחליף
-  // את התיבה שממנה נקלטים לידים.
+  // שתי בדיקות שלא היו כאן עד 24.09, ובלעדיהן זר יכול היה להחליף את
+  // טוקני הג'ימייל של הפרודקשן בשלו (ראו oauthState.ts):
+  //   1. מי שחוזר מגוגל חייב/ת להיות מחובר/ת אצלנו.
+  //   2. ה-state חייב להיות זה שאנחנו חתמנו, וטרי — אחרת זו אינה הזרימה שלנו.
   const user = await getAuthedUser();
-  if (!user?.isAdmin) return fail("רק אדמין יכול לחבר את תיבת הלידים");
-  if (!stateMatches(url.searchParams.get("state"), request.cookies.get(GMAIL_STATE_COOKIE)?.value)) {
-    return fail("החיבור פג או לא התחיל מהמסך הזה — נסו שוב");
+  if (!user) {
+    return NextResponse.redirect(`${baseUrl}/login`);
+  }
+  if (!user.isAdmin) {
+    return NextResponse.redirect(
+      `${baseUrl}/settings?gmail_error=${encodeURIComponent("רק אדמין יכול לחבר את תיבת הלידים")}`
+    );
+  }
+  if (!verifyOAuthState(url.searchParams.get("state"), user.email)) {
+    return NextResponse.redirect(
+      `${baseUrl}/settings?gmail_error=${encodeURIComponent("בקשת החיבור לא הגיעה מכאן או פג תוקפה — נסו שוב")}`
+    );
   }
 
   if (error) {
@@ -71,9 +77,7 @@ export async function GET(request: NextRequest) {
       })
       .eq("id", 1);
 
-    const ok = NextResponse.redirect(`${baseUrl}/settings?gmail_connected=true`);
-    ok.cookies.delete({ name: GMAIL_STATE_COOKIE, path: "/api/auth/gmail" });
-    return ok;
+    return NextResponse.redirect(`${baseUrl}/settings?gmail_connected=true`);
   } catch (err) {
     console.error("[Gmail OAuth] Callback error:", err);
     const message = err instanceof Error ? err.message : "Unknown error";

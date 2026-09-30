@@ -29,46 +29,6 @@ function getSupabaseAdmin() {
   );
 }
 
-const RETURNING_EVENT = "פנייה חוזרת";
-
-/**
- * מועמד שכבר יש לו כרטיס הגיש שוב (מודעה אחרת / אותה מודעה) או התקשר שוב.
- * נרשם ביומן הליד ומסומן "דורש תשומת לב" — פעם אחת ביממה לכל היותר, כי
- * אותו מייל נסרק שוב בכל ריצה עד שהוא יוצא מחלון ה-24 שעות.
- */
-async function noteReturningCandidate(
-  supabase: ReturnType<typeof getSupabaseAdmin>,
-  leadId: string,
-  info: { kind: "call" | "application"; detail: string }
-): Promise<void> {
-  const since = new Date(Date.now() - 24 * 3600_000).toISOString();
-  const { data: recent } = await supabase
-    .from("lead_events")
-    .select("id")
-    .eq("lead_id", leadId)
-    .eq("event_type", RETURNING_EVENT)
-    .gte("created_at", since)
-    .limit(1);
-  if (recent && recent.length > 0) return;
-
-  const reason =
-    info.kind === "call" ? "מועמד קיים התקשר שוב" : "מועמד קיים הגיש מועמדות שוב";
-  await supabase.from("lead_events").insert({
-    lead_id: leadId,
-    event_type: RETURNING_EVENT,
-    event_text: info.detail ? `${reason}: ${info.detail}` : reason,
-    created_by: "סורק המיילים",
-  });
-  await supabase
-    .from("leads")
-    .update({
-      needs_attention: true,
-      needs_attention_at: new Date().toISOString(),
-      attention_reason: reason,
-    })
-    .eq("id", leadId);
-}
-
 // Who may trigger a scrape:
 //   * Vercel cron  → Authorization: Bearer <CRON_SECRET> (Vercel adds it)
 //   * the settings page "סנכרון" button → signed-in recruiter session
@@ -245,15 +205,36 @@ async function handleFetchEmails(req: NextRequest) {
             );
             summary.duplicates++;
             summary.details.push(`Duplicate (phone ${phone}): ${name}`);
-            // מועמד קיים שהגיש שוב / התקשר שוב — עד עכשיו נבלע בלי זכר, כולל
-            // שיחה שלא נענתה ממועמד קיים. נרשם ביומן ומסומן "דורש תשומת לב".
-            // המייל נסרק שוב כל 2 דקות במשך יממה, ולכן לכל היותר רישום אחד ביום.
-            await noteReturningCandidate(supabase, existingByPhone[0].id as string, {
-              kind: maskyooCall ? "call" : "application",
-              detail: maskyooCall
-                ? notes ?? ""
-                : [email.subject, job_title].filter(Boolean).join(" · "),
+            // פנייה חוזרת (ועדת נפח הלידים 12.09, החלטה 1): המועמד פנה
+            // שוב — מתועד על הליד הקיים במקום להיבלע. מיילים של לידים
+            // נשארים לא-נקראים ונסרקים שוב ושוב, לכן occurrence_key לפי
+            // מזהה המייל מבטיח ספירה של פעם אחת בלבד.
+            const { error: repeatErr } = await supabase.rpc("record_repeat_inquiry", {
+              p_lead_id: existingByPhone[0].id,
+              p_channel: detectSource(email.from, email.subject, email.body),
+              p_detail:
+                (maskyooCall
+                  ? notes ?? ""
+                  : [email.subject, job_title].filter(Boolean).join(" · ")
+                ).slice(0, 200) || null,
+              p_occurrence_key: `repeat:${email.id}`,
             });
+            if (repeatErr) {
+              console.error(`[Gmail] record_repeat_inquiry failed:`, repeatErr.message);
+            }
+
+            // הרכזת ענתה לשיחה והקלידה את הליד בעצמה; המייל של מסקיו
+            // מגיע דקה אחריה ונתפס כאן ככפילות. עד עכשיו המספר הווירטואלי
+            // נזרק בדיוק כאן — ולכן השיחות שנענו, האיכותיות ביותר, היו
+            // היחידות בלי ייחוס לערוץ. רושמים רק אם השדה ריק, כדי לא לדרוס
+            // ייחוס קודם — הפנייה הראשונה היא זו שהביאה אותו.
+            if (maskyooCall?.virtualNumber) {
+              await supabase
+                .from("leads")
+                .update({ source_number: maskyooCall.virtualNumber })
+                .eq("id", existingByPhone[0].id)
+                .is("source_number", null);
+            }
             // Do NOT mark as read — lead emails must stay unread in the inbox.
             // Dedup is by original_email_id, so re-scanning is safe.
             continue;
@@ -264,6 +245,8 @@ async function handleFetchEmails(req: NextRequest) {
         const { data: insertedLead, error: insertError } = await supabase.from("leads").insert({
           name,
           phone,
+          // ייחוס ערוץ בעמודה, לא רק בטקסט ההערות (מיגרציה 00098)
+          source_number: maskyooCall?.virtualNumber ?? null,
           email: leadEmail,
           location,
           experience,

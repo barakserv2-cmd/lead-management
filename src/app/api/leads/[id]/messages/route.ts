@@ -22,7 +22,7 @@ export async function GET(
 
   let q = admin
     .from("messages")
-    .select("id, role, content, created_at, sent_by, via_instance")
+    .select("id, role, content, created_at, sent_by, via_instance, delivery_status, delivery_error")
     .eq("lead_id", id)
     .order("created_at", { ascending: true });
   const f = scopeFilter(scope);

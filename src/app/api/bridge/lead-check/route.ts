@@ -23,7 +23,7 @@ export async function GET(req: NextRequest) {
   const db = getSupabaseAdmin();
   const { data: lead } = await db
     .from("leads")
-    .select("id, status, handled_by, do_not_contact, updated_at, bot_paused, needs_human_attention")
+    .select("id, status, handled_by, handled_at, do_not_contact, updated_at, bot_paused, needs_human_attention")
     .eq("phone", phone)
     .maybeSingle();
 
@@ -47,6 +47,21 @@ export async function GET(req: NextRequest) {
   const active = !TERMINAL.includes(lead.status);
   const humanOwned = !!lead.handled_by && lead.handled_by !== GUBGET;
 
+  // האם יצאה אי-פעם הודעה מישהו (רכזת או בוט), וכמה זמן הבעלים
+  // האנושי מחזיק את הליד בלי לכתוב כלום. גובגט פותח אחרי סף השעות
+  // הזה — אחרת הבעלות היא נעילה ללא תפוגה והליד מתקרר אצל רכזת עסוקה.
+  const { count: outboundCount } = await db
+    .from("messages")
+    .select("id", { count: "exact", head: true })
+    .eq("lead_id", lead.id)
+    .in("role", ["assistant", "recruiter"]);
+  const hasOutbound = (outboundCount ?? 0) > 0;
+  const ownedSince = lead.handled_at ? new Date(lead.handled_at).getTime() : null;
+  const ownerSilentHours =
+    humanOwned && !hasOutbound && ownedSince !== null
+      ? Math.floor((Date.now() - ownedSince) / 3600_000)
+      : null;
+
   return NextResponse.json({
     exists: true,
     dnc: !!lead.do_not_contact,
@@ -54,6 +69,8 @@ export async function GET(req: NextRequest) {
     humanOwned,
     status: lead.status,
     lastHumanContactDays,
+    hasOutbound,
+    ownerSilentHours,
     // recruiter took over / escalation open → the machine must stay silent.
     // An open red flag counts even if bot_paused was never set (takeovers
     // from before the flag existed) — a human owns it either way.

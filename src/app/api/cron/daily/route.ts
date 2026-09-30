@@ -1,7 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient as createServerClient } from "@supabase/supabase-js";
-import { businessAccount, sendWhatsAppMessage } from "@/lib/whatsappService";
+import {
+  businessAccount,
+  officialReminderAccount,
+  sendWhatsAppMessage,
+  sendWhatsAppTemplate,
+} from "@/lib/whatsappService";
 import { runPostPlacementCare } from "@/lib/postPlacement";
+import { runIntakeMonitor } from "@/lib/intakeMonitor";
+import { runSiteMonitor } from "@/lib/siteMonitor";
 import { runArrivalCompanion } from "@/lib/arrivalCompanionRun";
 import { hasCronSecret } from "@/lib/secrets";
 import { isTemporaryBlock, restPeriodAt, REST_ENDS_HOUR } from "@/lib/sendGate";
@@ -116,10 +123,14 @@ async function runInterviewReminders(admin: ReturnType<typeof getAdmin>): Promis
       const occurrenceKey = `interview_${dateKey}_${lead.id}`;
 
       // Idempotency check
+      // מדלגים רק על תזכורת שהגיעה בפועל. עד 16.09 כל ניסיון נרשם כ"בוצע"
+      // גם כשנכשל, והריצה הבאה דילגה עליו — כך 20 תזכורות נעלמו בשקט.
+      // ה-cron רץ כל שעה בחלון השליחה, אז כשל חולף מקבל עוד ניסיונות.
       const { data: existing } = await admin
         .from("cron_reminders")
         .select("id")
         .eq("occurrence_key", occurrenceKey)
+        .eq("success", true)
         .maybeSingle();
       if (existing) {
         summary.details.push(`כבר נשלח: ${lead.name}`);
@@ -143,9 +154,27 @@ async function runInterviewReminders(admin: ReturnType<typeof getAdmin>): Promis
           : `תזכורת אוטומטית: ${target.label} יש לך ${type}.\n`) +
         `בהצלחה! 🎯`;
 
-      const sendRes = await sendWhatsAppMessage(lead.phone as string, message, businessAccount(), {
-        automated: true,
-      });
+      // בערוץ הרשמי: תבנית מאושרת, כי תזכורת תמיד מחוץ לחלון 24 השעות.
+      // בלי מספר רשמי מוגדר — ההתנהגות הקודמת, טקסט חופשי.
+      const official = officialReminderAccount();
+      const when = hasTime ? `${type} בשעה ${hh}:${mm}` : type;
+      const templateName =
+        target.offsetDays === 1 ? "interview_reminder_tomorrow" : "interview_reminder_sunday";
+      const sentText = official
+        ? `זו תזכורת מברק שירותים: ${target.label} יש לך ${when}.\n` +
+          `אם משהו משתנה, אפשר לעדכן אותנו כאן ונתאם מועד אחר.`
+        : message;
+
+      const sendRes = official
+        ? await sendWhatsAppTemplate(
+            lead.phone as string,
+            { name: templateName, language: "he", params: [when] },
+            official,
+            { automated: true }
+          )
+        : await sendWhatsAppMessage(lead.phone as string, message, businessAccount(), {
+            automated: true,
+          });
 
       // חסימה זמנית — לא רושמים, כדי שהריצה הבאה בחלון תשלח. רישום כאן היה
       // נחשב "כבר נשלח" וחוסם את התזכורת עד הראיון.
@@ -159,18 +188,20 @@ async function runInterviewReminders(admin: ReturnType<typeof getAdmin>): Promis
         await admin.from("messages").insert({
           lead_id: lead.id,
           role: "recruiter",
-          content: message,
+          content: sentText,
         });
       }
 
-      await admin.from("cron_reminders").insert({
+      // upsert ולא insert: occurrence_key ייחודי, וניסיון חוזר אחרי כשל
+      // מעדכן את אותה שורה במקום להיכשל על כפילות.
+      await admin.from("cron_reminders").upsert({
         lead_id: lead.id,
         reminder_type: "interview_tomorrow",
         occurrence_key: occurrenceKey,
         payload: { interview_at: lead.interview_date, type: lead.interview_type },
         success: sendRes.success,
         error: sendRes.error ?? null,
-      });
+      }, { onConflict: "occurrence_key" });
 
       if (sendRes.success) {
         summary.succeeded++;
@@ -334,6 +365,39 @@ async function runArrivalCompanionRule(admin: ReturnType<typeof getAdmin>): Prom
   return summary;
 }
 
+// ── Rule 5: ניטור בריאות ערוצי לידים (ועדת נפח הלידים, החלטה 3) ──
+// ערוץ שהיה פעיל ב-14 יום ונדם 3+ ימים → וואטסאפ לסער. פעם ביום ב-09:00.
+async function runChannelHealth(admin: ReturnType<typeof getAdmin>): Promise<RunSummary> {
+  const summary: RunSummary = {
+    rule: "channel_health",
+    attempted: 0,
+    succeeded: 0,
+    failed: 0,
+    details: [],
+  };
+  const monitor = await runIntakeMonitor(admin);
+  summary.attempted = monitor.channels;
+  summary.succeeded = monitor.alerts;
+  summary.details = monitor.details;
+  if (monitor.purged > 0) {
+    summary.details.push(`נוקו ${monitor.purged} פניות ללא ליד ישנות (90+ יום)`);
+  }
+  return summary;
+}
+
+// ── Rule 6: טפסי האתר עובדים? (אחרי התקלה של 29.09) ─────────
+// כל שעה: בדיקה טכנית כמבקר אנונימי + שקט חריג לפי הקצב הרגיל.
+async function runSiteHealth(admin: ReturnType<typeof getAdmin>): Promise<RunSummary> {
+  const res = await runSiteMonitor(admin);
+  return {
+    rule: "site_forms_health",
+    attempted: res.checked,
+    succeeded: res.alerts,
+    failed: 0,
+    details: res.details,
+  };
+}
+
 // ── Orchestrator ────────────────────────────────────────────
 async function runDailyCron() {
   const admin = getAdmin();
@@ -342,6 +406,8 @@ async function runDailyCron() {
     runStaleClaimCleanup(admin),
     runWeeklyDigest(admin),
     runPlacementCare(admin),
+    runChannelHealth(admin),
+    runSiteHealth(admin),
     runArrivalCompanionRule(admin),
   ]);
   return { ok: true, ran_at: new Date().toISOString(), rules: results };

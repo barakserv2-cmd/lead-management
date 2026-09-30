@@ -60,9 +60,12 @@ export async function POST(
     return NextResponse.json({ ok: true, notes: lead.notes ?? "" });
   }
 
+  // רכזת שכותבת הערה נגעה במועמד. עד 27.09 רק וואטסאפ ושינוי סטטוס עדכנו
+  // את "תאריך קשר אחרון", ולכן מועמדים שחושן טיפלה בהם בטלפון ותיעדה בהערה
+  // המשיכו להופיע ב"לא נגעת בהם" במסך "היום שלי".
   const { error: upErr } = await supabase
     .from("leads")
-    .update({ notes: next || null })
+    .update({ notes: next || null, last_contact_at: new Date().toISOString() })
     .eq("id", leadId);
   if (upErr) {
     return NextResponse.json({ error: upErr.message }, { status: 500 });

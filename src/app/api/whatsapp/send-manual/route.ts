@@ -1,6 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient as createServerClient } from "@supabase/supabase-js";
-import { sendWhatsAppMessage, resolveSender, checkWhatsappExists } from "@/lib/whatsappService";
+import {
+  sendWhatsAppMessage,
+  resolveSender,
+  checkWhatsappExists,
+  lastInboundAt,
+  isWithinServiceWindow,
+} from "@/lib/whatsappService";
 import { getMessageScope } from "@/lib/messageVisibility";
 import { getAuthedUser } from "@/lib/api-auth";
 
@@ -20,9 +26,10 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const { leadId, message } = await req.json();
+    const { leadId, message, check } = await req.json();
 
-    if (!leadId || !message?.trim()) {
+    // check: בדיקה בלבד, לפני שהצ'אט עוצר את הבוט — בלי לשמור ובלי לשלוח
+    if (!leadId || (!check && !message?.trim())) {
       return NextResponse.json(
         { success: false, error: "חסרים פרמטרים (leadId, message)" },
         { status: 400 }
@@ -56,14 +63,63 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    // ערוץ רשמי עם חלון סגור: ההודעה לא תצא, אז לא שומרים אותה בצ'אט
+    // ולא עוצרים את הבוט. עד 16.09 הבוט נעצר קודם והשליחה נכשלה אחר כך —
+    // מועמד שהבוט טיפל בו נשאר בלי אף אחד.
+    if (lead.phone && sender.provider === "cloud") {
+      const last = await lastInboundAt(lead.phone, sender.instanceId);
+      if (!isWithinServiceWindow(last)) {
+        // המועמד/ת מדברים עם הבוט והחלון שם פתוח? התשובה יוצאת ממספר הבוט,
+        // באותה שיחה (17.09 — תמי לקחה שליטה ונחסמה).
+        const { sendViaMachine } = await import("@/lib/machineBridge");
+        const probe = await sendViaMachine(lead.phone, "", { check: true });
+        if (probe.ok) {
+          if (check) return NextResponse.json({ success: true, via: "bot" });
+          const { data: row, error: rowErr } = await supabase
+            .from("messages")
+            .insert({ lead_id: leadId, role: "recruiter", content: message.trim(), sent_by: user.email ?? null })
+            .select("id")
+            .single();
+          if (rowErr) {
+            return NextResponse.json({ success: false, error: `שגיאה בשמירת ההודעה: ${rowErr.message}` }, { status: 500 });
+          }
+          const sent = await sendViaMachine(lead.phone, message.trim());
+          if (!sent.ok) {
+            await supabase.from("messages")
+              .update({ delivery_status: "failed", delivery_error: "לא הצלחתי להעביר את ההודעה למספר הבוט", delivery_updated_at: new Date().toISOString() })
+              .eq("id", row.id);
+            return NextResponse.json({ success: false, savedToChat: true, error: "ההודעה לא נשלחה — לא הצלחתי להעביר אותה למספר הבוט. נסי שוב." });
+          }
+          // מזהה ההודעה וסימני המסירה מגיעים מגובגט כשההודעה יוצאת בפועל
+          return NextResponse.json({ success: true, whatsappSent: true, via: "bot", sentFrom: "מספר הבוט 050-700-8171" });
+        }
+        const from = sender.userEmail === user.email?.toLowerCase() ? "" : ` (${sender.label ?? "מספר ברירת המחדל"})`;
+        return NextResponse.json({
+          success: false,
+          savedToChat: false,
+          windowClosed: true,
+          error:
+            `אי אפשר לשלוח מכאן${from} — המועמד/ת לא כתבו למספר הזה ב-24 השעות האחרונות, ` +
+            "ומטא מאפשרת רק תבנית מאושרת. הבוט ממשיך לנהל את השיחה. אפשר להתקשר, או לכתוב מאפליקציית WhatsApp Business בטלפון.",
+        });
+      }
+    }
+    if (check) {
+      return NextResponse.json({ success: true });
+    }
+
     // Save the recruiter message to DB
-    const { error: insertError } = await supabase.from("messages").insert({
-      lead_id: leadId,
-      role: "recruiter",
-      content: message.trim(),
-      sent_by: user.email ?? null,
-      via_instance: sender.instanceId,
-    });
+    const { data: savedRow, error: insertError } = await supabase
+      .from("messages")
+      .insert({
+        lead_id: leadId,
+        role: "recruiter",
+        content: message.trim(),
+        sent_by: user.email ?? null,
+        via_instance: sender.instanceId,
+      })
+      .select("id")
+      .single();
 
     if (insertError) {
       return NextResponse.json(
@@ -75,15 +131,29 @@ export async function POST(req: NextRequest) {
     // Send via WhatsApp if lead has a phone number
     let whatsappSent = false;
     let whatsappError: string | null = null;
+    let windowClosed = false;
     if (lead.phone) {
       const result = await sendWhatsAppMessage(lead.phone, message.trim(), sender);
       whatsappSent = result.success;
+      // המזהה מחבר את ההודעה לעדכוני המסירה שיגיעו מהספק. כישלון מיידי
+      // מסומן כבר עכשיו, כדי שהבועה בצ'אט תראה ❌ ולא וי.
+      if (savedRow?.id) {
+        await supabase
+          .from("messages")
+          .update(
+            result.success
+              ? { provider_msg_id: result.idMessage ?? null, delivery_status: "sent", delivery_updated_at: new Date().toISOString() }
+              : { delivery_status: "failed", delivery_error: result.error ?? "השליחה נכשלה", delivery_updated_at: new Date().toISOString() }
+          )
+          .eq("id", savedRow.id);
+      }
       if (result.success) {
         // גשר התשובות למכונת הגיוס (fire-and-forget)
         const { forwardReplyToMachine } = await import("@/lib/machineBridge");
         await forwardReplyToMachine(lead.phone, message.trim(), "human");
       }
       if (!result.success) {
+        windowClosed = result.windowClosed === true;
         whatsappError = result.error ?? "שליחה נכשלה";
         console.error(
           `[Manual Send] WhatsApp send failed for lead ${leadId}:`,
@@ -94,6 +164,21 @@ export async function POST(req: NextRequest) {
 
     // כישלון וואטסאפ הוא לא הצלחה שקטה — הרכזת חייבת לדעת שההודעה
     // לא הגיעה למועמד (למשל כשהחיבור ל-GreenAPI נפל).
+    // חלון 24 השעות נסגר — זו לא תקלת חיבור. 29.09: חושן ניסתה לכתוב
+    // למועמדת שכתבה לאחרונה לפני יומיים וקיבלה "הוואטסאפ שלך מנותק",
+    // בזמן שהמספר שלה עבד וקלט הודעות באותה שעה בדיוק.
+    if (lead.phone && !whatsappSent && windowClosed) {
+      return NextResponse.json({
+        success: false,
+        savedToChat: true,
+        windowClosed: true,
+        error:
+          "ההודעה נשמרה בצ'אט אבל לא נשלחה — המועמד/ת לא כתבו לך ב-24 השעות האחרונות, " +
+          "ומטא מאפשרת רק תבנית מאושרת. אפשר לשלוח תבנית מהכפתור שליד, להתקשר, " +
+          "או לכתוב מאפליקציית WhatsApp Business בטלפון.",
+      });
+    }
+
     if (lead.phone && !whatsappSent) {
       // Name the real reason. A candidate with no WhatsApp on that number
       // (test leads, landlines, typos) is not a connection problem — telling

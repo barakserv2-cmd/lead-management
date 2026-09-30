@@ -2,8 +2,10 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient as createServerClient } from "@supabase/supabase-js";
 import {
   configureInstanceWebhook,
+  defaultSenderAccount,
   getInstancePhone,
   getInstanceQr,
+  getAccountForEmail,
   getInstanceState,
   logoutInstance,
   type WhatsAppAccount,
@@ -45,12 +47,13 @@ interface Row {
   is_active: boolean;
   last_state: string | null;
   created_at: string;
+  provider: string | null;
 }
 
 async function loadRow(email: string): Promise<Row | null> {
   const { data } = await admin()
     .from("whatsapp_accounts")
-    .select("instance_id, api_token, phone, label, is_active, last_state, created_at")
+    .select("instance_id, api_token, phone, label, is_active, last_state, created_at, provider")
     .eq("user_email", email)
     .maybeSingle();
   return (data as Row | null) ?? null;
@@ -64,6 +67,10 @@ function publicView(row: Row, state: string, qr: string | null = null) {
     label: row.label,
     state,
     qr,
+    // בערוץ הרשמי אין מכשיר שמתחבר או מתנתק, ולכן המסך לא אמור להציע
+    // "לחץ לחיבור" (29.09: חושן ראתה "הוואטסאפ שלך מנותק" בזמן שהמספר
+    // שלה עבד והודעות נכנסו ויצאו).
+    provider: row.provider === "cloud" ? "cloud" : "greenapi",
     createdAt: row.created_at,
   };
 }
@@ -73,9 +80,20 @@ export async function GET(req: NextRequest) {
   if (!email) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const row = await loadRow(email);
-  if (!row) return NextResponse.json({ connected: false });
+  if (!row) {
+    // מי שאין לו מספר שולח/ת ממספר ברירת המחדל — מראים ממי בדיוק
+    const def = await defaultSenderAccount();
+    return NextResponse.json({
+      connected: false,
+      defaultSender: def.userEmail ? { label: def.label ?? null, phone: def.phone ?? null } : null,
+    });
+  }
 
-  const account: WhatsAppAccount = { instanceId: row.instance_id, token: row.api_token };
+  // החשבון המלא, כולל provider. 17.09: תמי ראתה "הוואטסאפ שלך מנותק" —
+  // החשבון נבנה בלי provider, ולכן המספר הרשמי שלה (360dialog) נבדק מול
+  // GreenAPI, והבדיקה נכשלה. בערוץ הרשמי getInstanceState מחזיר מחובר.
+  const account: WhatsAppAccount =
+    (await getAccountForEmail(email)) ?? { instanceId: row.instance_id, token: row.api_token };
   let state = "unknown";
   let qr: string | null = null;
   let phone = row.phone;
@@ -84,7 +102,7 @@ export async function GET(req: NextRequest) {
     if (state === "notAuthorized" && req.nextUrl.searchParams.get("qr") === "1") {
       qr = (await getInstanceQr(account)).qr;
     }
-    if (state === "authorized" && !phone) {
+    if (state === "authorized" && !phone && account.provider !== "cloud") {
       phone = await getInstancePhone(account);
     }
   } catch (err) {

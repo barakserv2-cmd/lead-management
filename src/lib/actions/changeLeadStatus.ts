@@ -16,6 +16,7 @@ import {
 import { normalizeEmployerName } from "@/lib/employerNormalization";
 import { logAudit } from "@/lib/audit";
 import { setMachineConversationMode } from "@/lib/machineBridge";
+import { completeLeadReminders, REMINDER_CLEARING_STATUSES } from "@/lib/reminders";
 import { isClosedStatus } from "@/lib/attention";
 import {
   isEmploymentEndReason,
@@ -63,6 +64,11 @@ export interface ChangeStatusInput {
 
 const GUBGET_EMAIL = "gubget@eilatjobs.com";
 
+/** סטטוסים שבהם אין יותר מה לעשות עם המועמד — סוגרים גם את האסקלציות בגובגט */
+const LEAD_CLOSED_STATUSES = new Set<string>([
+  "REJECTED", "NOT_SUITABLE", "LOST_CONTACT", "NOT_ACCEPTED", "INVALID_PHONE",
+  "EMPLOYMENT_ENDED", "NO_SHOW", "CANCELLED_ARRIVAL", "HIRED", "STARTED",
+]);
 /** סיבת הדגל הנוכחי, או null אם אין דגל פתוח. */
 async function currentAttention(
   supabase: ReturnType<typeof getSupabase>,
@@ -137,6 +143,14 @@ export async function changeLeadStatus(input: ChangeStatusInput): Promise<Change
   // A human moving the lead is now driving it: Gubget stays silent until a
   // recruiter explicitly hands the conversation back ("החזר לגובגט").
   if (actor === "human") updateData.bot_paused = true;
+
+  // ליד שנסגר יוצא מ"גובגט מחכה לך" — אין יותר על מה לחכות. 22.09: 3 לידים
+  // סגורים נשארו בתור המשותף שכל הרכזות רואות.
+  if (LEAD_CLOSED_STATUSES.has(newStatus)) {
+    updateData.needs_human_attention = false;
+    updateData.human_attention_reason = null;
+    updateData.human_attention_raised_at = null;
+  }
 
   // סגירת ליד מכבה את הדגל "דורש תשומת לב" — ההחלטה כבר התקבלה. בלי זה
   // נצברו 255 דגלים על לידים סגורים (29/09) והדגל הפסיק להגיד משהו.
@@ -283,7 +297,14 @@ export async function changeLeadStatus(input: ChangeStatusInput): Promise<Change
   // is already persisted above, and the machine re-checks it on every inbound
   // message, so a missed call here can't let the bot keep going.
   if (actor === "human" && lead.phone) {
-    setMachineConversationMode(lead.phone as string, "human").catch(() => undefined);
+    // סטטוס סופי סוגר גם את האסקלציות בגובגט (22.09 — הן נשארו פתוחות לנצח)
+    const closedStatus = LEAD_CLOSED_STATUSES.has(newStatus) ? newStatus : undefined;
+    setMachineConversationMode(lead.phone as string, "human", closedStatus).catch(() => undefined);
+  }
+
+  // תזכורת "להתקשר שוב" שאין בה יותר צורך — ראיון נקבע או שהליד נסגר.
+  if (REMINDER_CLEARING_STATUSES.has(newStatus)) {
+    await completeLeadReminders(supabase, leadId);
   }
 
   // 7. Log to status history

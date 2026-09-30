@@ -20,9 +20,17 @@ interface AccountStatus {
   phone?: string | null;
   label?: string | null;
   state?: string;
+  provider?: string;
   qr?: string | null;
   createdAt?: string;
 }
+
+// הערוץ הרשמי (360dialog/מטא) אינו מכשיר מקושר: אין QR, אין "שינה", ואין
+// מה לחבר. בדיקה שלא הצליחה היא תקלה בבדיקה, לא מספר מת (29.09).
+const CLOUD_STATE_LABELS: Record<string, { text: string; color: string }> = {
+  blocked: { text: "המספר חסום על ידי מטא", color: "bg-red-500" },
+  default: { text: "מחובר — ערוץ רשמי", color: "bg-green-500" },
+};
 
 const STATE_LABELS: Record<string, { text: string; color: string }> = {
   authorized: { text: "מחובר — הטלפון מקושר", color: "bg-green-500" },
@@ -129,7 +137,10 @@ export function WhatsAppSettings() {
     setRemoving(false);
   }
 
-  const stateInfo = STATE_LABELS[status?.state ?? "unknown"] ?? STATE_LABELS.unknown;
+  const stateInfo =
+    status?.provider === "cloud"
+      ? (CLOUD_STATE_LABELS[status?.state ?? ""] ?? CLOUD_STATE_LABELS.default)
+      : (STATE_LABELS[status?.state ?? "unknown"] ?? STATE_LABELS.unknown);
 
   return (
     <div>

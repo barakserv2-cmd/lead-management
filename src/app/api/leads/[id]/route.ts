@@ -6,6 +6,7 @@ import { diffFields, logAudit } from "@/lib/audit";
 import { normalizePhone } from "@/lib/phone";
 import { findLeadByPhone, duplicatePhonePayload, isPhoneUniqueViolation } from "@/lib/leadPhoneGuard";
 import { normalizeEmployerName } from "@/lib/employerNormalization";
+import { pushNameToMachine } from "@/lib/machineBridge";
 import { isEmploymentEndReason, isCandidateSegment } from "@/lib/constants";
 import { getAuthedUser } from "@/lib/api-auth";
 
@@ -50,6 +51,7 @@ const DATE_FIELDS = new Set(["start_date", "arrival_date", "employment_end_date"
 // answered from the log at all.
 const SNAPSHOT_COLUMNS =
   "name, phone, email, job_title, location, experience, age, screening_score, interview_date, " +
+  "status, sub_status, " +
   "interview_notes, hired_client, hired_position, rejection_reason, start_date, arrival_date, " +
   "employment_end_date, employment_end_reason, employment_end_notes, candidate_segment, " +
   "comes_with_friend, companion_name, notes, followup_notes";
@@ -213,6 +215,14 @@ export async function PATCH(
       if (existing) return NextResponse.json(duplicatePhonePayload(existing), { status: 409 });
     }
     return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+
+  // שם שתוקן בכרטיס חייב להגיע גם לבוט — אחרת הוא ממשיך לפנות למועמד/ת
+  // בשם הישן (ראו pushNameToMachine). הטלפון החדש אם שונה, אחרת הקיים.
+  if (typeof updateData.name === "string") {
+    const row = data as unknown as Record<string, unknown>;
+    const phone = (typeof updateData.phone === "string" ? updateData.phone : row.phone) as string | null;
+    void pushNameToMachine(phone, updateData.name);
   }
 
   const changes = diffFields(before as Record<string, unknown> | null, updateData);

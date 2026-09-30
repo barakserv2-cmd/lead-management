@@ -6,6 +6,9 @@ import { GUBGET_SOURCE } from "@/lib/constants";
 import { closureFor } from "@/lib/israelHolidays";
 import { ensureClosuresLoaded } from "@/lib/closures";
 import { hasMachineKey } from "@/lib/secrets";
+import { applyDeliveryStatus } from "@/lib/deliveryStatus";
+import type { SupabaseClient } from "@supabase/supabase-js";
+import { completeLeadReminders } from "@/lib/reminders";
 
 /**
  * POST /api/bridge/from-machine — the autonomous machine ("גובגט") reports
@@ -19,7 +22,47 @@ import { hasMachineKey } from "@/lib/secrets";
 
 const GUBGET_EMAIL = "gubget@eilatjobs.com";
 
-type InMsg = { role?: string; content?: string; created_at?: string };
+/** שמות שהם בעצם "אין שם": ריק, מציין מקום, או מספר טלפון בתור שם. */
+const PLACEHOLDER_NAMES = new Set([
+  "לא ידוע", "לא ידועה", "ללא שם", "ללא שם ללא שם", "אנונימי", "מועמד", "מועמדת",
+  "unknown", "candidate", "test", "בדיקה",
+]);
+
+export function isPlaceholderName(name: string | null | undefined): boolean {
+  const n = (name ?? "").trim();
+  if (!n) return true;
+  if (PLACEHOLDER_NAMES.has(n.toLowerCase())) return true;
+  return /^[\d\s+\-()]+$/.test(n);
+}
+
+/**
+ * הרכזות שמקבלות מועמדים שגובגט העביר לאדם. רשימה בסביבה (מופרדת בפסיקים)
+ * כדי שאפשר יהיה להוסיף או להוריד רכזת בלי שינוי קוד.
+ */
+const ESCALATION_RECRUITERS = (process.env.ESCALATION_RECRUITERS ?? "tami@eilatjobs.com,hoshen@eilatjobs.com")
+  .split(",").map((e) => e.trim().toLowerCase()).filter(Boolean);
+
+/**
+ * מי מקבלת את המועמד הבא: זו שיש לה הכי מעט ממתינים פתוחים כרגע. כך החלוקה
+ * מתאזנת מעצמה גם כשרכזת אחת סוגרת מהר יותר או נעדרת יום.
+ */
+async function pickEscalationOwner(db: SupabaseClient): Promise<string | null> {
+  if (ESCALATION_RECRUITERS.length === 0) return null;
+  const { data } = await db
+    .from("leads")
+    .select("handled_by")
+    .eq("needs_human_attention", true)
+    .in("handled_by", ESCALATION_RECRUITERS);
+  const load = new Map(ESCALATION_RECRUITERS.map((e) => [e, 0]));
+  for (const row of data ?? []) {
+    const e = (row.handled_by as string | null)?.trim().toLowerCase();
+    if (e && load.has(e)) load.set(e, (load.get(e) ?? 0) + 1);
+  }
+  return [...load.entries()].sort((a, b) => a[1] - b[1])[0][0];
+}
+
+type InMsg = { role?: string; content?: string; created_at?: string; provider_msg_id?: string };
+type InStatus = { provider_msg_id?: string; status?: string; error?: string | null };
 type Body = {
   phone?: string;
   name?: string;
@@ -36,6 +79,8 @@ type Body = {
   // 0-100 overall screening score from גובגט's verdict — required by the
   // state machine for an automated move to FIT_FOR_INTERVIEW.
   screeningScore?: number;
+  // עדכוני מסירה (נמסרה / נקראה / נכשלה) להודעות שגובגט שלח
+  statuses?: InStatus[];
 };
 
 // accept exactly the naive wall-clock shape v1 stores (YYYY-MM-DDTHH:mm[:ss])
@@ -58,6 +103,23 @@ export async function POST(req: NextRequest) {
 
   const db = getSupabaseAdmin();
 
+  // 0. עדכוני מסירה — לפני כל נגיעה בליד. השלב הבא יוצר ליד לכל מספר לא
+  //    מוכר, ועדכון "נמסרה" לבדו לא אמור ליצור ליד. בקשה שיש בה רק עדכונים
+  //    מסתיימת כאן. בלי סימון ליד: על כישלון גובגט שולח אסקלציה משלו.
+  let statusesApplied = 0;
+  for (const st of body.statuses ?? []) {
+    const s = st.status;
+    if (!st.provider_msg_id || !(s === "sent" || s === "delivered" || s === "read" || s === "failed")) continue;
+    const r = await applyDeliveryStatus(db, st.provider_msg_id, s, st.error ?? null, { flagLead: false });
+    statusesApplied += r.updated;
+  }
+  const onlyStatuses =
+    (body.statuses?.length ?? 0) > 0 &&
+    !body.messages?.length && !body.status && !body.escalation && !body.note && !body.interviewAt && !body.name;
+  if (onlyStatuses) {
+    return NextResponse.json({ ok: true, statusesApplied });
+  }
+
   // 1. Upsert the lead by phone
   const { data: existing } = await db
     .from("leads")
@@ -72,7 +134,11 @@ export async function POST(req: NextRequest) {
     leadId = existing.id;
     currentStatus = existing.status;
     const patch: Record<string, unknown> = {};
-    if (body.name && !existing.name) patch.name = body.name;
+    // "לא ידוע" הוא מציין מקום, לא שם. כשגובגט מצליח לקבל שם אמיתי בשיחה
+    // הוא מחליף את המציין, אבל לעולם לא שם אמיתי שכבר קיים (29.09).
+    if (body.name && isPlaceholderName(existing.name) && !isPlaceholderName(body.name)) {
+      patch.name = body.name;
+    }
     // claim as גובגט only when no human already owns it
     if (!existing.handled_by) patch.handled_by = GUBGET_EMAIL;
     if (Object.keys(patch).length > 0) {
@@ -103,18 +169,26 @@ export async function POST(req: NextRequest) {
     const content = (m.content ?? "").trim();
     if (!content) continue;
     const role = m.role === "user" ? "user" : "assistant";
+    const providerMsgId = typeof m.provider_msg_id === "string" && m.provider_msg_id.trim() ? m.provider_msg_id.trim() : null;
     const { data: dupe } = await db
       .from("messages")
-      .select("id")
+      .select("id, provider_msg_id")
       .eq("lead_id", leadId)
       .eq("content", content)
       .limit(1)
       .maybeSingle();
-    if (dupe) continue;
+    if (dupe) {
+      // אותה הודעה נשלחה שוב מגובגט — אם הפעם יש מזהה, מחברים אותו
+      if (providerMsgId && !dupe.provider_msg_id) {
+        await db.from("messages").update({ provider_msg_id: providerMsgId, delivery_status: "sent" }).eq("id", dupe.id);
+      }
+      continue;
+    }
     await db.from("messages").insert({
       lead_id: leadId,
       role,
       content,
+      ...(providerMsgId && role === "assistant" ? { provider_msg_id: providerMsgId, delivery_status: "sent" } : {}),
       ...(m.created_at && !isNaN(Date.parse(m.created_at)) ? { created_at: new Date(m.created_at).toISOString() } : {}),
     });
     appended++;
@@ -187,22 +261,35 @@ export async function POST(req: NextRequest) {
     const patch: Record<string, unknown> = { interview_date: body.interviewAt };
     if (body.interviewType) patch.interview_type = body.interviewType;
     const { error: ivErr } = await db.from("leads").update(patch).eq("id", leadId);
-    if (!ivErr) interviewSet = true;
+    if (!ivErr) {
+      interviewSet = true;
+      // הבוט קבע ראיון — תזכורת "להתקשר שוב" של הרכזת כבר מיותרת
+      await completeLeadReminders(db, leadId);
+    }
   }
 
   // 4. Human-attention flag — surfaces a red banner on the lead so recruiters
   //    (not just an admin phone) see they need to step in.
   let escalated = false;
   if (body.escalation && body.escalation.reason) {
-    const { error: attErr } = await db
-      .from("leads")
-      .update({
-        needs_human_attention: true,
-        human_attention_reason: body.escalation.reason,
-        human_attention_raised_at: new Date().toISOString(),
-        bot_paused: true, // Gubget froze itself on escalation — stays paused until a recruiter releases it
-      })
-      .eq("id", leadId);
+    const patch: Record<string, unknown> = {
+      needs_human_attention: true,
+      human_attention_reason: body.escalation.reason,
+      human_attention_raised_at: new Date().toISOString(),
+      bot_paused: true, // Gubget froze itself on escalation — stays paused until a recruiter releases it
+    };
+    // מועמד שמחכה לאדם מקבל רכזת בשם. עד 24.09 כל אלה נשארו על גובגט,
+    // וכל הרכזות ראו את אותה ערימה ב"היום שלי" — מה שהפך את "מישהי אחרת
+    // בטח מטפלת" לברירת מחדל, ולידים חיכו מיום חמישי עד שני.
+    const owner = (existing?.handled_by as string | null)?.trim().toLowerCase();
+    if (!owner || owner === GUBGET_EMAIL) {
+      const assignee = await pickEscalationOwner(db);
+      if (assignee) {
+        patch.handled_by = assignee;
+        patch.handled_at = new Date().toISOString();
+      }
+    }
+    const { error: attErr } = await db.from("leads").update(patch).eq("id", leadId);
     if (!attErr) escalated = true;
   }
 

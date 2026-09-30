@@ -15,6 +15,9 @@ const SUMMARY_COLUMNS =
   "hired_client, hired_position, interview_date, interview_notes, screening_score, notes, tags, created_at";
 
 export async function POST(request: NextRequest) {
+  // סריקת אבטחה 24.09: הנתיב הזה רץ בלי שום אימות על OPENAI_API_KEY
+  // שלנו. בקשה אנונימית בפרודקשן החזירה 200 — כלומר מי שמצא את ה-URL
+  // שילם על חשבוננו. רק מגייס/ת מחובר/ת מפעיל/ה אותו.
   const user = await getAuthedUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 

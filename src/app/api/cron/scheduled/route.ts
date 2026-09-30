@@ -4,6 +4,7 @@ import {
   sendWhatsAppMessage,
   resolveSender,
   getInstanceState,
+  getAccountByInstance,
   businessAccount,
   type WhatsAppAccount,
   type InstanceState,
@@ -151,15 +152,31 @@ async function monitorInstances(db: ReturnType<typeof admin>): Promise<number> {
 
   let checked = 0;
   for (const a of accounts ?? []) {
+    // החשבון המלא, כולל provider. 17.09: אחרי שהמספר של תמי עבר ל-360dialog
+    // וה-GreenAPI הישן שלו נותק, הניטור בדק אותו מול GreenAPI ושלח לסער
+    // "המספר עבר למצב notAuthorized" — על מספר שעובד מצוין.
     const acc: WhatsAppAccount = {
-      instanceId: String(a.instance_id),
-      token: String(a.api_token),
+      ...(await getAccountByInstance(String(a.instance_id))),
       label: (a.label as string) ?? null,
     };
     let state: InstanceState = "unknown";
+    // אם החשבון לא נמצא, getAccountByInstance מחזיר את חשבון העסק במקום —
+    // ואז הבדיקה רצה על מספר אחר לגמרי ונרשמת על זה שלא נבדק.
+    // עדיף לדלג מלדווח על משהו שלא נמדד.
+    if (acc.instanceId !== String(a.instance_id)) {
+      console.error(
+        `[cron/scheduled] חשבון ${a.instance_id} לא נמצא — הבדיקה היתה נופלת על ${acc.instanceId}; מדלג`
+      );
+      continue;
+    }
     try {
       state = await getInstanceState(acc);
-    } catch {
+    } catch (e) {
+      // הבליעה שקטה הפכה כל תקלה ל-"unknown" בלי שום דרך לדעת למה.
+      console.error(
+        `[cron/scheduled] בדיקת מצב נכשלה ל-${acc.userEmail ?? a.instance_id} (${acc.provider}/${acc.authStyle}):`,
+        e instanceof Error ? e.message.slice(0, 200) : String(e)
+      );
       state = "unknown";
     }
     checked++;
@@ -185,14 +202,16 @@ async function monitorInstances(db: ReturnType<typeof admin>): Promise<number> {
       `⚠️ התראת וואטסאפ — ${a.label ?? acc.instanceId}\n` +
       `המספר עבר למצב: ${state}\n` +
       (a.bot_enabled ? "הוצא אוטומטית מסבב הבוט. " : "") +
-      `בדוק את ה-instance בקונסולת GreenAPI.`;
+      (acc.provider === "cloud"
+        ? "מטא חוסמת שליחה מהמספר — בדוק ב-360dialog וב-WhatsApp Manager."
+        : `בדוק את ה-instance בקונסולת GreenAPI.`);
 
     // שולחים את ההתראה מכל מספר תקין אחר (או המספר העסקי)
     const others = (accounts ?? []).filter(
       (o) => String(o.instance_id) !== acc.instanceId && !BAD_STATES.includes(o.last_state as InstanceState)
     );
     const alertSender: WhatsAppAccount = others.length
-      ? { instanceId: String(others[0].instance_id), token: String(others[0].api_token) }
+      ? await getAccountByInstance(String(others[0].instance_id))
       : businessAccount();
     const res = await sendWhatsAppMessage(adminPhone, alertMsg, alertSender, { skipGate: true });
     if (!res.success) {

@@ -313,11 +313,31 @@ export default async function MyDayPage() {
   );
   const undatedIds = new Set(undatedFollowUps.map((l) => l.id as string));
 
+  // כל רישום ביומן של המועמד — הערה, שיחת טלפון שתועדה, אירוע מגובגט — הוא
+  // מגע. בלי זה מועמד שרכזת טיפלה בו בטלפון ותיעדה נראה "נטוש" (בקשת חושן,
+  // 23.09). last_contact_at מתעדכן מהיום גם בהערה, וזה מכסה את מה שנרשם קודם.
+  const openIds = (openRes.data ?? []).map((l) => l.id as string);
+  const eventAt = new Map<string, string>();
+  if (openIds.length > 0) {
+    const { data: evs } = await supabase
+      .from("lead_events")
+      .select("lead_id, created_at")
+      .in("lead_id", openIds)
+      .gte("created_at", new Date(Date.now() - 45 * 86_400_000).toISOString())
+      .order("created_at", { ascending: false })
+      .limit(2000);
+    for (const e of evs ?? []) {
+      const id = e.lead_id as string;
+      if (!eventAt.has(id)) eventAt.set(id, e.created_at as string);
+    }
+  }
+
   const stale = (openRes.data ?? [])
-    .map((l) => ({
-      ...l,
-      lastTouch: (l.last_contact_at ?? l.handled_at ?? l.created_at) as string,
-    }))
+    .map((l) => {
+      const own = (l.last_contact_at ?? l.handled_at ?? l.created_at) as string;
+      const ev = eventAt.get(l.id as string);
+      return { ...l, lastTouch: ev && new Date(ev) > new Date(own) ? ev : own };
+    })
     // מי שכבר מופיע בבלוק אחר לא חוזר כאן — אותה משימה מוצגת פעם אחת
     .filter(
       (l) =>

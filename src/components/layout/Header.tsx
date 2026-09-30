@@ -1,10 +1,11 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { usePathname, useRouter } from "next/navigation";
-import { LogOut, Menu, Search } from "lucide-react";
+import { LogOut, Menu, PhoneIncoming, Search } from "lucide-react";
 import { NAV_ITEMS } from "./Sidebar";
+import { openQuickFind } from "@/lib/quickFind";
 
 export default function Header({ onMenu }: { onMenu?: () => void }) {
   const router = useRouter();
@@ -14,19 +15,6 @@ export default function Header({ onMenu }: { onMenu?: () => void }) {
 
   // שם העמוד הנוכחי — כמו פירורי לחם, כדי שתמיד ברור איפה נמצאים
   const current = NAV_ITEMS.find((i) => pathname.startsWith(i.href));
-
-  // ⌘K / Ctrl+K — חיפוש מועמד מכל מסך במערכת
-  useEffect(() => {
-    function onKey(e: KeyboardEvent) {
-      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
-        e.preventDefault();
-        inputRef.current?.focus();
-        inputRef.current?.select();
-      }
-    }
-    document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
-  }, []);
 
   function search() {
     const term = q.trim();
@@ -76,13 +64,25 @@ export default function Header({ onMenu }: { onMenu?: () => void }) {
             }}
             placeholder="חיפוש מועמד לפי שם או טלפון"
             aria-label="חיפוש מועמד"
-            className="w-full h-8 pr-8 pl-3 md:pl-14 rounded-md border border-gray-200 bg-gray-50 text-[13px] placeholder:text-gray-400 focus:bg-white focus:outline-none focus:border-cyan-400 focus:ring-4 focus:ring-cyan-100 transition-colors"
+            className="w-full h-8 pr-8 pl-3 rounded-md border border-gray-200 bg-gray-50 text-[13px] placeholder:text-gray-400 focus:bg-white focus:outline-none focus:border-cyan-400 focus:ring-4 focus:ring-cyan-100 transition-colors"
           />
-          <kbd className="absolute left-2 top-1/2 -translate-y-1/2 hidden md:inline-flex items-center px-1.5 h-5 rounded border border-gray-200 bg-white text-[10px] text-gray-400 font-sans" dir="ltr">
-            Ctrl K
-          </kbd>
         </div>
       </div>
+
+      {/* נכנסת שיחה וצריך לדעת מי מתקשר: נפתח כחלון צף, בלי לעזוב
+          את המסך הנוכחי. כפתור ולא רק Ctrl+K — בטאבלט אין מקלדת. */}
+      <button
+        type="button"
+        onClick={openQuickFind}
+        title="חיפוש מהיר של מועמד/ת לפי שם או טלפון, בלי לעזוב את המסך (Ctrl+K)"
+        className="shrink-0 inline-flex items-center gap-1.5 h-8 px-2.5 rounded-md border border-gray-200 text-[13px] text-gray-600 hover:text-cyan-700 hover:border-cyan-300 hover:bg-cyan-50/50 transition-colors"
+      >
+        <PhoneIncoming className="w-4 h-4" strokeWidth={1.75} />
+        <span className="hidden sm:inline">מי מתקשר?</span>
+        <kbd className="hidden md:inline-flex items-center px-1 h-4 rounded border border-gray-200 bg-white text-[10px] text-gray-400 font-sans" dir="ltr">
+          Ctrl K
+        </kbd>
+      </button>
 
       <div className="flex items-center gap-1 sm:gap-2 shrink-0">
         <div className="hidden sm:flex items-center gap-2 px-1.5 py-1 rounded-md">
