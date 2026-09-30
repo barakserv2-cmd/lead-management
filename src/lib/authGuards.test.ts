@@ -28,6 +28,8 @@ const PUBLIC_ROUTES: Record<string, string> = {
   "app/api/sign/[token]/route.ts": "candidate signing link — 192-bit token",
   "app/api/booking/[token]/route.ts": "candidate self-booking link — 192-bit token",
   "app/api/whatsapp/route.ts": "GreenAPI webhook — GREEN_API_WEBHOOK_TOKEN",
+  "app/api/whatsapp/cloud/[token]/route.ts": "Meta webhook — per-account URL token + App Secret signature",
+  "app/api/chat/route.ts": "closed on 24.09 — always returns 404",
 };
 
 /** Server-action guards: requireRecruiter (api-auth) or the users page's admin check. */

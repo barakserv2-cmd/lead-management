@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient as createServerClient } from "@supabase/supabase-js";
-import { createClient as createCookieClient } from "@/lib/supabase/server";
 import { getMessageScope } from "@/lib/messageVisibility";
 import {
   listApprovedTemplates,
@@ -8,6 +7,7 @@ import {
   resolveSender,
   sendWhatsAppTemplate,
 } from "@/lib/whatsappService";
+import { getAuthedUser } from "@/lib/api-auth";
 
 function admin() {
   return createServerClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!);
@@ -19,8 +19,7 @@ function admin() {
 // תבנית מאושרת עוברת גם מחוץ לחלון, ולכן היא הדרך לפנות מתוך המערכת.
 // ההודעה נשמרת בצ'אט עם הטקסט המלא ומקבלת סימני מסירה כמו כל הודעה.
 export async function POST(req: NextRequest) {
-  const cookieClient = await createCookieClient();
-  const { data: { user } } = await cookieClient.auth.getUser();
+  const user = await getAuthedUser();
   if (!user) return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
 
   const { leadId, name, params } = (await req.json().catch(() => ({}))) as {
