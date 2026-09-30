@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
 import { changeLeadStatus, type ChangeStatusInput } from "@/lib/actions/changeLeadStatus";
+import { getAuthedUser } from "@/lib/api-auth";
 
 // Internal endpoint for in-dashboard status changes (kanban drag, status
 // dropdown, interview/hired/sub-status dialogs). Uses the user's cookie
@@ -9,9 +9,8 @@ import { changeLeadStatus, type ChangeStatusInput } from "@/lib/actions/changeLe
 // RSC render of /leads inside the action response) and rejected the client
 // promise with an opaque "Server Components render" error on render failure.
 export async function POST(request: NextRequest) {
-  const supabase = await createClient();
 
-  const { data: { user } } = await supabase.auth.getUser();
+  const user = await getAuthedUser();
   if (!user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }

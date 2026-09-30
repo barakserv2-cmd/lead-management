@@ -1,14 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { createClient as createCookieClient } from "@/lib/supabase/server";
+import { safeEqual } from "@/lib/secrets";
 
 // Validate API key from Authorization header
 export function validateApiKey(request: NextRequest): boolean {
   const authHeader = request.headers.get("authorization");
   if (!authHeader) return false;
 
-  const token = authHeader.replace("Bearer ", "");
-  return token === process.env.API_SECRET_KEY;
+  const secret = process.env.API_SECRET_KEY;
+  if (!secret) return false;
+  return safeEqual(authHeader.replace("Bearer ", ""), secret);
 }
 
 export function unauthorizedResponse() {
@@ -52,7 +54,31 @@ export interface AuthedUser {
   isAdmin: boolean;
 }
 
-/** המשתמש/ת המחובר/ת + תפקיד מ-user_profiles, או null כשאין session. */
+/**
+ * ILIKE בלי תווים כלליים: `%` ו-`_` חוקיים בחלק המקומי של אימייל, ובלי
+ * בריחה `x%@eilatjobs.com` היה תואם לשורה של אדמין (ועדת בחינה, 29/09).
+ */
+export function exactILike(value: string): string {
+  return value.replace(/[\\%_]/g, (c) => `\\${c}`);
+}
+
+/** השורה ב-user_profiles של האימייל (התאמה מדויקת, לא תלוית רישיות), או null. */
+export async function findProfileByEmail(
+  email: string
+): Promise<{ role: string | null; name: string | null } | null> {
+  const { data } = await getSupabaseAdmin()
+    .from("user_profiles")
+    .select("role, name")
+    .ilike("email", exactILike(email.toLowerCase()))
+    .maybeSingle();
+  return data ?? null;
+}
+
+/**
+ * המשתמש/ת המחובר/ת + תפקיד, או null כשאין session **או שאין שורה ב-user_profiles**.
+ * התחברות לבדה אינה "רכזת": הרשמה עצמית פתוחה ב-Supabase, ומחיקת רכזת מוחקת
+ * את הפרופיל — בלי הבדיקה הזו שני אלה היו מקבלים גישה מלאה דרך ה-API.
+ */
 export async function getAuthedUser(): Promise<AuthedUser | null> {
   const supabase = await createCookieClient();
   const {
@@ -61,13 +87,22 @@ export async function getAuthedUser(): Promise<AuthedUser | null> {
   if (!user?.email) return null;
 
   const email = user.email.toLowerCase();
-  const { data: profile } = await getSupabaseAdmin()
-    .from("user_profiles")
-    .select("role")
-    .ilike("email", email)
-    .maybeSingle();
+  const profile = await findProfileByEmail(email);
+  if (!profile) return null;
 
-  return { email, isAdmin: profile?.role === ADMIN_ROLE };
+  return { email, isAdmin: profile.role === ADMIN_ROLE };
+}
+
+/**
+ * שומר ל-server actions. כל פעולה מיוצאת בקובץ "use server" נגישה ב-POST לכל
+ * מי שמחזיק את מזהה הפעולה (הוא נמצא ב-JS הציבורי), ולכן כל אחת חייבת לבדוק
+ * בעצמה. זורק כשאין רכזת מחוברת (או כשנדרש אדמין ואין).
+ */
+export async function requireRecruiter(opts: { admin?: boolean } = {}): Promise<AuthedUser> {
+  const user = await getAuthedUser();
+  if (!user) throw new Error("לא מחובר/ת");
+  if (opts.admin && !user.isAdmin) throw new Error("פעולה זו מוגבלת לאדמין");
+  return user;
 }
 
 /**

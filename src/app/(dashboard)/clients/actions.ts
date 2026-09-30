@@ -3,6 +3,7 @@
 import { phoneSearchTerm } from "@/lib/phone";
 import { createClient as createServerClient } from "@supabase/supabase-js";
 import { revalidatePath } from "next/cache";
+import { requireRecruiter } from "@/lib/api-auth";
 
 function getSupabase() {
   return createServerClient(
@@ -12,6 +13,7 @@ function getSupabase() {
 }
 
 export async function getClients(status?: string, search?: string) {
+  await requireRecruiter();
   let query = getSupabase()
     .from("clients")
     .select("*")
@@ -40,6 +42,7 @@ export async function createClient(client: {
   type: string;
   city: string;
 }) {
+  await requireRecruiter();
   const { data, error } = await getSupabase()
     .from("clients")
     .insert({
@@ -75,6 +78,7 @@ export async function updateClient(
     city: string;
   }
 ) {
+  await requireRecruiter();
   const { data, error } = await getSupabase()
     .from("clients")
     .update({

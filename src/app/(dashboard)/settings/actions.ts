@@ -1,6 +1,7 @@
 "use server";
 
 import { createClient } from "@supabase/supabase-js";
+import { requireRecruiter } from "@/lib/api-auth";
 
 function getSupabase() {
   return createClient(
@@ -14,6 +15,7 @@ export async function getGmailStatus(): Promise<{
   email: string | null;
   connectedAt: string | null;
 }> {
+  await requireRecruiter();
   try {
     const { data, error } = await getSupabase()
       .from("settings")
@@ -36,6 +38,7 @@ export async function getGmailStatus(): Promise<{
 }
 
 export async function disconnectGmail(): Promise<{ error: string | null }> {
+  await requireRecruiter({ admin: true });
   const { error } = await getSupabase()
     .from("settings")
     .update({

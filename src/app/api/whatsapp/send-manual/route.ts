@@ -8,7 +8,7 @@ import {
   isWithinServiceWindow,
 } from "@/lib/whatsappService";
 import { getMessageScope } from "@/lib/messageVisibility";
-import { createClient as createCookieClient } from "@/lib/supabase/server";
+import { getAuthedUser } from "@/lib/api-auth";
 
 function getSupabase() {
   return createServerClient(
@@ -20,8 +20,7 @@ function getSupabase() {
 // POST — Recruiter sends a manual WhatsApp message from the CRM chat
 export async function POST(req: NextRequest) {
   // Only a signed-in recruiter may send from the business number.
-  const cookieClient = await createCookieClient();
-  const { data: { user } } = await cookieClient.auth.getUser();
+  const user = await getAuthedUser();
   if (!user) {
     return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
   }

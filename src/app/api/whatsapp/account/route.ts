@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient as createServerClient } from "@supabase/supabase-js";
-import { createClient as createCookieClient } from "@/lib/supabase/server";
 import {
   configureInstanceWebhook,
   defaultSenderAccount,
@@ -11,6 +10,7 @@ import {
   logoutInstance,
   type WhatsAppAccount,
 } from "@/lib/whatsappService";
+import { getAuthedUser } from "@/lib/api-auth";
 
 // ============================================================
 // /api/whatsapp/account — the signed-in recruiter's personal WhatsApp
@@ -28,9 +28,8 @@ function admin() {
 }
 
 async function currentEmail(): Promise<string | null> {
-  const cookieClient = await createCookieClient();
-  const { data: { user } } = await cookieClient.auth.getUser();
-  return user?.email?.toLowerCase() ?? null;
+  const user = await getAuthedUser();
+  return user?.email ?? null;
 }
 
 function webhookUrl(req: NextRequest): string {

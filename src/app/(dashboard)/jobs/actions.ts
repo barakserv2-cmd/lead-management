@@ -3,6 +3,7 @@
 import { createClient as createServerClient } from "@supabase/supabase-js";
 import { revalidatePath } from "next/cache";
 import type { JobStatus } from "@/types/jobs";
+import { requireRecruiter } from "@/lib/api-auth";
 
 function getSupabase() {
   return createServerClient(
@@ -12,6 +13,7 @@ function getSupabase() {
 }
 
 export async function getJobs() {
+  await requireRecruiter();
   const { data, error } = await getSupabase()
     .from("jobs")
     .select("*, clients(name, phone)")
@@ -44,6 +46,7 @@ function toRow(job: JobInput) {
 }
 
 export async function createJob(job: JobInput & { client_id: string }) {
+  await requireRecruiter();
   const { data, error } = await getSupabase()
     .from("jobs")
     .insert({ client_id: job.client_id, ...toRow(job) })
@@ -56,6 +59,7 @@ export async function createJob(job: JobInput & { client_id: string }) {
 }
 
 export async function updateJob(id: string, job: JobInput) {
+  await requireRecruiter();
   const { data, error } = await getSupabase()
     .from("jobs")
     .update(toRow(job))
@@ -70,12 +74,14 @@ export async function updateJob(id: string, job: JobInput) {
 
 /** Open / On Hold / Closed — quick action from the board. */
 export async function setJobStatus(id: string, status: JobStatus) {
+  await requireRecruiter();
   const { error } = await getSupabase().from("jobs").update({ status }).eq("id", id);
   if (!error) revalidatePath("/jobs");
   return { error: error?.message ?? null };
 }
 
 export async function setJobUrgent(id: string, urgent: boolean) {
+  await requireRecruiter();
   const { error } = await getSupabase().from("jobs").update({ urgent }).eq("id", id);
   if (!error) revalidatePath("/jobs");
   return { error: error?.message ?? null };
@@ -83,6 +89,7 @@ export async function setJobUrgent(id: string, urgent: boolean) {
 
 /** Bump the headcount by ±1 straight from the row. */
 export async function setJobNeeded(id: string, needed_count: number) {
+  await requireRecruiter();
   if (needed_count < 1) return { error: "לפחות תקן אחד" };
   const { error } = await getSupabase().from("jobs").update({ needed_count }).eq("id", id);
   if (!error) revalidatePath("/jobs");

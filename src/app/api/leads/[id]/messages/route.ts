@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient as createServerClient } from "@supabase/supabase-js";
-import { createClient as createCookieClient } from "@/lib/supabase/server";
 import { getMessageScope, scopeFilter } from "@/lib/messageVisibility";
+import { getAuthedUser } from "@/lib/api-auth";
 
 // GET /api/leads/[id]/messages — the lead's chat, limited to conversations the
 // signed-in recruiter may see (business number + their own personal number;
@@ -11,8 +11,7 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
-  const cookieClient = await createCookieClient();
-  const { data: { user } } = await cookieClient.auth.getUser();
+  const user = await getAuthedUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const scope = await getMessageScope(user.email);

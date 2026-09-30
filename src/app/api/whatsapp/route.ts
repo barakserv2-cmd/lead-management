@@ -3,6 +3,7 @@ import { phoneFromChatId, getAccountByInstance } from "@/lib/whatsappService";
 import { handleInboundMessage } from "@/lib/whatsappInbound";
 import { applyDeliveryStatus, mapGreenApiStatus } from "@/lib/deliveryStatus";
 import { getSupabaseAdmin } from "@/lib/api-auth";
+import { safeEqual } from "@/lib/secrets";
 
 /**
  * Webhook של GreenAPI — הערוץ הלא רשמי.
@@ -26,7 +27,7 @@ export async function POST(req: NextRequest) {
     if (expectedToken) {
       const auth = req.headers.get("authorization") ?? "";
       const got = auth.startsWith("Bearer ") ? auth.slice(7) : auth;
-      if (got !== expectedToken) {
+      if (!safeEqual(got, expectedToken)) {
         console.warn("[WhatsApp Webhook] rejected: bad or missing webhook token");
         return NextResponse.json({ error: "unauthorized" }, { status: 401 });
       }

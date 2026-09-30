@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { STATUS_LABELS, type LeadStatusValue } from "@/lib/stateMachine";
 import { logAudit } from "@/lib/audit";
-import { getSupabaseAdmin } from "@/lib/api-auth";
+import { getSupabaseAdmin, getAuthedUser } from "@/lib/api-auth";
 
 // יומן אירועים לליד: אירועים ידניים (lead_events) + שינויי סטטוס
 // אוטומטיים (lead_status_history) ממוזגים לציר זמן אחד.
@@ -44,7 +44,7 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const user = await getAuthedUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const { id: leadId } = await params;
@@ -151,7 +151,7 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const user = await getAuthedUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const { id: leadId } = await params;
@@ -174,7 +174,7 @@ export async function POST(
       lead_id: leadId,
       event_type: body.event_type?.trim() || "אחר",
       event_text: text,
-      created_by: user.email ?? user.id,
+      created_by: user.email,
     })
     .select("id, event_type, event_text, created_by, created_at")
     .single();
@@ -206,8 +206,7 @@ export async function PATCH(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const user = await getAuthedUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const { id: leadId } = await params;
@@ -254,8 +253,7 @@ export async function DELETE(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const user = await getAuthedUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const { id: leadId } = await params;
@@ -291,7 +289,7 @@ export async function DELETE(
   await logAudit({
     action: "delete",
     leadId,
-    actor: user.email ?? user.id,
+    actor: user.email,
     changes: { lead_event: { from: `${data.event_type}: ${data.event_text}`, to: null } },
     meta: { event_id: data.id, original_author: data.created_by, created_at: data.created_at },
   });

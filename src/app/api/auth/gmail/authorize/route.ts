@@ -5,9 +5,16 @@ import { createOAuthState } from "@/lib/oauthState";
 
 // חיבור תיבת הג'ימייל שממנה נקראים לידי AllJobs הוא פעולת ניהול, לא נתיב
 // ציבורי. עד 24.09 כל אדם יכול היה לפתוח את הזרימה הזו — ראו oauthState.ts.
+// רק אדמין: רכזת שמחליפה את התיבה (גם בטעות) עוצרת את קליטת הלידים.
 export async function GET() {
+  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
   const user = await getAuthedUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!user.isAdmin) {
+    return NextResponse.redirect(
+      `${baseUrl}/settings?gmail_error=${encodeURIComponent("רק אדמין יכול לחבר את תיבת הלידים")}`
+    );
+  }
 
   const oauth2Client = createOAuth2Client();
 

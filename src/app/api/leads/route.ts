@@ -4,6 +4,7 @@ import { LeadStatus } from "@/lib/stateMachine";
 import { logAudit } from "@/lib/audit";
 import { normalizePhone } from "@/lib/phone";
 import { findLeadByPhone, duplicatePhonePayload, isPhoneUniqueViolation } from "@/lib/leadPhoneGuard";
+import { getAuthedUser } from "@/lib/api-auth";
 
 export async function GET() {
   return NextResponse.json({ leads: [], total: 0 });
@@ -17,7 +18,7 @@ export async function GET() {
 export async function POST(request: NextRequest) {
   const supabase = await createClient();
 
-  const { data: { user } } = await supabase.auth.getUser();
+  const user = await getAuthedUser();
   if (!user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }

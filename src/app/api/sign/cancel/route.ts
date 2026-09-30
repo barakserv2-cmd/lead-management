@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient as createServerClient } from "@supabase/supabase-js";
-import { createClient as createCookieClient } from "@/lib/supabase/server";
+import { getAuthedUser } from "@/lib/api-auth";
 
 function getAdmin() {
   return createServerClient(
@@ -11,8 +11,7 @@ function getAdmin() {
 
 // POST — ביטול בקשת חתימה pending (הקישור מפסיק לעבוד)
 export async function POST(req: NextRequest) {
-  const cookieClient = await createCookieClient();
-  const { data: { user } } = await cookieClient.auth.getUser();
+  const user = await getAuthedUser();
   if (!user) {
     return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
   }

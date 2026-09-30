@@ -5,6 +5,7 @@
 import { NextResponse } from "next/server";
 import { createClient as createServerClient } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/server";
+import { exactILike } from "@/lib/api-auth";
 
 const ADMIN_ROLE = "אדמין";
 
@@ -32,10 +33,12 @@ export async function currentUser(): Promise<PublishingUser | null> {
   const { data: profile } = await admin()
     .from("user_profiles")
     .select("role")
-    .ilike("email", email)
+    .ilike("email", exactILike(email))
     .maybeSingle();
+  // התחברות בלי שורה ב-user_profiles אינה רכזת (ראו getAuthedUser)
+  if (!profile) return null;
 
-  return { email, isAdmin: profile?.role === ADMIN_ROLE };
+  return { email, isAdmin: profile.role === ADMIN_ROLE };
 }
 
 export function unauthorized() {

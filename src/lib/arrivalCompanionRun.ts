@@ -3,6 +3,7 @@
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { businessAccount, sendWhatsAppMessage } from "@/lib/whatsappService";
+import { isTemporaryBlock } from "@/lib/sendGate";
 import {
   ARRIVAL_WINDOW_STATUSES,
   arrivalCompanionEnabledFor,
@@ -92,7 +93,7 @@ async function runFirstDayTouches(
 
     const message = firstDayMessage(lead);
     const res = await sendWhatsAppMessage(lead.phone!, message, account, { automated: true });
-    if (res.blocked === "quiet_hours") continue;
+    if (isTemporaryBlock(res.blocked)) continue;
     await db.from("cron_reminders").insert({
       lead_id: lead.id,
       reminder_type: "arrival_first_day",
@@ -229,8 +230,8 @@ export async function runArrivalCompanion(db: SupabaseClient): Promise<Companion
 
     const message = touchMessage(touch, lead, daysAhead);
     const res = await sendWhatsAppMessage(lead.phone!, message, account, { automated: true });
-    // נחסם בשעות שקט — לא רושמים, כדי שהריצה הבאה תנסה שוב
-    if (res.blocked === "quiet_hours") continue;
+    // נחסם זמנית (לילה, שבת/חג) — לא רושמים, כדי שהריצה הבאה תנסה שוב
+    if (isTemporaryBlock(res.blocked)) continue;
 
     await db.from("cron_reminders").insert({
       lead_id: lead.id,

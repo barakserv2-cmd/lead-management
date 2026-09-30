@@ -247,7 +247,10 @@ export default async function LeadsPage({
     "screening_fit_score, screening_availability_score, screening_experience_score, extracted_availability, " +
     "extracted_salary_expectation, extracted_location_pref, extracted_interests, needs_attention, " +
     "attention_reason, needs_human_attention, human_attention_reason, human_attention_raised_at, " +
-    "handled_by, handled_at, last_contact_at, sub_status_at, updated_at";
+    "handled_by, handled_at, last_contact_at, sub_status_at, updated_at, " +
+    // lead-card-panel: באנר "החזר לגובגט" (bot_paused) ומצב "קח לטיפול"
+    // (assigned_*). הושמטו בצמצום של 07/09, והבאנר מעולם לא הופיע.
+    "bot_paused, assigned_to, assigned_at";
 
   // שאילתה אחת מחזירה גם נתונים וגם ספירה כוללת (count: "exact") —
   // במקום שאילתת ספירה נפרדת וכפולה.

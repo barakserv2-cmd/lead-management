@@ -11,6 +11,8 @@ import {
 } from "@/lib/whatsappService";
 import { runWelcomeBatch } from "@/lib/whatsappWelcome";
 import { runAutomationRules, type EngineSummary } from "@/lib/rulesEngine";
+import { hasCronSecret } from "@/lib/secrets";
+import { isTemporaryBlock } from "@/lib/sendGate";
 
 // ============================================================
 // /api/cron/scheduled — every 5 minutes (vercel.json).
@@ -26,9 +28,7 @@ function admin() {
 }
 
 function isAuthorized(req: NextRequest): boolean {
-  const secret = process.env.CRON_SECRET;
-  if (!secret) return true;
-  return (req.headers.get("authorization") ?? "") === `Bearer ${secret}`;
+  return hasCronSecret(req);
 }
 
 export async function GET(req: NextRequest) {
@@ -49,6 +49,7 @@ export async function GET(req: NextRequest) {
 
   let sent = 0;
   let failed = 0;
+  let deferred = 0;
   for (const row of due ?? []) {
     const lead = (Array.isArray(row.leads) ? row.leads[0] : row.leads) as
       | { phone: string | null; name: string | null }
@@ -84,6 +85,15 @@ export async function GET(req: NextRequest) {
         sent_by: row.created_by,
         via_instance: sender.instanceId,
       });
+    } else if (isTemporaryBlock(res.blocked)) {
+      // לילה, שבת/חג או בדיקת הסרה שלא הצליחה: חוזרת לתור ותישלח בריצה
+      // הראשונה שמותר. קודם סומנה "נכשלה" לתמיד — הודעה שרכזת תזמנה ל-07:30
+      // פשוט לא יצאה, ואיש לא ידע.
+      deferred++;
+      await db
+        .from("scheduled_messages")
+        .update({ status: "pending", sent_at: null, error: res.error ?? null })
+        .eq("id", row.id);
     } else {
       failed++;
       await db
@@ -124,6 +134,7 @@ export async function GET(req: NextRequest) {
     ok: true,
     due: due?.length ?? 0,
     sent,
+    deferred,
     failed,
     monitored,
     welcome,

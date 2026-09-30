@@ -12,7 +12,7 @@
 
 import { createHmac, timingSafeEqual } from "crypto";
 import { createClient as createServerClient } from "@supabase/supabase-js";
-import { checkSendGate } from "@/lib/sendGate";
+import { checkSendGate, type GateBlock } from "@/lib/sendGate";
 
 export type WhatsAppProvider = "greenapi" | "cloud";
 
@@ -245,15 +245,17 @@ export interface SendResult {
   success: boolean;
   idMessage?: string;
   error?: string;
-  /** השליחה נחסמה בשער (opt-out / שעות שקט) — לא כשל טכני */
-  blocked?: "do_not_contact" | "quiet_hours";
+  /** השליחה נחסמה בשער (opt-out / שעות שקט, שבת וחג / בדיקה נכשלה) — לא כשל טכני */
+  blocked?: GateBlock;
   /** ערוץ רשמי: המועמד/ת לא כתבו למספר הזה ב-24 השעות האחרונות */
   windowClosed?: boolean;
 }
 
 export interface SendOptions {
-  /** הודעה שהמערכת יוזמת (בוט, cron, תזכורת) — כפופה גם לשעות שקט */
+  /** הודעה שהמערכת יוזמת (בוט, cron, תזכורת) — כפופה גם לשעות שקט ולשבת/חג */
   automated?: boolean;
+  /** מחיל שבת/חג גם כשההודעה אינה automated (פתיחת בוט לליד טרי) */
+  rest?: boolean;
   /** עוקף את השער — רק לאישור ה-opt-out עצמו */
   skipGate?: boolean;
 }
@@ -457,7 +459,7 @@ export async function sendWhatsAppTemplate(
   opts: SendOptions = {}
 ): Promise<SendResult> {
   if (!opts.skipGate) {
-    const gate = await checkSendGate(phone, { automated: opts.automated === true });
+    const gate = await checkSendGate(phone, { automated: opts.automated === true, rest: opts.rest === true });
     if (!gate.allowed) {
       return { success: false, error: gate.error, blocked: gate.reason };
     }
@@ -587,7 +589,7 @@ export async function sendWhatsAppMessage(
   // שעות שקט חוסמות שליחה אוטומטית. נאכף כאן כדי שאף מסלול — ידני,
   // ברוכת, cron או בוט — לא יוכל לעקוף אותו.
   if (!opts.skipGate) {
-    const gate = await checkSendGate(phone, { automated: opts.automated === true });
+    const gate = await checkSendGate(phone, { automated: opts.automated === true, rest: opts.rest === true });
     if (!gate.allowed) {
       return { success: false, error: gate.error, blocked: gate.reason };
     }

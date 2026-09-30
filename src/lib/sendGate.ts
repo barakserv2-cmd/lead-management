@@ -2,16 +2,20 @@
 // Send Gate — שער שליחה אחד לכל הודעת וואטסאפ יוצאת
 // ============================================================
 //
-// שתי בדיקות, לפי שלב 2 בתוכנית העבודה:
+// שלוש בדיקות:
 //   1. do_not_contact — מועמד/ת שביקש/ה הסרה מדיוור: כל שליחה נחסמת,
 //      גם ידנית. ביטול — בפאנל הפרטיות בכרטיס המועמד.
 //   2. שעות שקט — הודעות *אוטומטיות* (בוט, cron, תזכורות) לא יוצאות
 //      בלילה. שליחה ידנית של רכזת מותרת בכל שעה.
+//   3. שבת וחג — הודעות אוטומטיות לא יוצאות משישי 14:00 עד מוצ"ש 20:00,
+//      ומערב חג 14:00 עד צאת החג 20:00. קודם השער בדק רק שעות, ותזכורות
+//      ראיון, "איך הולך בעבודה" ומלווה ההגעה יצאו בשבת ובחגים.
 //
 // השער נאכף בתוך sendWhatsAppMessage עצמה (whatsappService.ts) —
 // נקודת חנק אחת, אי אפשר לעקוף אותה בטעות מקוד חדש.
 
 import { createClient as createServerClient } from "@supabase/supabase-js";
+import { yomTovName } from "./israelHolidays";
 
 function adminClient() {
   return createServerClient(
@@ -54,26 +58,93 @@ export function isQuietHoursNow(at: Date = new Date()): boolean {
   return start > end ? hour >= start || hour < end : hour >= start && hour < end;
 }
 
+// ── שבת וחג ─────────────────────────────────────────────────
+// כלל פשוט ושמרני, בלי זמני כניסה מדויקים: ביום שלפני שבת/חג חוסמים
+// מ-14:00, וביום עצמו עד 20:00 (צאת השבת באילת מוקדם מזה כל השנה).
+// ראש השנה (יומיים) מכוסה מאליו: היום הראשון הוא גם "ערב" של השני.
+
+export const REST_STARTS_HOUR = 14;
+export const REST_ENDS_HOUR = 20;
+
+function israelDateAndHour(at: Date): { date: string; hour: number } {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Jerusalem",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    hour12: false,
+  }).formatToParts(at);
+  const get = (t: string) => parts.find((p) => p.type === t)?.value ?? "";
+  return { date: `${get("year")}-${get("month")}-${get("day")}`, hour: Number(get("hour")) % 24 };
+}
+
+function addDays(date: string, days: number): string {
+  const d = new Date(`${date}T12:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + days);
+  return d.toISOString().slice(0, 10);
+}
+
+/** "שבת" או שם החג אם התאריך (YYYY-MM-DD) הוא יום מנוחה, אחרת null. */
+function restDayName(date: string): string | null {
+  if (new Date(`${date}T12:00:00Z`).getUTCDay() === 6) return "שבת";
+  return yomTovName(date);
+}
+
+/** שם השבת/החג אם ברגע הזה אסור לשלוח הודעות אוטומטיות, אחרת null. */
+export function restPeriodAt(at: Date = new Date()): string | null {
+  const { date, hour } = israelDateAndHour(at);
+  const today = restDayName(date);
+  if (today && hour < REST_ENDS_HOUR) return today;
+  const tomorrow = restDayName(addDays(date, 1));
+  if (tomorrow && hour >= REST_STARTS_HOUR) return tomorrow;
+  return null;
+}
+
+/** שעות שקט או שבת/חג — זמן שבו הודעות אוטומטיות לא יוצאות. */
+export function isQuietTimeNow(at: Date = new Date()): boolean {
+  return isQuietHoursNow(at) || restPeriodAt(at) !== null;
+}
+
 // ── תוצאת השער ──────────────────────────────────────────────
+
+export type GateBlock = "do_not_contact" | "quiet_hours" | "gate_error";
 
 export interface GateResult {
   allowed: boolean;
-  reason?: "do_not_contact" | "quiet_hours";
+  /**
+   * quiet_hours — לילה, שבת או חג (זמני: לשלוח שוב אחר כך).
+   * gate_error — לא ניתן היה לבדוק הסרה מדיוור (זמני).
+   * do_not_contact — ביקש/ה הסרה (סופי).
+   */
+  reason?: GateBlock;
   /** הודעת שגיאה בעברית, מוכנה להצגה/ללוג */
   error?: string;
 }
 
+/** חסימה זמנית: ההודעה צריכה לחכות לריצה הבאה, לא להיכשל. */
+export function isTemporaryBlock(reason: GateBlock | undefined): boolean {
+  return reason === "quiet_hours" || reason === "gate_error";
+}
+
 /**
  * בדיקת השער לפני שליחה. automated=true להודעות שהמערכת יוזמת
- * (בוט, cron, תזכורות); false לשליחה ידנית של רכזת.
+ * (בוט, cron, תזכורות); false לשליחה ידנית של רכזת. rest=true מחיל את
+ * חסימת שבת/חג גם על הודעה שאינה automated (פתיחת בוט לליד טרי).
  *
- * כשל DB בבדיקת הדגל לא חוסם שליחה (fail-open) — עדיף פספוס נדיר
- * של opt-out מהשבתת כל התקשורת של העסק על תקלת רשת.
+ * כשל בבדיקת דגל ההסרה חוסם את השליחה (gate_error, זמני). קודם זה היה
+ * fail-open, ו-supabase-js לא זורק על שגיאה — כך שכל תקלת DB שלחה
+ * הודעות גם למי שביקש/ה לא לקבל.
  */
 export async function checkSendGate(
   phone: string,
-  opts: { automated: boolean }
+  opts: { automated: boolean; rest?: boolean }
 ): Promise<GateResult> {
+  const unverified: GateResult = {
+    allowed: false,
+    reason: "gate_error",
+    error: "לא ניתן לוודא כרגע שהמועמד/ת לא ביקש/ה הסרה — נסו שוב בעוד רגע",
+  };
   try {
     const local = normalizeLocalPhone(phone);
     // בדאטאבייס הטלפונים מנורמלים (00047), אבל ליתר ביטחון בודקים גם
@@ -84,12 +155,16 @@ export async function checkSendGate(
       `+972${local.slice(1)}`,
       `972${local.slice(1)}`,
     ];
-    const { data } = await adminClient()
+    const { data, error } = await adminClient()
       .from("leads")
       .select("id")
       .in("phone", variants)
       .eq("do_not_contact", true)
       .limit(1);
+    if (error) {
+      console.error("[sendGate] do_not_contact check failed — blocking send:", error.message);
+      return unverified;
+    }
 
     if (data && data.length > 0) {
       return {
@@ -99,7 +174,8 @@ export async function checkSendGate(
       };
     }
   } catch (err) {
-    console.error("[sendGate] do_not_contact check failed — allowing send:", err);
+    console.error("[sendGate] do_not_contact check failed — blocking send:", err);
+    return unverified;
   }
 
   if (opts.automated && isQuietHoursNow()) {
@@ -109,6 +185,17 @@ export async function checkSendGate(
       reason: "quiet_hours",
       error: `שעות שקט (${start}:00–${end}:00) — הודעות אוטומטיות לא נשלחות בלילה`,
     };
+  }
+
+  if (opts.automated || opts.rest) {
+    const rest = restPeriodAt();
+    if (rest) {
+      return {
+        allowed: false,
+        reason: "quiet_hours",
+        error: `${rest} — הודעות אוטומטיות לא נשלחות בשבת ובחג (יישלחו אחרי ${REST_ENDS_HOUR}:00)`,
+      };
+    }
   }
 
   return { allowed: true };

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { hasCronSecret } from "@/lib/secrets";
 
 // Push v1's OPEN jobs to גובגט so it screens against the real, current set.
 // Guarded by CRON_SECRET. Uses MACHINE_INGEST_URL + MACHINE_INGEST_KEY
@@ -9,9 +10,7 @@ function getAdmin() {
   return createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!);
 }
 function isAuthorized(req: NextRequest): boolean {
-  const secret = process.env.CRON_SECRET;
-  if (!secret) return true;
-  return (req.headers.get("authorization") ?? "") === `Bearer ${secret}`;
+  return hasCronSecret(req);
 }
 
 export async function GET(req: NextRequest) {

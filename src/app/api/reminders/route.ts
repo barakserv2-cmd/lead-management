@@ -1,14 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
-import { getSupabaseAdmin } from "@/lib/api-auth";
+import { getSupabaseAdmin, getAuthedUser } from "@/lib/api-auth";
 
 // תזכורות עצמיות של המגייסת ("להתקשר שוב"). כל מגייסת רואה ומסמנת רק את
 // שלה. fetch+API ולא server action — הדפוס הקבוע בפרויקט (Next 16).
 
 async function currentEmail(): Promise<string | null> {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  return user?.email?.toLowerCase() ?? null;
+  const user = await getAuthedUser();
+  return user?.email ?? null;
 }
 
 export async function POST(request: NextRequest) {

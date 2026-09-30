@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createClient as createServerClient } from "@supabase/supabase-js";
+import { getAuthedUser } from "@/lib/api-auth";
 
 // שחזור החלונות הצפים אחרי ניווט: הרכזת פתחה מועמדים, ניווטה (חיפוש,
 // סינון, רענון) — והלידים האלה כבר אינם בעמוד הנוכחי של הטבלה. כאן
@@ -29,7 +30,7 @@ function getAdmin() {
 
 export async function GET(request: NextRequest) {
   const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const user = await getAuthedUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const ids = (request.nextUrl.searchParams.get("ids") ?? "")

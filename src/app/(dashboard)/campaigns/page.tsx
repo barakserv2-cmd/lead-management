@@ -200,10 +200,16 @@ export default function ExtrasPage() {
         </div>
         <div className="flex gap-2 flex-wrap justify-end">
           <button onClick={async () => {
-            if (!confirm('פעולה זו תמחק לצמיתות את כל העובדים שיובאו מאקסל!\nהאם להמשיך?')) return;
-            const res = await nukeAllExtrasLeads();
+            if (!confirm('פעולה זו תמחק לצמיתות את העובדים שיובאו לאקסטרות ושלא טופלו מאז (בלי שינוי סטטוס ובלי הודעות).\nהאם להמשיך?')) return;
+            let res: Awaited<ReturnType<typeof nukeAllExtrasLeads>>;
+            try {
+              res = await nukeAllExtrasLeads();
+            } catch (e) {
+              alert('שגיאה: ' + (e instanceof Error ? e.message : String(e)));
+              return;
+            }
             if (res.error) { alert('שגיאה: ' + res.error); return; }
-            alert(`${res.deleted} רשומות נמחקו בהצלחה. ניתן לייבא מחדש.`);
+            alert(`${res.deleted} רשומות נמחקו.${res.kept ? ` ${res.kept} נשמרו כי כבר טופלו.` : ''} ניתן לייבא מחדש.`);
             fetchScheduleLeads();
           }} className="bg-red-600 text-white px-3 py-2 rounded-lg text-sm font-bold hover:bg-red-700 flex items-center gap-1.5 border-2 border-red-800">
             <Trash2 size={16} /> מחיקת כל נתוני אקסטרות

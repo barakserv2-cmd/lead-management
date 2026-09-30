@@ -5,6 +5,7 @@ import { isValidStatus, validateTransition, STATUS_LABELS, type LeadStatusValue 
 import { GUBGET_SOURCE } from "@/lib/constants";
 import { closureFor } from "@/lib/israelHolidays";
 import { ensureClosuresLoaded } from "@/lib/closures";
+import { hasMachineKey } from "@/lib/secrets";
 import { applyDeliveryStatus } from "@/lib/deliveryStatus";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { completeLeadReminders } from "@/lib/reminders";
@@ -86,8 +87,7 @@ type Body = {
 const INTERVIEW_AT_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2})?$/;
 
 export async function POST(req: NextRequest) {
-  const key = req.headers.get("x-machine-key");
-  if (!key || key !== process.env.MACHINE_BRIDGE_KEY) {
+  if (!hasMachineKey(req)) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
 

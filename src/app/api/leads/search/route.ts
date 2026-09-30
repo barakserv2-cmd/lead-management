@@ -1,14 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
-import { getSupabaseAdmin } from "@/lib/api-auth";
+import { getSupabaseAdmin, getAuthedUser } from "@/lib/api-auth";
 import { normalizePhone } from "@/lib/phone";
 
 // Lightweight candidate lookup for the "merge with another card" dialog.
 //   GET /api/leads/search?q=<name or phone>&exclude=<leadId>
 // Returns up to 10 cards, newest first.
 export async function GET(request: NextRequest) {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const user = await getAuthedUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const q = request.nextUrl.searchParams.get("q")?.trim() ?? "";

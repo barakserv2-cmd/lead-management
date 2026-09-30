@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient as createServerClient } from "@supabase/supabase-js";
-import { createClient as createCookieClient } from "@/lib/supabase/server";
 import { sendSignatureRequestForDoc } from "@/lib/signatureSend";
 import { isSignableMime } from "@/lib/signatureTypes";
+import { getAuthedUser } from "@/lib/api-auth";
 
 function getAdmin() {
   return createServerClient(
@@ -20,8 +20,7 @@ function appBase(req: NextRequest): string {
 
 // POST — יצירת בקשת חתימה על מסמך קיים ושליחת הקישור בוואטסאפ
 export async function POST(req: NextRequest) {
-  const cookieClient = await createCookieClient();
-  const { data: { user } } = await cookieClient.auth.getUser();
+  const user = await getAuthedUser();
   if (!user) {
     return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
   }

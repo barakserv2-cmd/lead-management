@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
-import { getSupabaseAdmin } from "@/lib/api-auth";
+import { getSupabaseAdmin, getAuthedUser } from "@/lib/api-auth";
 import { logAudit } from "@/lib/audit";
 import { SENT_TO_INTERVIEW } from "@/lib/constants";
 import { validateInterviewLocal } from "@/lib/interviewTime";
@@ -32,8 +31,7 @@ export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const session = await createClient();
-  const { data: { user } } = await session.auth.getUser();
+  const user = await getAuthedUser();
   if (!user?.email) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const { id: leadId } = await params;

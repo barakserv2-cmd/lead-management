@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/api-auth";
+import { hasMachineKey } from "@/lib/secrets";
 
 /**
  * GET /api/bridge/closures — ימי הסגירה הידניים, לגובגט.
@@ -11,8 +12,7 @@ import { getSupabaseAdmin } from "@/lib/api-auth";
  * אותו אימות כמו שאר הגשר: x-machine-key.
  */
 export async function GET(req: NextRequest) {
-  const key = process.env.MACHINE_BRIDGE_KEY;
-  if (!key || req.headers.get("x-machine-key") !== key) {
+  if (!hasMachineKey(req)) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
 

@@ -12,6 +12,7 @@ import { createClient as createServerClient } from "@supabase/supabase-js";
 import { changeLeadStatus } from "@/lib/actions/changeLeadStatus";
 import { generateShadowWelcome, processIncomingMessage } from "@/lib/aiService";
 import { sendWhatsAppMessage } from "@/lib/whatsappService";
+import { checkSendGate, isTemporaryBlock } from "@/lib/sendGate";
 import { pickBotSender } from "@/lib/botSender";
 import {
   botMode,
@@ -132,6 +133,17 @@ export async function deliverWelcome(leadId: string): Promise<boolean> {
   const ageMin = (Date.now() - new Date(lead.created_at).getTime()) / 60000;
   const isFresh = ageMin <= FRESH_LEAD_MINUTES;
 
+  // השער נבדק *לפני* מעברי הסטטוס. קודם הסטטוס התקדם ל"בסינון" והפתיחה
+  // נשמרה בשיחה, ורק אז השליחה נחסמה (שעות שקט) — והריצה הבאה דילגה על
+  // הליד כי הוא כבר לא "חדש". המועמד לא קיבל הודעה ואיש לא ידע.
+  // שבת/חג חלים גם על ליד טרי.
+  const gate = await checkSendGate(row.phone, { automated: !isFresh, rest: true });
+  if (!gate.allowed) {
+    if (isTemporaryBlock(gate.reason)) return false;
+    await db.from("bot_outbox").update({ status: "skipped", error: gate.error }).eq("id", row.id);
+    return false;
+  }
+
   // מעברי סטטוס: NEW_LEAD → CONTACTED → SCREENING_IN_PROGRESS
   const step1 = await changeLeadStatus({
     leadId,
@@ -175,6 +187,7 @@ export async function deliverWelcome(leadId: string): Promise<boolean> {
 
   const sendRes = await sendWhatsAppMessage(row.phone, result.aiReply, sender, {
     automated: !isFresh,
+    rest: true,
   });
 
   if (sendRes.success) {
@@ -185,8 +198,8 @@ export async function deliverWelcome(leadId: string): Promise<boolean> {
     return true;
   }
 
-  // שעות שקט על ליד ישן — נשאר בתור לריצת הבוקר; כשל אחר — failed.
-  if (sendRes.blocked === "quiet_hours") return false;
+  // חסימה זמנית (לילה, שבת/חג) — נשאר בתור לריצה הבאה; כשל אחר — failed.
+  if (isTemporaryBlock(sendRes.blocked)) return false;
   await db
     .from("bot_outbox")
     .update({ status: sendRes.blocked === "do_not_contact" ? "skipped" : "failed", error: sendRes.error })

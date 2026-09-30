@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import Anthropic from "@anthropic-ai/sdk";
 import { businessAccount, sendWhatsAppMessage } from "@/lib/whatsappService";
+import { hasCronSecret } from "@/lib/secrets";
 
 // Daily digest of open recruiter feedback → WhatsApp to the admin.
 // Guarded by CRON_SECRET. Scheduled once a day (see vercel.json).
@@ -12,9 +13,7 @@ function getAdmin() {
   return createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!);
 }
 function isAuthorized(req: NextRequest): boolean {
-  const secret = process.env.CRON_SECRET;
-  if (!secret) return true;
-  return (req.headers.get("authorization") ?? "") === `Bearer ${secret}`;
+  return hasCronSecret(req);
 }
 
 async function summarize(items: { category: string; author: string; body: string }[]): Promise<string> {

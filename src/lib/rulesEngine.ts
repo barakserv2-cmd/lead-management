@@ -14,7 +14,7 @@
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { resolveSender, businessAccount, sendWhatsAppMessage } from "@/lib/whatsappService";
-import { isQuietHoursNow } from "@/lib/sendGate";
+import { isQuietTimeNow } from "@/lib/sendGate";
 import { israelNow } from "@/lib/booking";
 import { sendBookingLinkToLead } from "@/lib/bookingSend";
 import { LeadStatus } from "@/lib/stateMachine";
@@ -246,9 +246,9 @@ async function executeAction(
 export async function runAutomationRules(db: SupabaseClient): Promise<EngineSummary> {
   const summary: EngineSummary = { rules: 0, matched: 0, executed: 0, skipped: 0, errors: 0 };
 
-  // חוק ברזל: המנוע פועל רק בשעות העבודה (דגלים שקטים היו מותרים,
-  // אבל אף חוק נוכחי לא צריך אותם בלילה — פשוט מחכים לבוקר).
-  if (isQuietHoursNow()) return summary;
+  // חוק ברזל: המנוע פועל רק בשעות העבודה, לא בלילה ולא בשבת/חג (דגלים
+  // שקטים היו מותרים, אבל אף חוק נוכחי לא צריך אותם — פשוט מחכים).
+  if (isQuietTimeNow()) return summary;
 
   const { data: rules } = await db
     .from("automation_rules")

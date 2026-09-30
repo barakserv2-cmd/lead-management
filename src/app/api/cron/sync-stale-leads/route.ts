@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { LeadStatus } from "@/lib/stateMachine";
 import { sweepVerdict, type SweepLead } from "@/lib/staleLeadSweep";
+import { hasCronSecret } from "@/lib/secrets";
 
 // הרשת השנייה מתחת ל-sync-new-leads: ליד שהחלון בן 3 הדקות פספס (גובגט
 // היה מנותק, הגשר נפל) או שרכזת מחזיקה אותו שעות בלי לכתוב — חוזר לגובגט.
@@ -20,9 +21,7 @@ function getAdmin() {
   return createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!);
 }
 function isAuthorized(req: NextRequest): boolean {
-  const secret = process.env.CRON_SECRET;
-  if (!secret) return true;
-  return (req.headers.get("authorization") ?? "") === `Bearer ${secret}`;
+  return hasCronSecret(req);
 }
 
 export async function GET(req: NextRequest) {

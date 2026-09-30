@@ -6,9 +6,9 @@
 // ============================================================
 
 import { NextRequest, NextResponse } from "next/server";
-import { createClient as createSessionClient } from "@/lib/supabase/server";
 import { createClient } from "@supabase/supabase-js";
 import { STATUS_LABELS, LeadStatus, ALL_STATUSES, type LeadStatusValue } from "@/lib/stateMachine";
+import { getAuthedUser } from "@/lib/api-auth";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -47,10 +47,7 @@ function fmtWallDate(iso: string | null | undefined) {
 }
 
 export async function GET(req: NextRequest) {
-  const supabase = await createSessionClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getAuthedUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const sp = req.nextUrl.searchParams;

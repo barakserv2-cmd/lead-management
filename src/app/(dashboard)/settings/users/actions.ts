@@ -2,7 +2,7 @@
 
 import { createClient as createServerClient } from "@supabase/supabase-js";
 import { revalidatePath } from "next/cache";
-import { getAuthedUser } from "@/lib/api-auth";
+import { getAuthedUser, requireRecruiter } from "@/lib/api-auth";
 
 function getSupabase() {
   return createServerClient(
@@ -29,8 +29,7 @@ export interface UserProfile {
 }
 
 export async function getUsers() {
-  const user = await getAuthedUser();
-  if (!user) return { users: [] as UserProfile[], error: "לא מחובר/ת" };
+  await requireRecruiter();
 
   const { data, error } = await getSupabase()
     .from("user_profiles")
@@ -98,15 +97,51 @@ export async function updateUser(
 }
 
 export async function deleteUser(id: string) {
-  if (!(await requireAdminActor())) return { error: NOT_ADMIN };
+  const actor = await requireAdminActor();
+  if (!actor) return { error: NOT_ADMIN };
 
-  const { error } = await getSupabase()
+  const supabase = getSupabase();
+  const { data: profile } = await supabase
+    .from("user_profiles")
+    .select("email")
+    .eq("id", id)
+    .maybeSingle();
+  const email = (profile?.email as string | undefined)?.trim().toLowerCase();
+  if (email && email === actor) return { error: "אי אפשר למחוק את המשתמש שלך" };
+
+  const { error } = await supabase
     .from("user_profiles")
     .delete()
     .eq("id", id);
 
   if (error) return { error: error.message };
 
+  // מחיקת הפרופיל לבדה השאירה את חשבון ההתחברות חי: עובדת שעזבה המשיכה
+  // להתחבר, ונתיבים שבדקו רק "יש session" נתנו לה גישה מלאה. מוחקים גם אותו.
+  if (email) {
+    const authErr = await deleteAuthAccount(email);
+    if (authErr) {
+      revalidatePath("/settings/users");
+      return { error: `המשתמש/ת הוסר/ה מהרשימה, אבל חשבון ההתחברות לא נמחק: ${authErr}` };
+    }
+  }
+
   revalidatePath("/settings/users");
   return { error: null };
+}
+
+/** מוחק את חשבון ההתחברות (auth.users) של האימייל, אם קיים. מחזיר הודעת שגיאה או null. */
+async function deleteAuthAccount(email: string): Promise<string | null> {
+  const supabase = getSupabase();
+  for (let page = 1; page <= 5; page++) {
+    const { data, error } = await supabase.auth.admin.listUsers({ page, perPage: 100 });
+    if (error) return error.message;
+    const hit = data.users.find((u) => u.email?.toLowerCase() === email);
+    if (hit) {
+      const { error: delErr } = await supabase.auth.admin.deleteUser(hit.id);
+      return delErr ? delErr.message : null;
+    }
+    if (data.users.length < 100) return null;
+  }
+  return null;
 }

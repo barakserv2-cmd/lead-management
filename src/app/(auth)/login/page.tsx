@@ -28,6 +28,16 @@ export default function LoginPage() {
       return;
     }
 
+    // התחברות מוצלחת אינה הרשאה: רק מי שמופיע/ה במסך המשתמשים נכנס/ת.
+    // בלי זה ה-proxy היה מחזיר לכאן בשקט, בלולאה.
+    const { data: isRecruiter } = await supabase.rpc("is_recruiter");
+    if (isRecruiter === false) {
+      await supabase.auth.signOut();
+      setError("החשבון הזה לא מורשה להיכנס למערכת. אם זו טעות, פנו לאדמין.");
+      setLoading(false);
+      return;
+    }
+
     router.push("/dashboard");
     router.refresh();
   }

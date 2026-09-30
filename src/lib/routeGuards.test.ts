@@ -21,8 +21,8 @@ const API_DIR = join(process.cwd(), "src", "app", "api");
 const GUARDS: { name: string; re: RegExp }[] = [
   { name: "session helper", re: /getAuthedUser|getAuthedContext|requireAdmin|currentUser\s*\(/ },
   { name: "api key", re: /validateApiKey/ },
-  { name: "cron secret", re: /CRON_SECRET/ },
-  { name: "machine bridge key", re: /MACHINE_BRIDGE_KEY|x-machine-key/ },
+  { name: "cron secret", re: /CRON_SECRET|hasCronSecret\(/ },
+  { name: "machine bridge key", re: /MACHINE_BRIDGE_KEY|x-machine-key|hasMachineKey\(/ },
   { name: "ingest key", re: /MACHINE_INGEST_KEY|x-ingest-key/ },
   { name: "webhook token", re: /WEBHOOK_TOKEN|webhook_token|verifyWebhookToken|X-Hub-Signature|APP_SECRET/ },
 ];

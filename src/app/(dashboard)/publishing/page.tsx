@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { createClient as createServerClient } from "@supabase/supabase-js";
+import { exactILike } from "@/lib/api-auth";
 import { PublishingContent } from "./publishing-content";
 
 export const dynamic = "force-dynamic";
@@ -26,7 +27,7 @@ export default async function PublishingPage() {
   );
 
   const [{ data: profile }, { data: jobs }] = await Promise.all([
-    admin.from("user_profiles").select("role, name").ilike("email", email).maybeSingle(),
+    admin.from("user_profiles").select("role, name").ilike("email", exactILike(email)).maybeSingle(),
     admin
       .from("jobs")
       .select("id, title, pay_rate, location, urgent, clients(name)")

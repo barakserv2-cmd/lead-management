@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient as createServerClient } from "@supabase/supabase-js";
-import { createClient as createCookieClient } from "@/lib/supabase/server";
 import { getMessageScope } from "@/lib/messageVisibility";
+import { getAuthedUser } from "@/lib/api-auth";
 
 // GET  /api/leads/[id]/reminders → reminders for this lead (mine; admin: all)
 // POST /api/leads/[id]/reminders → schedule one { sendAt: ISO, message }
@@ -14,9 +14,8 @@ function admin() {
 }
 
 async function me() {
-  const c = await createCookieClient();
-  const { data: { user } } = await c.auth.getUser();
-  return user?.email?.toLowerCase() ?? null;
+  const user = await getAuthedUser();
+  return user?.email ?? null;
 }
 
 const COLS = "id, send_at, message, created_by, status, sent_at, error, created_at";

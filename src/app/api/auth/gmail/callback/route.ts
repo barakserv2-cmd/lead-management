@@ -26,6 +26,11 @@ export async function GET(request: NextRequest) {
   if (!user) {
     return NextResponse.redirect(`${baseUrl}/login`);
   }
+  if (!user.isAdmin) {
+    return NextResponse.redirect(
+      `${baseUrl}/settings?gmail_error=${encodeURIComponent("רק אדמין יכול לחבר את תיבת הלידים")}`
+    );
+  }
   if (!verifyOAuthState(url.searchParams.get("state"), user.email)) {
     return NextResponse.redirect(
       `${baseUrl}/settings?gmail_error=${encodeURIComponent("בקשת החיבור לא הגיעה מכאן או פג תוקפה — נסו שוב")}`
