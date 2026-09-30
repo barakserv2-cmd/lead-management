@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { alertViaGubget } from "@/lib/gubgetAlert";
 
 // ============================================================
 // ניטור טפסי האתר eilatjobs.com — נולד מהתקלה של 29.09.
@@ -174,25 +175,10 @@ export function expectedTouches(history: string[], from: Date, to: Date, windowD
   return expected;
 }
 
-// ── שליחה ─────────────────────────────────────────────────────
+// ── שליחה ──────────────────────────────────────────────────
 
-async function alertSaar(title: string, subject: string, reason: string, text: string): Promise<string | null> {
-  const base = process.env.MACHINE_INGEST_URL;
-  const key = process.env.MACHINE_INGEST_KEY;
-  if (!base || !key) return "חסרים MACHINE_INGEST_URL/KEY";
-  try {
-    const res = await fetch(`${base}/api/v1/bridge/alert`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "x-ingest-key": key },
-      body: JSON.stringify({ title, subject, reason, text }),
-      signal: AbortSignal.timeout(20_000),
-    });
-    const body = (await res.json().catch(() => ({}))) as { ok?: boolean; sentTo?: number };
-    if (!res.ok || !body.ok) return `גובגט החזיר ${res.status} (sentTo=${body.sentTo ?? 0})`;
-    return null;
-  } catch (e) {
-    return e instanceof Error ? e.message : String(e);
-  }
+function alertSaar(title: string, subject: string, reason: string, text: string): Promise<string | null> {
+  return alertViaGubget({ title, subject, reason, text, to: "admins" });
 }
 
 /** תופס מפתח אידמפוטנטיות; false = כבר התרענו. */

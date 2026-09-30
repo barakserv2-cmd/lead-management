@@ -13,6 +13,7 @@ import {
 import { parseEmailWithAI } from "@/lib/ai/parse-email";
 import { LEAD_STATUSES } from "@/lib/constants";
 import { enqueueWelcome, runWelcomeBatch } from "@/lib/whatsappWelcome";
+import { noteExistingCandidateCall, flushMissedCallAlerts } from "@/lib/missedCallAlert";
 import { getAuthedUser } from "@/lib/api-auth";
 import { hasCronSecret } from "@/lib/secrets";
 
@@ -82,6 +83,10 @@ async function handleFetchEmails(req: NextRequest) {
     console.log(`[Gmail] Found ${emails.length} unread emails`);
 
     if (emails.length === 0) {
+      // התראות שיחה שלא נענתה מבשילות גם כשאין מיילים חדשים (בוקר אחרי לילה)
+      await flushMissedCallAlerts(getSupabaseAdmin()).catch((e) =>
+        console.error("[Gmail] flushMissedCallAlerts failed:", e)
+      );
       return NextResponse.json({
         ...summary,
         message: "No unread emails found",
@@ -235,6 +240,19 @@ async function handleFetchEmails(req: NextRequest) {
                 .eq("id", existingByPhone[0].id)
                 .is("source_number", null);
             }
+            // מועמד קיים שהתקשר ולא נענה — הרכזת שלו תקבל התראה (missedCallAlert).
+            // גובגט לא כותב לו: הוא לא ליד חדש, ורכזת כבר מחזיקה אותו.
+            if (maskyooCall) {
+              const callAt =
+                email.date && !isNaN(new Date(email.date).getTime()) ? new Date(email.date) : new Date();
+              await noteExistingCandidateCall(supabase, {
+                leadId: existingByPhone[0].id as string,
+                phone,
+                call: { status: maskyooCall.status, virtualNumber: maskyooCall.virtualNumber },
+                emailId: email.id,
+                callAt,
+              }).catch((e) => console.error("[Gmail] missed-call note failed:", e));
+            }
             // Do NOT mark as read — lead emails must stay unread in the inbox.
             // Dedup is by original_email_id, so re-scanning is safe.
             continue;
@@ -347,6 +365,14 @@ async function handleFetchEmails(req: NextRequest) {
       }
     } catch (e) {
       console.error("[Gmail] runWelcomeBatch failed:", e);
+    }
+
+    // מועמדים קיימים שהתקשרו ולא נענו — התראה לרכזת (אחרי 10 דק', בשעות התורנות)
+    try {
+      const missed = await flushMissedCallAlerts(supabase);
+      if (missed.sent > 0) console.log(`[Gmail] missed-call alerts sent: ${missed.sent}`);
+    } catch (e) {
+      console.error("[Gmail] flushMissedCallAlerts failed:", e);
     }
 
     return NextResponse.json(summary);
