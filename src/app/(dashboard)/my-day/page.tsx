@@ -342,6 +342,7 @@ export default async function MyDayPage() {
       .from("lead_events")
       .select("lead_id, created_at")
       .in("lead_id", openIds)
+      // eslint-disable-next-line react-hooks/purity -- server component, renders once per request
       .gte("created_at", new Date(Date.now() - 45 * 86_400_000).toISOString())
       .order("created_at", { ascending: false })
       .limit(2000);
