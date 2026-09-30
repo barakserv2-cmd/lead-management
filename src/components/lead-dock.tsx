@@ -19,13 +19,13 @@ export function LeadDock() {
   const { ids, chatFirst } = useLeadWindows();
   const [leads, setLeads] = useState<Lead[]>([]);
 
+  // רק הלידים של חלונות פתוחים. ליד של חלון שנסגר נשאר בזיכרון עד הטעינה
+  // הבאה (שם הוא מנוקה), וכשהחלון נפתח שוב הוא נשלף מחדש — לא מוצג מהעותק הישן.
+  const openLeads = leads.filter((l) => ids.includes(l.id));
+
   useEffect(() => {
-    const missing = ids.filter((id) => !leads.some((l) => l.id === id));
-    if (missing.length === 0) {
-      // חלון שנסגר — משחררים את הליד מהזיכרון המקומי
-      if (leads.length > ids.length) setLeads((prev) => prev.filter((l) => ids.includes(l.id)));
-      return;
-    }
+    const missing = ids.filter((id) => !openLeads.some((l) => l.id === id));
+    if (missing.length === 0) return;
     let cancelled = false;
     (async () => {
       try {
@@ -34,22 +34,24 @@ export function LeadDock() {
         const data = (await res.json()) as { leads?: Lead[] };
         if (cancelled || !data.leads?.length) return;
         setLeads((prev) => {
-          const have = new Set(prev.map((l) => l.id));
-          const add = data.leads!.filter((l) => !have.has(l.id));
-          return add.length ? [...prev, ...add] : prev;
+          const fetched = new Set(data.leads!.map((l) => l.id));
+          // משחררים לידים של חלונות שנסגרו ועותקים ישנים של מה שנשלף עכשיו
+          return [...prev.filter((l) => ids.includes(l.id) && !fetched.has(l.id)), ...data.leads!];
         });
       } catch {
         // רשת נפלה — החלון פשוט לא ייפתח הפעם
       }
     })();
     return () => { cancelled = true; };
+    // openLeads נגזר מ-leads ו-ids בכל רינדור
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ids, leads]);
 
   if (ids.length === 0) return null;
 
   return (
     <LeadWindowManager
-      leads={leads}
+      leads={openLeads}
       openLeadIds={ids}
       chatFirstIds={new Set(chatFirst)}
       onOpenLead={openLeadWindow}

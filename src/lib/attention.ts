@@ -14,7 +14,14 @@
 
 import { LeadStatus } from "./stateMachine";
 
-export type AttentionKind = "urgent" | "guarantee" | "normal";
+export type AttentionKind = "urgent" | "returning" | "guarantee" | "normal";
+
+/**
+ * מועמד שכבר יש לו כרטיס פנה שוב — "מועמד קיים הגיש מועמדות שוב / התקשר שוב"
+ * (סורק המיילים) או "פנייה חוזרת דרך …". בספטמבר היו כ-275 כאלה. רבים מהם על
+ * לידים סגורים, ולכן הם מוצגים בבלוק משלהם גם כשהליד סגור.
+ */
+export const RETURNING_PREFIXES = ["מועמד קיים", "פנייה חוזרת"];
 
 /**
  * סטטוסים סגורים. מעבר לאחד מהם מכבה את הדגל — הרכזת כבר טיפלה והחליטה.
@@ -45,6 +52,7 @@ export const GUARANTEE_FLAG_TTL_DAYS = 8;
 export function attentionKind(reason: string | null | undefined): AttentionKind {
   const r = (reason ?? "").trim();
   if (r.startsWith(URGENT_PREFIX)) return "urgent";
+  if (RETURNING_PREFIXES.some((p) => r.startsWith(p))) return "returning";
   if (r.startsWith(GUARANTEE_PREFIX)) return "guarantee";
   return "normal";
 }
