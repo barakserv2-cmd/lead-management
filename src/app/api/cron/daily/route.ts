@@ -8,6 +8,7 @@ import {
 } from "@/lib/whatsappService";
 import { runPostPlacementCare } from "@/lib/postPlacement";
 import { runIntakeMonitor } from "@/lib/intakeMonitor";
+import { runSiteMonitor } from "@/lib/siteMonitor";
 
 // Vercel cron pings this URL every hour at :30 (see vercel.json).
 // Guarded by CRON_SECRET so it can't be hit anonymously from outside.
@@ -345,6 +346,19 @@ async function runChannelHealth(admin: ReturnType<typeof getAdmin>): Promise<Run
   return summary;
 }
 
+// ── Rule 6: טפסי האתר עובדים? (אחרי התקלה של 29.09) ─────────
+// כל שעה: בדיקה טכנית כמבקר אנונימי + שקט חריג לפי הקצב הרגיל.
+async function runSiteHealth(admin: ReturnType<typeof getAdmin>): Promise<RunSummary> {
+  const res = await runSiteMonitor(admin);
+  return {
+    rule: "site_forms_health",
+    attempted: res.checked,
+    succeeded: res.alerts,
+    failed: 0,
+    details: res.details,
+  };
+}
+
 // ── Orchestrator ────────────────────────────────────────────
 async function runDailyCron() {
   const admin = getAdmin();
@@ -354,6 +368,7 @@ async function runDailyCron() {
     runWeeklyDigest(admin),
     runPlacementCare(admin),
     runChannelHealth(admin),
+    runSiteHealth(admin),
   ]);
   return { ok: true, ran_at: new Date().toISOString(), rules: results };
 }
