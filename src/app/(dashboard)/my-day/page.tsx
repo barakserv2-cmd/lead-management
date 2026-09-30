@@ -5,7 +5,7 @@ import { FOLLOW_UP } from "@/lib/constants";
 import { MyReminders } from "../today/my-reminders";
 import { LeadStatus, STATUS_LABELS, type LeadStatusValue } from "@/lib/stateMachine";
 // ליד סגור לא צריך טיפול גם אם נשאר עליו דגל ישן — אותה רשימה שמכבה דגלים בסגירה
-import { attentionKind, CLOSED_STATUSES } from "@/lib/attention";
+import { attentionKind, CLOSED_STATUSES, isClosedStatus } from "@/lib/attention";
 
 // "היום שלי" — רשימת עבודה אחת לרכזת.
 //
@@ -205,7 +205,7 @@ export default async function MyDayPage() {
   const quietCutoffMs = Date.now() - QUIET_HOURS * 3600_000;
   const quietCutoff = new Date(quietCutoffMs).toISOString();
 
-  const [escRes, ivRes, pastIvRes, openRes, remRes, attnRes, quietRes] = await Promise.all([
+  const [escRes, ivRes, pastIvRes, openRes, remRes, attnRes, quietRes, returnRes] = await Promise.all([
     // אסקלציות שממתינות לי: מה שגובגט העביר ועדיין לא נלקח, או מה שכבר עליי
     supabase
       .from("leads")
@@ -271,6 +271,17 @@ export default async function MyDayPage() {
       .or(`last_contact_at.lt.${quietCutoff},last_contact_at.is.null`)
       .order("last_contact_at", { ascending: true, nullsFirst: true })
       .limit(200),
+    // מועמד שכבר יש לו כרטיס פנה שוב — גם כשהליד סגור ("לא מתאים", "אבד
+    // קשר"...). עד עכשיו הם הוסתרו כאן יחד עם כל הלידים הסגורים, כך שאיש לא
+    // ראה אותם (~275 פניות חוזרות בספטמבר).
+    supabase
+      .from("leads")
+      .select("id, name, phone, status, attention_reason, needs_attention_at, handled_by")
+      .eq("needs_attention", true)
+      .not("needs_human_attention", "is", true)
+      .or(mineOrUnowned)
+      .order("needs_attention_at", { ascending: false, nullsFirst: false })
+      .limit(500),
   ]);
 
   const escalations = (escRes.data ?? []).filter((l) => {
@@ -297,8 +308,16 @@ export default async function MyDayPage() {
         new Date((b.needs_attention_at as string) ?? 0).getTime() -
         new Date((a.needs_attention_at as string) ?? 0).getTime()
     );
+  // הסינון לפי סוג הדגל נעשה כאן (attentionKind) ולא בשאילתה — אותה פונקציה
+  // שנבדקת ב-attention.test.ts, בלי תחביר like על טקסט עברי ב-PostgREST.
+  const returning = (returnRes.data ?? [])
+    .filter((l) => attentionKind(l.attention_reason as string | null) === "returning")
+    .filter((l) => !pastIds.has(l.id as string))
+    .slice(0, 100);
+  const returningIds = new Set(returning.map((l) => l.id as string));
   const attention = allAttention.filter(
-    (l) => attentionKind(l.attention_reason as string | null) !== "urgent"
+    (l) =>
+      attentionKind(l.attention_reason as string | null) !== "urgent" && !returningIds.has(l.id as string)
   );
 
   const quiet = (quietRes.data ?? [])
@@ -352,6 +371,7 @@ export default async function MyDayPage() {
   const actionable =
     escalations.length +
     urgent.length +
+    returning.length +
     interviews.length +
     pastInterviews.length +
     attention.length +
@@ -425,6 +445,44 @@ export default async function MyDayPage() {
               }
             />
           ))}
+        </Block>
+
+        <Block
+          title="פנו אלינו שוב"
+          count={returning.length}
+          hint="מועמד שכבר יש לו כרטיס הגיש או התקשר שוב — גם אם נסגר בעבר. פנייה שנייה היא סימן למוטיבציה"
+          border="border-emerald-200"
+          head="bg-emerald-50 text-emerald-900"
+        >
+          {returning.map((l) => {
+            const closed = isClosedStatus(l.status as string);
+            return (
+              <LeadRow
+                key={l.id}
+                id={l.id as string}
+                name={l.name as string | null}
+                phone={l.phone as string | null}
+                meta={
+                  <>
+                    {(l.attention_reason as string | null) ?? "פנייה חוזרת"}
+                    {" · "}
+                    <span className={closed ? "font-semibold text-slate-700" : ""}>
+                      {closed ? `נסגר בעבר: ${statusLabel(l.status as string)}` : statusLabel(l.status as string)}
+                    </span>
+                    {l.needs_attention_at && (
+                      <span className="text-slate-400">
+                        {" · "}
+                        {daysSince(l.needs_attention_at as string) === 0
+                          ? "היום"
+                          : `לפני ${daysSince(l.needs_attention_at as string)} ימים`}
+                      </span>
+                    )}
+                    {isUnowned(l.handled_by) && <UnownedTag />}
+                  </>
+                }
+              />
+            );
+          })}
         </Block>
 
         <Block

@@ -18,6 +18,8 @@ describe("attentionKind", () => {
     expect(attentionKind("🚩 מלווה ההגעה: דני — החבר התחרט")).toBe("urgent");
     expect(attentionKind("⏳ תקופת האחריות של דני בישרוטל נגמרת בעוד 7 ימים")).toBe("guarantee");
     expect(attentionKind("שואל על תנאי שכר")).toBe("normal");
+    expect(attentionKind("מועמד קיים הגיש מועמדות שוב")).toBe("returning");
+    expect(attentionKind("פנייה חוזרת דרך טלפון")).toBe("returning");
     expect(attentionKind(null)).toBe("normal");
   });
 });
