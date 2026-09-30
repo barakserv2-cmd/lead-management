@@ -14,6 +14,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { LEAD_SOURCES } from "@/lib/constants";
+import { RECRUITER_CHANNELS } from "@/lib/leadChannel";
 import { ALL_STATUSES, STATUS_LABELS, LeadStatus } from "@/lib/stateMachine";
 
 export function AddLeadDialog() {
@@ -30,6 +31,12 @@ export function AddLeadDialog() {
       toast.error("שם הוא שדה חובה");
       return;
     }
+    // בלי ערוץ הדוח "איזה ערוץ עובד" נשאר חלקי (סער, 30.09)
+    const channel = (form.get("channel") as string) || "";
+    if (!channel) {
+      toast.error("צריך לבחור איך המועמד/ת שמע/ה עלינו");
+      return;
+    }
 
     setSubmitting(true);
     try {
@@ -44,6 +51,7 @@ export function AddLeadDialog() {
           phone: (form.get("phone") as string).trim(),
           job_title: (form.get("job_title") as string).trim(),
           source: form.get("source") as string,
+          channel,
           status: form.get("status") as string,
         }),
       });

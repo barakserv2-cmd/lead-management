@@ -5,6 +5,19 @@ import { logAudit } from "@/lib/audit";
 import { normalizePhone } from "@/lib/phone";
 import { findLeadByPhone, duplicatePhonePayload, isPhoneUniqueViolation } from "@/lib/leadPhoneGuard";
 import { getAuthedUser } from "@/lib/api-auth";
+import { RECRUITER_CHANNELS, type Channel } from "@/lib/leadChannel";
+
+function isRecruiterChannel(v: unknown): v is Channel {
+  return typeof v === "string" && (RECRUITER_CHANNELS as readonly string[]).includes(v);
+}
+
+function methodForManualSource(source: unknown): string {
+  const s = typeof source === "string" ? source : "";
+  if (/טלפון/.test(s)) return "שיחה";
+  if (/וואטסאפ/.test(s)) return "וואטסאפ";
+  if (/צ.?אט/.test(s)) return "צ'אט";
+  return "ידני";
+}
 
 export async function GET() {
   return NextResponse.json({ leads: [], total: 0 });

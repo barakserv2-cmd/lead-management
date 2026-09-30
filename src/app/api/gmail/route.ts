@@ -14,6 +14,7 @@ import { parseEmailWithAI } from "@/lib/ai/parse-email";
 import { LEAD_STATUSES } from "@/lib/constants";
 import { enqueueWelcome, runWelcomeBatch } from "@/lib/whatsappWelcome";
 import { noteExistingCandidateCall, flushMissedCallAlerts } from "@/lib/missedCallAlert";
+import { fillMissingChannels, refineUnknownChannel } from "@/lib/leadChannelFill";
 import { getAuthedUser } from "@/lib/api-auth";
 import { hasCronSecret } from "@/lib/secrets";
 
@@ -365,6 +366,13 @@ async function handleFetchEmails(req: NextRequest) {
       }
     } catch (e) {
       console.error("[Gmail] runWelcomeBatch failed:", e);
+    }
+
+    // ערוץ לכל ליד חדש, מכל מסלול שבו נוצר (lib/leadChannel.ts)
+    try {
+      await fillMissingChannels(supabase);
+    } catch (e) {
+      console.error("[Gmail] fillMissingChannels failed:", e);
     }
 
     // מועמדים קיימים שהתקשרו ולא נענו — התראה לרכזת (אחרי 10 דק', בשעות התורנות)
