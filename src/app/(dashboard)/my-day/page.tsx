@@ -4,6 +4,8 @@ import { getSupabaseAdmin } from "@/lib/api-auth";
 import { FOLLOW_UP } from "@/lib/constants";
 import { MyReminders } from "../today/my-reminders";
 import { LeadStatus, STATUS_LABELS, type LeadStatusValue } from "@/lib/stateMachine";
+// ליד סגור לא צריך טיפול גם אם נשאר עליו דגל ישן — אותה רשימה שמכבה דגלים בסגירה
+import { attentionKind, CLOSED_STATUSES } from "@/lib/attention";
 
 // "היום שלי" — רשימת עבודה אחת לרכזת.
 //
@@ -25,6 +27,30 @@ const OPEN_STATUSES: string[] = [
 
 /** אחרי כמה ימי שתיקה מועמד פתוח נחשב נשכח. */
 const STALE_DAYS = 3;
+
+/** אחרי כמה שעות בלי אף הודעה יוצאת שיחה של גובגט נחשבת שהשתתקה. */
+const QUIET_HOURS = 48;
+
+/** השלבים שבהם גובגט מנהל את השיחה לבד, לפני שמישהו קבע ראיון. */
+const QUIET_STATUSES: string[] = [
+  LeadStatus.CONTACTED,
+  LeadStatus.SCREENING_IN_PROGRESS,
+  LeadStatus.FIT_FOR_INTERVIEW,
+];
+
+/** ליד בלי רכזת אחראית — נקבע ע"י גובגט או ע"י המועמד עצמו. */
+function isUnowned(handledBy: unknown): boolean {
+  const owner = typeof handledBy === "string" ? handledBy.trim().toLowerCase() : "";
+  return !owner || owner === GUBGET_EMAIL;
+}
+
+function UnownedTag() {
+  return (
+    <span className="ms-1 inline-block rounded bg-gray-100 px-1.5 text-[11px] font-medium text-gray-600">
+      ללא רכזת
+    </span>
+  );
+}
 
 /**
  * ראיון שעדיין דורש משהו מהרכזת. מי שכבר בוטל או לא הגיע — לא צריך להופיע
@@ -84,9 +110,9 @@ function LeadRow({
 }) {
   const hover = {
     slate: "hover:bg-slate-50",
-    orange: "hover:bg-orange-100/40",
-    purple: "hover:bg-purple-100/40",
-    amber: "hover:bg-amber-100/40",
+    orange: "hover:bg-gray-50",
+    purple: "hover:bg-gray-50",
+    amber: "hover:bg-gray-50",
   }[tone];
 
   return (
@@ -94,7 +120,7 @@ function LeadRow({
       <div className="min-w-0 flex-1">
         <Link
           href={`/leads/${id}`}
-          className="font-semibold text-slate-900 hover:text-cyan-700 hover:underline"
+          className="font-medium text-gray-900 hover:text-cyan-700"
         >
           {name || "מועמד ללא שם"}
         </Link>
@@ -109,9 +135,9 @@ function LeadRow({
             href={waHref(phone)}
             target="_blank"
             rel="noopener noreferrer"
-            className="text-emerald-600 hover:text-emerald-800 text-xs font-semibold"
+            className="h-7 px-2 inline-flex items-center rounded-md border border-gray-200 text-emerald-700 hover:bg-emerald-50 text-xs font-medium"
           >
-            WA
+            WhatsApp
           </a>
         </div>
       )}
@@ -135,13 +161,27 @@ function Block({
   children: React.ReactNode;
 }) {
   if (count === 0) return null;
+  // כרטיס ניטרלי; הצבע רק בנקודה ובמונה — כך חמשת הבלוקים נקראים כמערכת
+  // אחת, והדחיפות עדיין מזוהה במבט.
+  const DOT: Record<string, string> = {
+    "border-orange-200": "bg-orange-500",
+    "border-purple-200": "bg-purple-500",
+    "border-red-200": "bg-red-500",
+    "border-amber-200": "bg-amber-500",
+    "border-slate-200": "bg-gray-400",
+  };
+  void head;
   return (
-    <section className={`rounded-xl border ${border} overflow-hidden bg-white`}>
-      <div className={`flex items-center justify-between px-4 py-2.5 border-b ${border} ${head}`}>
-        <h2 className="font-semibold text-sm">
-          {title} ({count})
+    <section className="rounded-xl border border-gray-200 overflow-hidden bg-white">
+      <div className="flex items-center justify-between gap-3 px-4 py-3 border-b border-gray-100">
+        <h2 className="flex items-center gap-2 font-semibold text-[13px] text-gray-900">
+          <span className={`w-2 h-2 rounded-full ${DOT[border] ?? "bg-gray-400"}`} />
+          {title}
+          <span className="min-w-5 h-5 px-1.5 inline-flex items-center justify-center rounded-md bg-gray-100 text-gray-600 text-[11px] font-semibold tabular-nums">
+            {count}
+          </span>
         </h2>
-        {hint && <span className="text-xs opacity-70">{hint}</span>}
+        {hint && <span className="text-xs text-gray-500">{hint}</span>}
       </div>
       <ul className="divide-y divide-slate-100">{children}</ul>
     </section>
@@ -157,7 +197,15 @@ export default async function MyDayPage() {
 
   const today = israelToday();
 
-  const [escRes, ivRes, pastIvRes, openRes, remRes] = await Promise.all([
+  // "שלי או של אף אחד": ראיון שגובגט או המועמד עצמו קבעו (קישור תיאום עצמי)
+  // נשאר בלי רכזת אחראית — handled_by ריק או של גובגט — ולכן לא הופיע לאף
+  // אחד. עכשיו הוא מופיע לכל הרכזות עד שמישהי רושמת תוצאה.
+  const mineOrUnowned = `handled_by.ilike.${email},handled_by.is.null,handled_by.eq.${GUBGET_EMAIL}`;
+  // eslint-disable-next-line react-hooks/purity -- server component, renders once per request
+  const quietCutoffMs = Date.now() - QUIET_HOURS * 3600_000;
+  const quietCutoff = new Date(quietCutoffMs).toISOString();
+
+  const [escRes, ivRes, pastIvRes, openRes, remRes, attnRes, quietRes] = await Promise.all([
     // אסקלציות שממתינות לי: מה שגובגט העביר ועדיין לא נלקח, או מה שכבר עליי
     supabase
       .from("leads")
@@ -168,8 +216,8 @@ export default async function MyDayPage() {
     // ראיונות היום — גבולות היום ב-Z, כי interview_date הוא שעון ישראל בתווית UTC
     supabase
       .from("leads")
-      .select("id, name, phone, status, interview_date, interview_type")
-      .ilike("handled_by", email)
+      .select("id, name, phone, status, interview_date, interview_type, handled_by")
+      .or(mineOrUnowned)
       .gte("interview_date", `${today}T00:00:00Z`)
       .lte("interview_date", `${today}T23:59:59Z`)
       .order("interview_date", { ascending: true })
@@ -178,9 +226,10 @@ export default async function MyDayPage() {
     // נבנה, אחד מהם מחודש מרץ — הם היו בלתי נראים כי שום דף לא חיפש אותם.
     supabase
       .from("leads")
-      .select("id, name, phone, sub_status, interview_date")
-      .ilike("handled_by", email)
-      .eq("status", LeadStatus.INTERVIEW_BOOKED)
+      // "דחה הגעה" נשאר בסטטוס הזה גם אחרי המועד החדש — גם הוא ממתין לתוצאה
+      .select("id, name, phone, status, sub_status, interview_date, handled_by")
+      .or(mineOrUnowned)
+      .in("status", [LeadStatus.INTERVIEW_BOOKED, LeadStatus.POSTPONED_ARRIVAL])
       .lt("interview_date", `${today}T00:00:00Z`)
       .order("interview_date", { ascending: true })
       .limit(200),
@@ -199,6 +248,29 @@ export default async function MyDayPage() {
       .eq("recruiter", email)
       .eq("is_completed", false)
       .limit(500),
+    // "דורש תשומת לב" — נדלק בהרבה מקומות (מועמד שביטל ראיון שקבע לבד, שאלה
+    // בוואטסאפ, מועמד קיים שהגיש שוב, תקופת אחריות שמסתיימת) אבל הוצג רק בתוך
+    // כרטיס הליד, כלומר רק למי שכבר פתחה אותו.
+    supabase
+      .from("leads")
+      .select("id, name, phone, status, attention_reason, needs_attention_at, handled_by")
+      .eq("needs_attention", true)
+      .not("needs_human_attention", "is", true)
+      .not("status", "in", `(${CLOSED_STATUSES.join(",")})`)
+      .or(mineOrUnowned)
+      .order("needs_attention_at", { ascending: true, nullsFirst: false })
+      .limit(200),
+    // שיחות של גובגט שהשתתקו: ליד בלי רכזת, באמצע התהליך, ששום הודעה לא
+    // יצאה אליו כבר QUIET_HOURS שעות. אף בלוק ואף חוק לא תפס אותם עד עכשיו.
+    supabase
+      .from("leads")
+      .select("id, name, phone, status, last_contact_at, created_at")
+      .or(`handled_by.is.null,handled_by.eq.${GUBGET_EMAIL}`)
+      .in("status", QUIET_STATUSES)
+      .not("needs_human_attention", "is", true)
+      .or(`last_contact_at.lt.${quietCutoff},last_contact_at.is.null`)
+      .order("last_contact_at", { ascending: true, nullsFirst: true })
+      .limit(200),
   ]);
 
   const escalations = (escRes.data ?? []).filter((l) => {
@@ -212,6 +284,27 @@ export default async function MyDayPage() {
 
   const pastInterviews = pastIvRes.data ?? [];
   const pastIds = new Set(pastInterviews.map((l) => l.id as string));
+
+  // אותה משימה מוצגת פעם אחת: ראיון שעבר קודם לדגל
+  const allAttention = (attnRes.data ?? []).filter((l) => !pastIds.has(l.id as string));
+  const attentionIds = new Set(allAttention.map((l) => l.id as string));
+  // דחוף (מלווה ההגעה: מתלבט, החבר התחרט, לא עונה) — בלוק משלו למעלה, החדש
+  // ראשון. השאר נשארים בבלוק הרגיל, מהישן לחדש.
+  const urgent = allAttention
+    .filter((l) => attentionKind(l.attention_reason as string | null) === "urgent")
+    .sort(
+      (a, b) =>
+        new Date((b.needs_attention_at as string) ?? 0).getTime() -
+        new Date((a.needs_attention_at as string) ?? 0).getTime()
+    );
+  const attention = allAttention.filter(
+    (l) => attentionKind(l.attention_reason as string | null) !== "urgent"
+  );
+
+  const quiet = (quietRes.data ?? [])
+    .map((l) => ({ ...l, lastTouch: (l.last_contact_at ?? l.created_at) as string }))
+    .filter((l) => !attentionIds.has(l.id as string))
+    .filter((l) => new Date(l.lastTouch).getTime() < quietCutoffMs);
 
   // "מעקב" שנשמר לפני שהמועד הפך לחובה — החלטה שנדחתה ואיש לא קבע מתי לחזור
   const remindedLeadIds = new Set((remRes.data ?? []).map((r) => r.lead_id as string));
@@ -246,22 +339,30 @@ export default async function MyDayPage() {
       return { ...l, lastTouch: ev && new Date(ev) > new Date(own) ? ev : own };
     })
     // מי שכבר מופיע בבלוק אחר לא חוזר כאן — אותה משימה מוצגת פעם אחת
-    .filter((l) => !pastIds.has(l.id as string) && !undatedIds.has(l.id as string))
+    .filter(
+      (l) =>
+        !pastIds.has(l.id as string) &&
+        !undatedIds.has(l.id as string) &&
+        !attentionIds.has(l.id as string)
+    )
     .filter((l) => daysSince(l.lastTouch) >= STALE_DAYS)
     .sort((a, b) => new Date(a.lastTouch).getTime() - new Date(b.lastTouch).getTime());
 
   const openCount = (openRes.data ?? []).length;
   const actionable =
     escalations.length +
+    urgent.length +
     interviews.length +
     pastInterviews.length +
+    attention.length +
+    quiet.length +
     undatedFollowUps.length +
     stale.length;
 
   return (
     <div>
       <div className="mb-6">
-        <h1 className="text-2xl font-bold">היום שלי</h1>
+        <h1 className="text-xl font-semibold text-gray-900 tracking-tight">היום שלי</h1>
         <p className="text-sm text-gray-500 mt-0.5">
           כל מה שדורש ממך פעולה היום, במקום אחד · {openCount} מועמדים פתוחים באחריותך
         </p>
@@ -269,7 +370,7 @@ export default async function MyDayPage() {
 
       <div className="flex flex-col gap-4 max-w-4xl">
         <Block
-          title="🟠 גובגט מחכה לך"
+          title="גובגט מחכה לך"
           count={escalations.length}
           hint="גובגט מוקפא עד שתחליטי"
           border="border-orange-200"
@@ -300,7 +401,34 @@ export default async function MyDayPage() {
         </Block>
 
         <Block
-          title="📅 ראיונות היום"
+          title="🚩 דחוף — מועמד בדרך לאילת או בימים הראשונים"
+          count={urgent.length}
+          hint="מלווה ההגעה זיהה בעיה — להתקשר עכשיו, כשעוד אפשר להציל"
+          border="border-red-300"
+          head="bg-red-50 text-red-900"
+        >
+          {urgent.map((l) => (
+            <LeadRow
+              key={l.id}
+              id={l.id as string}
+              name={l.name as string | null}
+              phone={l.phone as string | null}
+              meta={
+                <>
+                  <span className="text-red-700">
+                    {String(l.attention_reason ?? "").replace(/^🚩\s*/, "")}
+                  </span>
+                  {" · "}
+                  {statusLabel(l.status as string)}
+                  {isUnowned(l.handled_by) && <UnownedTag />}
+                </>
+              }
+            />
+          ))}
+        </Block>
+
+        <Block
+          title="ראיונות היום"
           count={interviews.length}
           hint="לאשר טלפונית מי מגיע"
           border="border-purple-200"
@@ -322,6 +450,7 @@ export default async function MyDayPage() {
                   {INTERVIEW_TYPE_LABELS[(l.interview_type as string) ?? ""] ?? "ראיון"}
                   {" · "}
                   {statusLabel(l.status as string)}
+                  {isUnowned(l.handled_by) && <UnownedTag />}
                 </>
               }
             />
@@ -329,7 +458,7 @@ export default async function MyDayPage() {
         </Block>
 
         <Block
-          title="❗ ראיונות שעברו בלי תוצאה"
+          title="ראיונות שעברו בלי תוצאה"
           count={pastInterviews.length}
           hint="הראיון היה — מה קרה בו?"
           border="border-red-200"
@@ -350,8 +479,9 @@ export default async function MyDayPage() {
                     {l.sub_status ? ` · ${l.sub_status}` : ""}
                     {" · "}
                     <span className={days >= 14 ? "text-red-600 font-semibold" : ""}>
-                      עברו {days} ימים והסטטוס עדיין &quot;ראיון נקבע&quot;
+                      עברו {days} ימים והסטטוס עדיין &quot;{statusLabel(l.status as string)}&quot;
                     </span>
+                    {isUnowned(l.handled_by) && <UnownedTag />}
                   </>
                 }
               />
@@ -359,11 +489,71 @@ export default async function MyDayPage() {
           })}
         </Block>
 
+        <Block
+          title="דורש תשומת לב"
+          count={attention.length}
+          hint="סימון שהמערכת הדליקה — לבדוק ולנקות בכרטיס"
+          border="border-amber-200"
+          head="bg-amber-50 text-amber-900"
+        >
+          {attention.map((l) => (
+            <LeadRow
+              key={l.id}
+              id={l.id as string}
+              name={l.name as string | null}
+              phone={l.phone as string | null}
+              tone="amber"
+              meta={
+                <>
+                  {(l.attention_reason as string | null) ?? "סומן לטיפול"}
+                  {" · "}
+                  {statusLabel(l.status as string)}
+                  {l.needs_attention_at && (
+                    <span className="text-slate-400">
+                      {" · "}
+                      {daysSince(l.needs_attention_at as string) === 0
+                        ? "היום"
+                        : `לפני ${daysSince(l.needs_attention_at as string)} ימים`}
+                    </span>
+                  )}
+                  {isUnowned(l.handled_by) && <UnownedTag />}
+                </>
+              }
+            />
+          ))}
+        </Block>
+
+        <Block
+          title="שיחות של גובגט שהשתתקו"
+          count={quiet.length}
+          hint={`בלי רכזת ובלי אף הודעה ${QUIET_HOURS} שעות — לקחת או לסגור`}
+          border="border-slate-200"
+          head="bg-slate-50 text-slate-800"
+        >
+          {quiet.map((l) => (
+            <LeadRow
+              key={l.id}
+              id={l.id as string}
+              name={l.name as string | null}
+              phone={l.phone as string | null}
+              meta={
+                <>
+                  {statusLabel(l.status as string)}
+                  {" · "}
+                  <span className={daysSince(l.lastTouch) >= 7 ? "text-red-600 font-semibold" : ""}>
+                    הודעה אחרונה לפני {daysSince(l.lastTouch)} ימים
+                  </span>
+                </>
+              }
+            />
+          ))}
+        </Block>
+
         {/* התזכורות מביאות את עצמן — אותה רשימה שכבר קיימת ב"לידים של היום" */}
         <MyReminders />
 
         <Block
-          title="🗓️ מעקב בלי תאריך"
+          title="מעקב בלי תאריך"
           count={undatedFollowUps.length}
           hint="לקבוע מתי לחזור, אחרת זה לא משימה"
           border="border-amber-200"
@@ -386,7 +576,7 @@ export default async function MyDayPage() {
         </Block>
 
         <Block
-          title="⏳ לא נגעת בהם"
+          title="לא נגעת בהם"
           count={stale.length}
           hint={`${STALE_DAYS} ימים ומעלה — להמשיך או לסגור`}
           border="border-slate-200"
@@ -413,9 +603,12 @@ export default async function MyDayPage() {
         </Block>
 
         {actionable === 0 && (
-          <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-5 py-8 text-center">
-            <p className="text-emerald-900 font-semibold">אין כלום שממתין לך 🎉</p>
-            <p className="text-sm text-emerald-800/80 mt-1">
+          <div className="rounded-xl border border-gray-200 bg-white px-5 py-10 text-center">
+            <div className="mx-auto mb-3 w-10 h-10 rounded-full bg-emerald-50 ring-1 ring-emerald-200 text-emerald-600 flex items-center justify-center">
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5"><path d="M20 6 9 17l-5-5" /></svg>
+            </div>
+            <p className="text-gray-900 font-semibold">אין כלום שממתין לך</p>
+            <p className="text-sm text-gray-500 mt-1">
               אין אסקלציות, אין ראיונות היום, ואף מועמד פתוח לא נשכח.
             </p>
             <Link

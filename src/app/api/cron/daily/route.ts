@@ -9,6 +9,7 @@ import {
 import { runPostPlacementCare } from "@/lib/postPlacement";
 import { runIntakeMonitor } from "@/lib/intakeMonitor";
 import { runSiteMonitor } from "@/lib/siteMonitor";
+import { runArrivalCompanion } from "@/lib/arrivalCompanionRun";
 
 // Vercel cron pings this URL every hour at :30 (see vercel.json).
 // Guarded by CRON_SECRET so it can't be hit anonymously from outside.
@@ -95,7 +96,9 @@ async function runInterviewReminders(admin: ReturnType<typeof getAdmin>): Promis
     const { data: leads } = await admin
       .from("leads")
       .select("id, name, phone, interview_date, interview_type")
-      .eq("status", "INTERVIEW_BOOKED")
+      // "דחה הגעה" שומר את המועד החדש ב-interview_date אבל נשאר בסטטוס הזה —
+      // בלעדיו מי שדחה לא קיבל תזכורת לפני המועד החדש
+      .in("status", ["INTERVIEW_BOOKED", "POSTPONED_ARRIVAL"])
       .not("phone", "is", null)
       .gte("interview_date", dayStart.toISOString())
       .lt("interview_date", dayEnd.toISOString());
@@ -321,7 +324,28 @@ async function runPlacementCare(admin: ReturnType<typeof getAdmin>): Promise<Run
   summary.succeeded = care.checkinsSent + care.guaranteeAlerts;
   summary.failed = care.failed;
   summary.details.push(
-    `בדיקות שלומות: ${care.checkinsSent} · התראות אחריות: ${care.guaranteeAlerts}`
+    `בדיקות שלומות: ${care.checkinsSent} · התראות אחריות: ${care.guaranteeAlerts} · דגלי אחריות שפגו נוקו: ${care.expiredFlagsCleared}`
+  );
+  return summary;
+}
+
+// ── Rule 5: מלווה ההגעה ─────────────────────────────────────
+// נקודות המגע וחלונות השעות מוגדרים ב-arrivalCompanion.ts (planTouch).
+// כבוי עד ARRIVAL_COMPANION_MODE=live או רשימת פיילוט.
+async function runArrivalCompanionRule(admin: ReturnType<typeof getAdmin>): Promise<RunSummary> {
+  const summary: RunSummary = {
+    rule: "arrival_companion",
+    attempted: 0,
+    succeeded: 0,
+    failed: 0,
+    details: [],
+  };
+  const res = await runArrivalCompanion(admin);
+  summary.attempted = res.sent + res.failed;
+  summary.succeeded = res.sent;
+  summary.failed = res.failed;
+  summary.details.push(
+    `נשלחו: ${res.sent} · דגלי "לא ענה": ${res.silentFlags} · לא בפיילוט: ${res.skippedDisabled}`
   );
   return summary;
 }
@@ -369,6 +393,7 @@ async function runDailyCron() {
     runPlacementCare(admin),
     runChannelHealth(admin),
     runSiteHealth(admin),
+    runArrivalCompanionRule(admin),
   ]);
   return { ok: true, ran_at: new Date().toISOString(), rules: results };
 }

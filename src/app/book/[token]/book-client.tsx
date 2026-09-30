@@ -130,7 +130,7 @@ export function BookClient({ token }: { token: string }) {
         )}
 
         {(state === "expired" || state === "error") && (
-          <div className="bg-white rounded-xl border shadow-sm p-6 text-center">
+          <div className="bg-white rounded-xl border border-gray-200 p-6 text-center">
             <p className="font-semibold text-gray-800 mb-1">
               {state === "expired" ? "הקישור כבר לא בתוקף" : "משהו השתבש"}
             </p>
@@ -143,7 +143,7 @@ export function BookClient({ token }: { token: string }) {
         )}
 
         {state === "booked" && info?.bookedStart && !rescheduling && (
-          <div className="bg-white rounded-xl border shadow-sm p-6 text-center">
+          <div className="bg-white rounded-xl border border-gray-200 p-6 text-center">
             <div className="w-12 h-12 mx-auto mb-3 rounded-full bg-green-100 flex items-center justify-center">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} className="w-6 h-6 text-green-600">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
@@ -188,7 +188,7 @@ export function BookClient({ token }: { token: string }) {
         )}
 
         {(state === "open" || rescheduling) && state !== "loading" && state !== "expired" && state !== "error" && (
-          <div className="bg-white rounded-xl border shadow-sm p-5">
+          <div className="bg-white rounded-xl border border-gray-200 p-5">
             <p className="font-semibold text-gray-900 mb-1">
               {info?.firstName ? `היי ${info.firstName}! ` : ""}בחר/י מועד ל{typeLabel}
             </p>

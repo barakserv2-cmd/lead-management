@@ -193,7 +193,7 @@ export function LeadDetailDrawer({
 
   // Notes
   const [notes, setNotes] = useState("");
-  const [notesLoading, setNotesLoading] = useState(false);
+  const [notesLoading, setNotesLoading] = useState(true);
   const [savingNotes, setSavingNotes] = useState(false);
 
   // Preferences
@@ -228,7 +228,9 @@ export function LeadDetailDrawer({
   const [historyLoaded, setHistoryLoaded] = useState(false);
 
   // Reset all state when lead changes
-  useEffect(() => {
+  const [prevLead, setPrevLead] = useState(lead);
+  if (lead !== prevLead) {
+    setPrevLead(lead);
     setDisplayName(lead.name);
     setDisplayPhone(lead.phone);
     setDisplayEmail(lead.email);
@@ -241,8 +243,11 @@ export function LeadDetailDrawer({
     setHistoryEntries([]);
     setHistoryLoaded(false);
 
-    // Fetch fresh notes
     setNotesLoading(true);
+  }
+
+  // Fetch fresh notes
+  useEffect(() => {
     getLeadNotes(lead.id).then((result) => {
       setNotes(result.notes ?? "");
       setNotesLoading(false);
@@ -444,10 +449,10 @@ export function LeadDetailDrawer({
           </SheetHeader>
 
           {/* ═══ TWO-PANEL BODY ═══════════════════════════════════ */}
-          <div className="flex-1 flex min-h-0 overflow-hidden">
+          <div className="flex-1 flex flex-col md:flex-row min-h-0 overflow-y-auto md:overflow-hidden">
 
             {/* ── LEFT: Contact Info + Tabs ───────────────────── */}
-            <div className="w-[380px] flex-shrink-0 border-l overflow-y-auto bg-white">
+            <div className="w-full md:w-[380px] flex-shrink-0 border-b md:border-b-0 md:border-l md:overflow-y-auto bg-white">
               {/* Contact fields */}
               <div className="p-5 space-y-3 border-b">
                 {contactFields.map((f) => (

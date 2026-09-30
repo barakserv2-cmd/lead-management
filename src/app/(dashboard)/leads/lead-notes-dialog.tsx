@@ -27,7 +27,7 @@ export function LeadNotesDialog({
 }: {
   leadId: string;
   leadName: string;
-  size?: "sm" | "xs";
+  size?: "sm" | "xs" | "icon";
   /** כשהמסך כבר מחזיק את הסטטוס — חוסך קריאה ומציג אותו מיד */
   currentStatus?: string;
   currentSubStatus?: string | null;
@@ -58,21 +58,37 @@ export function LeadNotesDialog({
 
   return (
     <>
-      <Button
-        variant="outline"
-        size="sm"
-        onClick={(e) => {
-          e.stopPropagation();
-          setOpen(true);
-        }}
-        className={`gap-1.5 border-violet-300 text-violet-700 hover:bg-violet-50 ${
-          size === "xs" ? "h-7 px-2 text-xs" : ""
-        }`}
-        title="הוסף הערה וצפה בהיסטוריה של המועמד"
-      >
-        <NotebookPen className="w-4 h-4" />
-        הערה
-      </Button>
+      {size === "icon" ? (
+        // בשורת טבלה: אייקון בלבד, כמו כפתורי הטלפון והוואטסאפ שלידו
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            setOpen(true);
+          }}
+          className="p-1.5 rounded-lg text-gray-400 hover:text-violet-600 hover:bg-violet-50 transition-colors"
+          title="הערה — הוסף הערה וצפה בהיסטוריה של המועמד"
+          aria-label="הערה"
+        >
+          <NotebookPen className="w-4 h-4" />
+        </button>
+      ) : (
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={(e) => {
+            e.stopPropagation();
+            setOpen(true);
+          }}
+          className={`gap-1.5 border-violet-300 text-violet-700 hover:bg-violet-50 ${
+            size === "xs" ? "h-7 px-2 text-xs" : ""
+          }`}
+          title="הוסף הערה וצפה בהיסטוריה של המועמד"
+        >
+          <NotebookPen className="w-4 h-4" />
+          הערה
+        </Button>
+      )}
 
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent

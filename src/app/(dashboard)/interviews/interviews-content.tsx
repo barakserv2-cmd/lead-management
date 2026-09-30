@@ -112,7 +112,7 @@ const INTERVIEW_STATUSES: LeadStatusValue[] = [
   LeadStatus.LOST_CONTACT,
 ];
 
-type Range = "today" | "yesterday" | "tomorrow" | "week" | "upcoming" | "past" | "all";
+type Range = "today" | "yesterday" | "tomorrow" | "week" | "upcoming" | "awaiting" | "past" | "all";
 
 const RANGE_LABELS: Record<Range, string> = {
   today: "היום",
@@ -120,9 +120,17 @@ const RANGE_LABELS: Record<Range, string> = {
   tomorrow: "מחר",
   week: "7 ימים",
   upcoming: "כל הקרובים",
+  awaiting: "ממתינים לתוצאה",
   past: "עברו",
   all: "הכל",
 };
+
+// ראיון שהמועד שלו עבר והסטטוס עדיין "ראיון נקבע" / "דחה הגעה" — איש לא רשם
+// מה קרה בו. ברירת המחדל "כל הקרובים" מסתירה אותם, ולכן הם נשכחו.
+const AWAITING_STATUSES = new Set<string>([LeadStatus.INTERVIEW_BOOKED, LeadStatus.POSTPONED_ARRIVAL]);
+function isAwaitingOutcome(r: InterviewRow, today: string): boolean {
+  return !r.postponedOriginal && AWAITING_STATUSES.has(r.status) && wallDateKey(r.interview_date) < today;
+}
 
 export function InterviewsContent({
   rows,
@@ -172,6 +180,7 @@ export function InterviewsContent({
       if (range === "week" && (key < today || key > addDays(today, 7))) return false;
       if (range === "upcoming" && key < today) return false;
       if (range === "past" && key >= today) return false;
+      if (range === "awaiting" && !isAwaitingOutcome(r, today)) return false;
       }
       // handled interviews leave the work queue (unless explicitly shown, or
       // the recruiter filtered to that exact status)
@@ -209,6 +218,7 @@ export function InterviewsContent({
 
   const todayCount = rows.filter((r) => wallDateKey(r.interview_date) === today).length;
   const upcomingCount = rows.filter((r) => wallDateKey(r.interview_date) >= today).length;
+  const awaitingCount = rows.filter((r) => isAwaitingOutcome(r, today)).length;
 
   const exportUrl = (() => {
     const p = new URLSearchParams({ type: "interviews" });
@@ -246,7 +256,7 @@ export function InterviewsContent({
     <div dir="rtl" className="max-w-6xl">
       <div className="flex flex-wrap items-end justify-between gap-3 mb-5">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">{title}</h1>
+          <h1 className="text-xl font-semibold text-gray-900 tracking-tight text-slate-900">{title}</h1>
           <p className="text-sm text-slate-500 mt-1">
             <span className="font-semibold text-slate-700">{todayCount}</span> היום ·{" "}
             <span className="font-semibold text-slate-700">{upcomingCount}</span> קרובים · לוח משותף לכל המחלקות
@@ -364,6 +374,15 @@ export function InterviewsContent({
             }`}
           >
             {RANGE_LABELS[r]}
+            {r === "awaiting" && awaitingCount > 0 && (
+              <span
+                className={`ms-1.5 inline-flex min-w-5 h-5 px-1 items-center justify-center rounded-md text-[11px] font-semibold tabular-nums ${
+                  range === r ? "bg-white/20 text-white" : "bg-red-50 text-red-700 ring-1 ring-inset ring-red-200"
+                }`}
+              >
+                {awaitingCount}
+              </span>
+            )}
           </button>
         ))}
       </div>
@@ -467,7 +486,7 @@ export function InterviewsContent({
                             {r.job_title && <span className="text-sm text-slate-700 bg-slate-100 rounded px-1.5 py-0.5">{r.job_title}</span>}
                             {r.client && <span className="text-sm text-slate-600">@ {r.client}</span>}
                             {r.interview_type && (
-                              <span className="text-xs text-slate-500">{r.interview_type === "video" ? "🎥 וידאו" : r.interview_type === "phone" ? "📞 טלפוני" : "🏢 פרונטלי"}</span>
+                              <span className="text-xs text-slate-500">{r.interview_type === "video" ? "וידאו" : r.interview_type === "phone" ? "טלפוני" : "פרונטלי"}</span>
                             )}
                             {r.status === LeadStatus.POSTPONED_ARRIVAL && (
                               <span className="text-[11px] font-semibold rounded px-1.5 py-0.5 bg-teal-100 text-teal-800">
@@ -492,7 +511,7 @@ export function InterviewsContent({
                             ) : (
                               <span className="text-slate-400">אין טלפון</span>
                             )}
-                            {r.location && <span>📍 {r.location}</span>}
+                            {r.location && <span>{r.location}</span>}
                             {r.recruiter && <span>רכזת: {r.recruiter}</span>}
                             {r.source && <span className="text-slate-400">{r.source}</span>}
                           </div>
@@ -546,7 +565,7 @@ export function InterviewsContent({
                             title="שנה מועד ראיון"
                             className="h-7 inline-flex items-center whitespace-nowrap px-2 text-xs rounded-md border border-purple-300 text-purple-700 hover:bg-purple-50 transition-colors"
                           >
-                            🗓 שנה מועד
+                            שנה מועד
                           </button>
                           <InterviewMessageDialog
                             name={r.name}

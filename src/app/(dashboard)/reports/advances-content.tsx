@@ -143,12 +143,12 @@ export function AdvancesContent({ rows, workers, loadError }: { rows: AdvanceRow
     <div>
       <div className="flex flex-wrap items-end justify-between gap-3 mb-6">
         <div>
-          <h1 className="text-2xl font-bold">דוח מקדמות לדיור</h1>
+          <h1 className="text-xl font-semibold text-gray-900 tracking-tight">דוח מקדמות לדיור</h1>
           <p className="text-sm text-gray-500 mt-1">עובדים שמסומנים לשכר לניכוי סכום מהמשכורת לטובת השכירות/המגורים.</p>
         </div>
         <div className="flex gap-2">
           <a href={exportUrl} className="text-sm px-3 py-2 rounded-lg border border-gray-300 bg-white hover:bg-gray-50">⬇ ייצוא לאקסל</a>
-          <button type="button" onClick={() => setShowForm((v) => !v)} className="text-sm px-3 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700 font-semibold">
+          <button type="button" onClick={() => setShowForm((v) => !v)} className="text-sm px-3 py-2 rounded-lg bg-cyan-600 text-white hover:bg-cyan-700 font-medium">
             + סימון עובד/ת לניכוי
           </button>
         </div>
@@ -214,7 +214,7 @@ export function AdvancesContent({ rows, workers, loadError }: { rows: AdvanceRow
               <input value={notes} onChange={(e) => setNotes(e.target.value)} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" placeholder="אופציונלי" />
             </div>
             <div className="flex items-end gap-2">
-              <button type="button" onClick={submit} disabled={saving} className="flex-1 text-sm px-3 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50 font-semibold">
+              <button type="button" onClick={submit} disabled={saving} className="flex-1 text-sm px-3 py-2 rounded-lg bg-cyan-600 text-white hover:bg-cyan-700 disabled:opacity-50 font-medium">
                 {saving ? "שומר…" : "שמור"}
               </button>
               <button type="button" onClick={() => setShowForm(false)} className="text-sm px-3 py-2 rounded-lg border border-gray-300">ביטול</button>
@@ -265,7 +265,7 @@ export function AdvancesContent({ rows, workers, loadError }: { rows: AdvanceRow
         <div className="text-center py-16 text-gray-500">אין רישומים להצגה. לחצי &quot;סימון עובד/ת לניכוי&quot; כדי להוסיף.</div>
       ) : (
         <div className="grid gap-6 lg:grid-cols-[1fr_300px]">
-          <div className="bg-white rounded-xl border shadow-sm overflow-x-auto">
+          <div className="bg-white rounded-xl border border-gray-200 overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
                 <tr className="bg-gray-50 border-b text-right">
@@ -297,7 +297,7 @@ export function AdvancesContent({ rows, workers, loadError }: { rows: AdvanceRow
               </tbody>
             </table>
           </div>
-          <div className="bg-white rounded-xl border shadow-sm p-4 h-fit">
+          <div className="bg-white rounded-xl border border-gray-200 p-4 h-fit">
             <h3 className="font-semibold text-gray-800 mb-3">סיכום לפי עובד</h3>
             <ul className="divide-y text-sm">
               {perWorker.map((w) => (

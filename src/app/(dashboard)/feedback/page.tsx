@@ -74,9 +74,9 @@ export default function FeedbackPage() {
   }
 
   return (
-    <div dir="rtl" className="max-w-3xl mx-auto p-4 md:p-6 space-y-6">
+    <div dir="rtl" className="max-w-3xl mx-auto space-y-6">
       <div>
-        <h1 className="text-2xl font-bold text-[#142A3E]">דיווח בעיות</h1>
+        <h1 className="text-xl font-semibold text-gray-900 tracking-tight text-[#142A3E]">דיווח בעיות</h1>
         <p className="text-sm text-gray-500 mt-1">
           נתקלת בבעיה עם המכונה או המערכת? כתבי כאן — סער מקבל סיכום יומי ומטפל.
         </p>
@@ -110,7 +110,7 @@ export default function FeedbackPage() {
           <Button onClick={submit} disabled={sending || !text.trim()}>
             {sending ? "שולח..." : "שלח דיווח"}
           </Button>
-          {sent && <span className="text-sm text-green-600">✅ נשלח, תודה!</span>}
+          {sent && <span className="text-sm text-green-600">✓ נשלח, תודה!</span>}
         </div>
       </div>
 

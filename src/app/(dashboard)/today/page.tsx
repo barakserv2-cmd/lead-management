@@ -132,7 +132,7 @@ export default async function TodayPage({
   }));
 
   return (
-    <div dir="rtl" className="p-6 max-w-6xl mx-auto">
+    <div dir="rtl" className="max-w-6xl mx-auto">
       {/* refresh the board every 15s so handling/new leads appear near-live —
           pointless on a past day, where nothing new can land */}
       {isToday && <AutoRefresh intervalMs={15000} />}
@@ -140,7 +140,7 @@ export default async function TodayPage({
       {/* ═══ Header ═══ */}
       <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-3 mb-4">
         <div>
-          <h1 className="text-2xl font-bold text-slate-800">
+          <h1 className="text-xl font-semibold text-gray-900 tracking-tight text-slate-800">
             {isToday ? "לידים של היום" : isYesterday ? "לידים של אתמול" : "לידים לפי תאריך"}
           </h1>
           <p className="text-sm text-slate-500 mt-1">
@@ -148,7 +148,7 @@ export default async function TodayPage({
             {isToday ? " · מתעדכן אוטומטית" : ""}
           </p>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3">
           <DayNav
             selected={selectedDate}
             todayKey={todayKey}
@@ -293,7 +293,7 @@ export default async function TodayPage({
                           <div className="text-xs text-slate-500 truncate">
                             {r.job_title}
                             {r.job_title && r.location ? " · " : ""}
-                            {r.location && <span>📍 {r.location}</span>}
+                            {r.location && <span>{r.location}</span>}
                           </div>
                         )}
                       </div>

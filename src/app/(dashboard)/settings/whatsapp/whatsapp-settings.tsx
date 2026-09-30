@@ -149,7 +149,7 @@ export function WhatsAppSettings() {
           הגדרות
         </Link>
         <span className="text-gray-400">/</span>
-        <h1 className="text-2xl font-bold">הוואטסאפ שלי</h1>
+        <h1 className="text-xl font-semibold text-gray-900 tracking-tight">הוואטסאפ שלי</h1>
       </div>
 
       <div className="space-y-4 max-w-2xl">

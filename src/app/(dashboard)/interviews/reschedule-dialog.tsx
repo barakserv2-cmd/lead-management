@@ -99,7 +99,7 @@ export function RescheduleDialog({
       <div className="absolute inset-0 bg-black/40" onClick={() => !saving && onClose()} />
 
       <div
-        className="relative bg-white rounded-xl shadow-2xl border border-gray-200 w-full max-w-md mx-4 p-6"
+        className="relative bg-white rounded-xl shadow-2xl border border-gray-200 w-full max-w-md mx-4 p-6 max-h-[calc(100dvh-2rem)] overflow-y-auto"
         dir="rtl"
         onClick={(e) => e.stopPropagation()}
       >
@@ -136,7 +136,7 @@ export function RescheduleDialog({
         </p>
 
         <div className="grid grid-cols-2 gap-2 mt-4">
-          {([["phone", "📞 טלפוני"], ["in_person", "🏢 פרונטלי"], ["video", "🎥 וידאו"]] as const).map(([v, label]) => (
+          {([["phone", "טלפוני"], ["in_person", "פרונטלי"], ["video", "וידאו"]] as const).map(([v, label]) => (
             <button
               key={v}
               type="button"
@@ -167,7 +167,7 @@ export function RescheduleDialog({
             type="button"
             onClick={save}
             disabled={!canSave}
-            className="flex-1 px-4 py-2.5 bg-purple-600 text-white text-sm font-semibold rounded-lg hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            className="flex-1 px-4 py-2.5 bg-cyan-600 text-white text-sm font-medium rounded-lg hover:bg-cyan-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
           >
             {saving ? "שומר..." : unchanged ? "לא בוצע שינוי" : "עדכן מועד"}
           </button>

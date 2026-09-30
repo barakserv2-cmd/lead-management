@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import type { Lead } from "@/types/leads";
 import { validateInterviewLocal } from "@/lib/interviewTime";
+import { CANDIDATE_SEGMENTS, candidateSegmentLabel } from "@/lib/constants";
 
 /** תוויות סוג ראיון. מוגדרות כאן ולא ב-lib/booking, שמושך node:crypto. */
 const INTERVIEW_TYPE_LABELS: Record<string, string> = {
@@ -25,6 +26,9 @@ type Form = {
   rejection_reason: string;
   start_date: string;
   arrival_date: string;
+  candidate_segment: string;
+  comes_with_friend: "" | "true" | "false";
+  companion_name: string;
 };
 
 type Values = Pick<
@@ -38,6 +42,9 @@ type Values = Pick<
   | "rejection_reason"
   | "start_date"
   | "arrival_date"
+  | "candidate_segment"
+  | "comes_with_friend"
+  | "companion_name"
 >;
 
 const pad = (n: number) => String(n).padStart(2, "0");
@@ -80,6 +87,9 @@ function pick(lead: Lead): Values {
     rejection_reason: lead.rejection_reason,
     start_date: lead.start_date,
     arrival_date: lead.arrival_date,
+    candidate_segment: lead.candidate_segment ?? null,
+    comes_with_friend: lead.comes_with_friend ?? null,
+    companion_name: lead.companion_name ?? null,
   };
 }
 
@@ -93,7 +103,16 @@ function toForm(v: Values): Form {
     rejection_reason: v.rejection_reason ?? "",
     start_date: v.start_date ?? "",
     arrival_date: v.arrival_date ?? "",
+    candidate_segment: v.candidate_segment ?? "",
+    comes_with_friend: v.comes_with_friend == null ? "" : v.comes_with_friend ? "true" : "false",
+    companion_name: v.companion_name ?? "",
   };
+}
+
+function friendLabel(v: boolean | null | undefined, companion: string | null | undefined): string | null {
+  if (v == null) return null;
+  if (!v) return "מגיע לבד";
+  return companion ? `עם ${companion}` : "כן";
 }
 
 function Row({ label, value }: { label: string; value: string | null | undefined }) {
@@ -132,7 +151,7 @@ export function RecruitmentInfoSection({ lead }: { lead: Lead }) {
     setEditing(false);
   }, [lead]);
 
-  function set<K extends keyof Form>(key: K, val: string) {
+  function set<K extends keyof Form>(key: K, val: Form[K]) {
     setForm((f) => ({ ...f, [key]: val }));
   }
 
@@ -151,6 +170,10 @@ export function RecruitmentInfoSection({ lead }: { lead: Lead }) {
         rejection_reason: form.rejection_reason,
         start_date: form.start_date,
         arrival_date: form.arrival_date,
+        candidate_segment: form.candidate_segment,
+        comes_with_friend: form.comes_with_friend,
+        // שם החבר רלוונטי רק כשמגיעים עם חבר
+        companion_name: form.comes_with_friend === "true" ? form.companion_name : "",
       };
       const res = await fetch(`/api/leads/${lead.id}`, {
         method: "PATCH",
@@ -231,6 +254,8 @@ export function RecruitmentInfoSection({ lead }: { lead: Lead }) {
             <Row label="סיבת דחייה" value={values.rejection_reason} />
             <Row label="תאריך התחלה" value={formatDate(values.start_date)} />
             <Row label="תאריך הגעה" value={formatDate(values.arrival_date)} />
+            <Row label="סוג מועמד" value={values.candidate_segment ? candidateSegmentLabel(values.candidate_segment) : null} />
+            <Row label="מגיע עם חבר" value={friendLabel(values.comes_with_friend, values.companion_name)} />
           </>
         ) : (
           <>
@@ -259,6 +284,30 @@ export function RecruitmentInfoSection({ lead }: { lead: Lead }) {
             <Field label="תאריך הגעה">
               <input type="date" value={form.arrival_date} onChange={(e) => set("arrival_date", e.target.value)} className={inputCls} dir="ltr" />
             </Field>
+            <Field label="סוג מועמד">
+              <select value={form.candidate_segment} onChange={(e) => set("candidate_segment", e.target.value)} className={inputCls}>
+                <option value="">לא סומן</option>
+                {CANDIDATE_SEGMENTS.map((s) => (
+                  <option key={s.code} value={s.code}>{s.label}</option>
+                ))}
+              </select>
+            </Field>
+            <Field label="מגיע עם חבר">
+              <select
+                value={form.comes_with_friend}
+                onChange={(e) => set("comes_with_friend", e.target.value as Form["comes_with_friend"])}
+                className={inputCls}
+              >
+                <option value="">לא ידוע</option>
+                <option value="true">כן</option>
+                <option value="false">לא, מגיע לבד</option>
+              </select>
+            </Field>
+            {form.comes_with_friend === "true" && (
+              <Field label="שם החבר">
+                <input type="text" value={form.companion_name} onChange={(e) => set("companion_name", e.target.value)} className={inputCls} placeholder="עם מי הוא מגיע" />
+              </Field>
+            )}
           </>
         )}
       </div>

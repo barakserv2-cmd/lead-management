@@ -133,23 +133,26 @@ export function LeadSheet({
   const [displayExperience, setDisplayExperience] = useState<string | null>(null);
   const [displayAge, setDisplayAge] = useState<number | null>(null);
 
-  // Sync display state when lead changes
-  useEffect(() => {
-    if (!lead) return;
-    setDisplayName(lead.name);
-    setDisplayPhone(lead.phone);
-    setDisplayEmail(lead.email);
-    setDisplayJobTitle(lead.job_title);
-    setDisplayLocation(lead.location);
-    setDisplayExperience(lead.experience);
-    setDisplayAge(lead.age);
-  }, [lead]);
+  // Sync display state when lead changes (adjusted during render, not in an effect)
+  const [prevLead, setPrevLead] = useState<SheetLead | null>(null);
+  if (lead !== prevLead) {
+    setPrevLead(lead);
+    if (lead) {
+      setDisplayName(lead.name);
+      setDisplayPhone(lead.phone);
+      setDisplayEmail(lead.email);
+      setDisplayJobTitle(lead.job_title);
+      setDisplayLocation(lead.location);
+      setDisplayExperience(lead.experience);
+      setDisplayAge(lead.age);
+      setLoading(true); // the notes fetch below starts for this lead
+    }
+  }
 
   // Fetch fresh notes from DB when sheet opens
   useEffect(() => {
     if (!lead) return;
     let cancelled = false;
-    setLoading(true);
     getLeadNotes(lead.id).then((result) => {
       if (cancelled) return;
       setNotes(result.notes ?? "");

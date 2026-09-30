@@ -96,7 +96,7 @@ export function SentToInterviewDialog({
       <div className="absolute inset-0 bg-black/40" onClick={() => !saving && onCancel()} />
 
       <div
-        className="relative bg-white rounded-xl shadow-2xl border border-gray-200 w-full max-w-md mx-4 p-6"
+        className="relative bg-white rounded-xl shadow-2xl border border-gray-200 w-full max-w-md mx-4 p-6 max-h-[calc(100dvh-2rem)] overflow-y-auto"
         dir="rtl"
         onClick={(e) => e.stopPropagation()}
       >
@@ -135,7 +135,7 @@ export function SentToInterviewDialog({
         <p className={`mt-1 text-xs ${timeError ? "text-red-600" : "text-gray-500"}`}>
           {timeError ??
             (otherDay
-              ? "🔔 הראיון ביום אחר — תיפתח תזכורת שעה לפניו"
+              ? "הראיון ביום אחר — תיפתח תזכורת שעה לפניו"
               : "הראיון היום — לא נפתחת תזכורת")}
         </p>
 
@@ -144,7 +144,7 @@ export function SentToInterviewDialog({
             type="button"
             onClick={save}
             disabled={!canSave}
-            className="flex-1 px-4 py-2.5 bg-indigo-600 text-white text-sm font-semibold rounded-lg hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            className="flex-1 px-4 py-2.5 bg-cyan-600 text-white text-sm font-medium rounded-lg hover:bg-cyan-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
           >
             {saving ? "שומר..." : "שמור"}
           </button>

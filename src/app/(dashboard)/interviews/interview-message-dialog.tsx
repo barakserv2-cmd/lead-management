@@ -55,13 +55,13 @@ export function InterviewMessageDialog({ name, phone, interviewDate, jobTitle, i
         className="h-7 inline-flex items-center whitespace-nowrap text-xs px-2 rounded-md border border-emerald-300 bg-emerald-50 text-emerald-800 font-semibold hover:bg-emerald-100 transition-colors"
         title="הודעת אישור ראיון מוכנה לוואטסאפ"
       >
-        📩 אישור
+        אישור
       </button>
 
       {open && (
         <div className="fixed inset-0 z-[200] flex items-center justify-center">
           <div className="absolute inset-0 bg-black/40" onClick={() => setOpen(false)} />
-          <div dir="rtl" className="relative bg-white rounded-xl shadow-2xl border border-slate-200 w-full max-w-lg mx-4 p-5">
+          <div dir="rtl" className="relative bg-white rounded-xl shadow-2xl border border-slate-200 w-full max-w-lg mx-4 p-5 max-h-[calc(100dvh-2rem)] overflow-y-auto">
             <div className="flex items-start justify-between gap-3 mb-3">
               <div>
                 <h3 className="text-lg font-bold text-slate-900">הודעת אישור ראיון</h3>

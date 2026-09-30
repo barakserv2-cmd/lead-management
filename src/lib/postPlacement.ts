@@ -12,8 +12,11 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { getAccountForEmail, sendWhatsAppMessage, businessAccount } from "@/lib/whatsappService";
 import { LeadStatus } from "@/lib/stateMachine";
+import { GUARANTEE_PREFIX, GUARANTEE_FLAG_TTL_DAYS } from "@/lib/attention";
 
-export const CHECKIN_DAYS = [3, 14, 30] as const;
+// 60 ו-90: רוב העובדים עוזבים אחרי חודש עד שלושה ("מיצו", מצאו תנאים טובים
+// יותר, אילת לא התאימה). הבדיקה ביום 60 מציעה מעבר פנימי לפני שמחליטים לעזוב.
+export const CHECKIN_DAYS = [3, 14, 30, 60, 90] as const;
 
 export function checkinOwnerEmail(): string {
   return (process.env.CHECKIN_OWNER_EMAIL ?? "barakserv@eilatjobs.com").trim().toLowerCase();
@@ -32,7 +35,13 @@ function checkinMessage(day: number, name: string | null, client: string | null)
   if (day === 14) {
     return `היי ${n}, מלי מברק שירותים 🙂 כבר שבועיים${at} — איך אתה מרגיש? יש משהו שהיית רוצה שנשפר?`;
   }
-  return `היי ${n}! חודש${at} 🎉 כיף לראות אותך מחזיק/ה — הכל מסתדר? אני כאן אם צריך משהו.`;
+  if (day === 30) {
+    return `היי ${n}! חודש${at} 🎉 כיף לראות אותך מחזיק/ה — הכל מסתדר? אני כאן אם צריך משהו.`;
+  }
+  if (day === 60) {
+    return `היי ${n}, מלי מברק שירותים 😊 כבר חודשיים${at}! איך אתה מרגיש? אם בא לך לגוון — תפקיד אחר, מקום אחר או משמרות אחרות — ספר/י לי, יש לנו הרבה אפשרויות באילת 🙏`;
+  }
+  return `היי ${n}! שלושה חודשים${at} 🎉 זה הישג אמיתי. הכל טוב? אם יש משהו שיעזור לך להמשיך בכיף, אני כאן.`;
 }
 
 /** תאריך היום לפי לוח ישראל (YYYY-MM-DD). */
@@ -80,6 +89,23 @@ export interface CareSummary {
   checkinsSent: number;
   guaranteeAlerts: number;
   failed: number;
+  expiredFlagsCleared: number;
+}
+
+/**
+ * מכבה התראות "תקופת האחריות נגמרת" שהאחריות שלהן כבר עברה. הן מתריעות
+ * שבוע לפני הסוף; אחרי זה הן רק רעש שמסתיר דגלים אמיתיים (ראו lib/attention).
+ */
+async function clearExpiredGuaranteeFlags(db: SupabaseClient): Promise<number> {
+  const cutoff = new Date(Date.now() - GUARANTEE_FLAG_TTL_DAYS * 86_400_000).toISOString();
+  const { data } = await db
+    .from("leads")
+    .update({ needs_attention: false, needs_attention_at: null, attention_reason: null })
+    .eq("needs_attention", true)
+    .like("attention_reason", `${GUARANTEE_PREFIX}%`)
+    .lt("needs_attention_at", cutoff)
+    .select("id");
+  return data?.length ?? 0;
 }
 
 /** ימי אחריות אפקטיביים פר-מלון: דריסה בטבלת clients או ברירת המחדל. */
@@ -98,7 +124,8 @@ async function guaranteeDaysMap(
 }
 
 export async function runPostPlacementCare(db: SupabaseClient): Promise<CareSummary> {
-  const summary: CareSummary = { checkinsSent: 0, guaranteeAlerts: 0, failed: 0 };
+  const summary: CareSummary = { checkinsSent: 0, guaranteeAlerts: 0, failed: 0, expiredFlagsCleared: 0 };
+  summary.expiredFlagsCleared = await clearExpiredGuaranteeFlags(db);
   const today = israelToday();
   const leads = await placedLeads(db);
   if (leads.length === 0) return summary;
@@ -110,7 +137,7 @@ export async function runPostPlacementCare(db: SupabaseClient): Promise<CareSumm
   // כדגלים). ברגע שהמספר מקושר ב"הוואטסאפ שלי" — הכל נדלק לבד.
   const sender = await getAccountForEmail(owner);
 
-  // ── Check-ins בימים 3/14/30 ────────────────────────────────
+  // ── Check-ins בימים CHECKIN_DAYS ───────────────────────────
   const candidates: { lead: PlacedLead; day: number; key: string }[] = [];
   for (const lead of leads) {
     if (!sender) break;

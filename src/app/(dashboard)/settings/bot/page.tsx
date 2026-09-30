@@ -62,8 +62,8 @@ export default async function BotSettingsPage() {
   const sources = (process.env.SCREENING_BOT_SOURCES ?? "").trim() || "— לא הוגדרו —";
 
   return (
-    <div className="p-6 max-w-4xl" dir="rtl">
-      <h1 className="text-2xl font-bold text-gray-900 mb-1">בוט הסינון</h1>
+    <div className="max-w-4xl" dir="rtl">
+      <h1 className="text-xl font-semibold text-gray-900 tracking-tight mb-1">בוט הסינון</h1>
       <p className="text-sm text-gray-500 mb-6">
         מסך בקרה — המתגים עצמם מוגדרים ב-Environment Variables של Vercel.
       </p>

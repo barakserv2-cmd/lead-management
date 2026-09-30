@@ -35,6 +35,7 @@ export function HiredConfirmDialog({
   useEffect(() => {
     if (!open) return;
     let cancelled = false;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- marks the getOpenJobs request below as in flight; must run after the opening commit so the job search input mounts enabled and receives autoFocus
     setJobsLoading(true);
     getOpenJobs().then((res) => {
       if (cancelled) return;
@@ -83,7 +84,7 @@ export function HiredConfirmDialog({
       <div className="absolute inset-0 bg-black/40" onClick={handleCancel} />
 
       <div
-        className="relative bg-white rounded-xl shadow-2xl border border-gray-200 w-full max-w-md mx-4 p-6"
+        className="relative bg-white rounded-xl shadow-2xl border border-gray-200 w-full max-w-md mx-4 p-6 max-h-[calc(100dvh-2rem)] overflow-y-auto"
         dir="rtl"
       >
         <div className="flex items-center gap-3 mb-5">

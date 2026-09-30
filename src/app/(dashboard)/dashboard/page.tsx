@@ -69,28 +69,33 @@ export default async function DashboardPage() {
     .sort((a, b) => b.count - a.count);
 
   const cards = [
-    { label: "סה״כ לידים", value: totalCount ?? 0, color: "bg-gradient-to-br from-purple-50 to-purple-100 text-purple-700" },
-    { label: STATUS_LABELS[LEAD_STATUSES.NEW_LEAD], value: newCount ?? 0, color: "bg-gradient-to-br from-blue-50 to-blue-100 text-blue-700" },
-    { label: STATUS_LABELS[LEAD_STATUSES.CONTACTED], value: contactedCount ?? 0, color: "bg-gradient-to-br from-cyan-50 to-cyan-100 text-cyan-700" },
-    { label: STATUS_LABELS[LEAD_STATUSES.SCREENING_IN_PROGRESS], value: screeningCount ?? 0, color: "bg-gradient-to-br from-orange-50 to-orange-100 text-orange-700" },
-    { label: STATUS_LABELS[LEAD_STATUSES.INTERVIEW_BOOKED], value: interviewBookedCount ?? 0, color: "bg-gradient-to-br from-purple-50 to-purple-100 text-purple-700" },
-    { label: STATUS_LABELS[LEAD_STATUSES.HIRED], value: hiredCount ?? 0, color: "bg-gradient-to-br from-green-50 to-green-100 text-green-700" },
-    { label: STATUS_LABELS[LEAD_STATUSES.NOT_ACCEPTED], value: notAcceptedCount ?? 0, color: "bg-gradient-to-br from-pink-50 to-pink-100 text-pink-700" },
-    { label: STATUS_LABELS[LEAD_STATUSES.REJECTED], value: rejectedCount ?? 0, color: "bg-gradient-to-br from-gray-50 to-gray-100 text-gray-700" },
+    { label: "סה״כ לידים", value: totalCount ?? 0, dot: "bg-purple-500" },
+    { label: STATUS_LABELS[LEAD_STATUSES.NEW_LEAD], value: newCount ?? 0, dot: "bg-blue-500" },
+    { label: STATUS_LABELS[LEAD_STATUSES.CONTACTED], value: contactedCount ?? 0, dot: "bg-cyan-500" },
+    { label: STATUS_LABELS[LEAD_STATUSES.SCREENING_IN_PROGRESS], value: screeningCount ?? 0, dot: "bg-orange-500" },
+    { label: STATUS_LABELS[LEAD_STATUSES.INTERVIEW_BOOKED], value: interviewBookedCount ?? 0, dot: "bg-purple-500" },
+    { label: STATUS_LABELS[LEAD_STATUSES.HIRED], value: hiredCount ?? 0, dot: "bg-green-500" },
+    { label: STATUS_LABELS[LEAD_STATUSES.NOT_ACCEPTED], value: notAcceptedCount ?? 0, dot: "bg-pink-500" },
+    { label: STATUS_LABELS[LEAD_STATUSES.REJECTED], value: rejectedCount ?? 0, dot: "bg-gray-500" },
   ];
 
   return (
     <div>
-      <h1 className="text-2xl font-bold mb-1">דשבורד</h1>
+      <h1 className="text-xl font-semibold text-gray-900 tracking-tight mb-1">דשבורד</h1>
       <p className="text-sm text-gray-500 mb-6">סיכום פעילות הגיוס</p>
-      <div className="grid grid-cols-1 md:grid-cols-4 lg:grid-cols-8 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-8 gap-3">
         {cards.map((card) => (
           <div
             key={card.label}
-            className={`${card.color} rounded-xl p-6 border`}
+            className="bg-white rounded-xl border border-gray-200 p-4"
           >
-            <p className="text-sm font-medium opacity-80">{card.label}</p>
-            <p className="text-3xl font-bold mt-2">{card.value}</p>
+            <p className="flex items-center gap-1.5 text-[13px] font-medium text-gray-500">
+              <span className={`w-1.5 h-1.5 rounded-full ${card.dot}`} />
+              {card.label}
+            </p>
+            <p className="text-2xl font-semibold tracking-tight text-gray-900 tabular-nums mt-1.5">
+              {card.value.toLocaleString("he-IL")}
+            </p>
           </div>
         ))}
       </div>

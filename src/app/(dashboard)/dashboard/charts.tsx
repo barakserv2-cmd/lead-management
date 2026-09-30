@@ -31,7 +31,7 @@ export function LeadsPerDayChart({
   data: { day: string; count: number }[];
 }) {
   return (
-    <div className="bg-white rounded-xl shadow-sm border p-6">
+    <div className="bg-white rounded-xl border border-gray-200 p-6">
       <h2 className="text-lg font-semibold mb-4">לידים לפי יום</h2>
       <div className="h-72">
         <ResponsiveContainer width="100%" height="100%">
@@ -71,7 +71,7 @@ export function LeadsBySourceChart({
   data: { source: string; count: number }[];
 }) {
   return (
-    <div className="bg-white rounded-xl shadow-sm border p-6">
+    <div className="bg-white rounded-xl border border-gray-200 p-6">
       <h2 className="text-lg font-semibold mb-4">לידים לפי מקור</h2>
       <div className="h-72">
         <ResponsiveContainer width="100%" height="100%">

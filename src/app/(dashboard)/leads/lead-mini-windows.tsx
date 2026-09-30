@@ -216,12 +216,12 @@ function LeadMiniWindow({
   return (
     <div
       className={`flex flex-col bg-white rounded-t-xl shadow-2xl border border-gray-200 overflow-hidden transition-all duration-200 ${
-        minimized ? "w-[240px]" : "w-[360px] h-[480px]"
+        minimized ? "w-[240px] max-w-[calc(100vw-2rem)]" : "w-[360px] max-w-[calc(100vw-2rem)] h-[480px] max-h-[calc(100dvh-5rem)]"
       }`}
     >
       {/* Header */}
       <div
-        className="flex items-center gap-2 px-3 py-2 bg-gradient-to-l from-cyan-600 to-cyan-700 text-white cursor-pointer select-none flex-shrink-0"
+        className="flex items-center gap-2 px-3 py-2 bg-gray-900 text-white cursor-pointer select-none flex-shrink-0"
         onClick={onToggleMinimize}
       >
         <span className="w-7 h-7 rounded-full bg-white/20 flex items-center justify-center text-[10px] font-bold flex-shrink-0">

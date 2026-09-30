@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { HardHat, Home, Repeat, Filter, ShieldCheck, Folder, Wallet, Anchor, MapPin, type LucideIcon } from "lucide-react";
 import { getAuthedUser, getSupabaseAdmin } from "@/lib/api-auth";
 import { LEAD_STATUSES } from "@/lib/constants";
 import type { Lead } from "@/types/leads";
@@ -8,23 +9,39 @@ import { TransfersContent, type TransferRow } from "./transfers-content";
 import { FunnelContent } from "./funnel-content";
 import { FinanceContent } from "./finance-content";
 import { GuaranteeContent } from "./guarantee-content";
+import { RetentionContent } from "./retention-content";
+import { ArrivalContent } from "./arrival-content";
 import { computeAnalytics, computeFinance } from "@/lib/analytics";
 import { computeGuaranteeReport } from "@/lib/postPlacement";
+import { computeRetention } from "@/lib/retention";
+import { computeEmploymentCheck } from "@/lib/employmentCheck";
+import { computeArrivals } from "@/lib/arrival";
 import { isFinanceUser } from "@/lib/finance";
 import { computeSourceFolders } from "@/lib/sourceFolders";
 import { FoldersView } from "../leads/folders-view";
 
 export const dynamic = "force-dynamic";
 
-type Tab = "hired" | "advances" | "transfers" | "funnel" | "finance" | "guarantee" | "sources";
+type Tab =
+  | "hired"
+  | "advances"
+  | "transfers"
+  | "funnel"
+  | "finance"
+  | "guarantee"
+  | "arrival"
+  | "retention"
+  | "sources";
 
-const TABS: { key: Tab; label: string; icon: string }[] = [
-  { key: "hired", label: "דוח מועסקים", icon: "👷" },
-  { key: "advances", label: "דוח מקדמות לדיור", icon: "🏠" },
-  { key: "transfers", label: "דוח העברות בין עבודות", icon: "🔁" },
-  { key: "funnel", label: "משפך", icon: "📉" },
-  { key: "guarantee", label: "אחריות", icon: "🛡️" },
-  { key: "sources", label: "תיקיות לפי גורם גיוס", icon: "📁" },
+const TABS: { key: Tab; label: string; icon: LucideIcon }[] = [
+  { key: "hired", label: "דוח מועסקים", icon: HardHat },
+  { key: "advances", label: "דוח מקדמות לדיור", icon: Home },
+  { key: "transfers", label: "דוח העברות בין עבודות", icon: Repeat },
+  { key: "funnel", label: "משפך", icon: Filter },
+  { key: "guarantee", label: "אחריות", icon: ShieldCheck },
+  { key: "arrival", label: "הגעה", icon: MapPin },
+  { key: "retention", label: "שימור", icon: Anchor },
+  { key: "sources", label: "תיקיות לפי גורם גיוס", icon: Folder },
 ];
 
 /** ברירת מחדל: 30 הימים האחרונים, לפי לוח ישראל. */
@@ -33,6 +50,22 @@ function defaultRange(): { from: string; to: string } {
   const d = new Date(`${today}T00:00:00Z`);
   d.setUTCDate(d.getUTCDate() - 30);
   return { from: d.toISOString().slice(0, 10), to: today };
+}
+
+// חצות לפי שעון ישראל כרגע UTC — נכון גם בשעון חורף (+02:00) וגם בקיץ
+// (+03:00). היסט קבוע של +03:00 הזיז בחורף כל טווח בשעה.
+function ilDayStartUTC(dateStr: string): Date {
+  const noon = new Date(`${dateStr}T12:00:00Z`);
+  const offsetMs =
+    new Date(noon.toLocaleString("en-US", { timeZone: "Asia/Jerusalem" })).getTime() -
+    new Date(noon.toLocaleString("en-US", { timeZone: "UTC" })).getTime();
+  return new Date(new Date(`${dateStr}T00:00:00Z`).getTime() - offsetMs);
+}
+
+function shiftDays(dateStr: string, days: number): string {
+  const d = new Date(`${dateStr}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + days);
+  return d.toISOString().slice(0, 10);
 }
 
 export default async function ReportsPage({
@@ -45,7 +78,10 @@ export default async function ReportsPage({
   const authed = await getAuthedUser();
   const financeAllowed = isFinanceUser(authed?.email);
   const tab: Tab =
-    rawTab === "advances" || rawTab === "transfers" || rawTab === "funnel" || rawTab === "guarantee" || rawTab === "sources"
+    rawTab === "advances" || rawTab === "transfers" || rawTab === "funnel" || rawTab === "guarantee" ||
+    rawTab === "arrival" ||
+    rawTab === "retention" ||
+    rawTab === "sources"
       ? rawTab
       : rawTab === "finance" && financeAllowed
         ? "finance"
@@ -56,8 +92,8 @@ export default async function ReportsPage({
   const from = /^\d{4}-\d{2}-\d{2}$/.test(rawFrom ?? "") ? rawFrom! : dr.from;
   const to = /^\d{4}-\d{2}-\d{2}$/.test(rawTo ?? "") ? rawTo! : dr.to;
   // גבולות יום לפי שעון ישראל — created_at הוא זמן אמת
-  const fromIso = new Date(`${from}T00:00:00+03:00`).toISOString();
-  const toIso = new Date(`${to}T23:59:59+03:00`).toISOString();
+  const fromIso = ilDayStartUTC(from).toISOString();
+  const toIso = new Date(ilDayStartUTC(shiftDays(to, 1)).getTime() - 1).toISOString();
 
   // Placed workers — the pick-list for both entry forms.
   const workersPromise =
@@ -76,11 +112,44 @@ export default async function ReportsPage({
     const folders = await computeSourceFolders(supabase);
     content = <FoldersView folders={folders} />;
   } else if (tab === "funnel") {
-    const analytics = await computeAnalytics(supabase, fromIso, toIso);
-    content = <FunnelContent data={analytics} from={from} to={to} />;
+    // תקופת השוואה: אותו מספר ימים, מיד לפני התקופה הנבחרת
+    const days = Math.round((ilDayStartUTC(to).getTime() - ilDayStartUTC(from).getTime()) / 86_400_000) + 1;
+    const prevTo = shiftDays(from, -1);
+    const prevFrom = shiftDays(prevTo, -(days - 1));
+    const [analytics, prev, { data: profiles }] = await Promise.all([
+      computeAnalytics(supabase, fromIso, toIso),
+      computeAnalytics(
+        supabase,
+        ilDayStartUTC(prevFrom).toISOString(),
+        new Date(ilDayStartUTC(from).getTime() - 1).toISOString()
+      ),
+      supabase.from("user_profiles").select("name, email"),
+    ]);
+    // שם תצוגה לרכזת במקום האימייל
+    const recruiterNames: Record<string, string> = {};
+    for (const p of (profiles ?? []) as { name: string | null; email: string | null }[]) {
+      if (p.email && p.name && !p.name.includes("@")) recruiterNames[p.email.toLowerCase()] = p.name;
+    }
+    content = (
+      <FunnelContent
+        data={analytics}
+        prev={prev}
+        from={from}
+        to={to}
+        prevFrom={prevFrom}
+        prevTo={prevTo}
+        recruiterNames={recruiterNames}
+      />
+    );
   } else if (tab === "guarantee") {
     const rows = await computeGuaranteeReport(supabase);
     content = <GuaranteeContent rows={rows} />;
+  } else if (tab === "arrival") {
+    const report = await computeArrivals(supabase);
+    content = <ArrivalContent data={report} />;
+  } else if (tab === "retention") {
+    const [report, check] = await Promise.all([computeRetention(supabase), computeEmploymentCheck(supabase)]);
+    content = <RetentionContent data={report} check={check} />;
   } else if (tab === "finance") {
     const analytics = await computeAnalytics(supabase, fromIso, toIso);
     const finance = await computeFinance(supabase, fromIso, toIso, analytics.sources);
@@ -180,20 +249,26 @@ export default async function ReportsPage({
 
   return (
     <div dir="rtl">
-      <div className="flex items-center gap-1 mb-6 bg-gray-100 rounded-lg p-1 w-fit">
-        {[...TABS, ...(financeAllowed ? [{ key: "finance" as Tab, label: "כספים", icon: "💰" }] : [])].map((t) => (
-          <Link
-            key={t.key}
-            href={`/reports?tab=${t.key}`}
-            className={`px-4 py-2 rounded-md text-sm font-semibold transition-colors ${
-              tab === t.key ? "bg-white text-gray-900 shadow-sm" : "text-gray-500 hover:text-gray-800"
-            }`}
-          >
-            <span className="ml-1.5">{t.icon}</span>
-            {t.label}
-          </Link>
-        ))}
-      </div>
+      <h1 className="text-xl font-semibold text-gray-900 tracking-tight mb-4">דוחות</h1>
+      <nav className="flex items-center gap-6 mb-6 border-b border-gray-200 overflow-x-auto" aria-label="סוגי דוחות">
+        {[...TABS, ...(financeAllowed ? [{ key: "finance" as Tab, label: "כספים", icon: Wallet }] : [])].map((t) => {
+          const Icon = t.icon;
+          const isActive = tab === t.key;
+          return (
+            <Link
+              key={t.key}
+              href={`/reports?tab=${t.key}`}
+              aria-current={isActive ? "page" : undefined}
+              className={`-mb-px flex items-center gap-1.5 whitespace-nowrap pb-2.5 pt-1 text-[13px] font-medium border-b-2 transition-colors ${
+                isActive ? "border-gray-900 text-gray-900" : "border-transparent text-gray-500 hover:text-gray-800"
+              }`}
+            >
+              <Icon className={`w-4 h-4 ${isActive ? "text-cyan-600" : "text-gray-400"}`} strokeWidth={1.75} />
+              {t.label}
+            </Link>
+          );
+        })}
+      </nav>
       {content}
     </div>
   );

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useEffect, useLayoutEffect } from "react";
+import { useState, useRef, useEffect, useLayoutEffect, useSyncExternalStore } from "react";
 import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import { changeLeadStatus } from "@/lib/changeLeadStatusClient";
@@ -13,7 +13,14 @@ import {
   getAllowedTransitions,
   type LeadStatusValue,
 } from "@/lib/stateMachine";
-import { SUB_STATUSES, NO_ANSWER_3, NOT_AVAILABLE_NOW, SENT_TO_INTERVIEW, FOLLOW_UP } from "@/lib/constants";
+import {
+  SUB_STATUSES,
+  NO_ANSWER_3,
+  NOT_AVAILABLE_NOW,
+  SENT_TO_INTERVIEW,
+  FOLLOW_UP,
+  noArrivalReasonLabel,
+} from "@/lib/constants";
 
 const SUB_STATUS_DIALOG_CONFIG: Partial<Record<LeadStatusValue, SubStatusPickerConfig>> = {
   [LeadStatus.CONTACTED]: {
@@ -32,7 +39,8 @@ const SUB_STATUS_DIALOG_CONFIG: Partial<Record<LeadStatusValue, SubStatusPickerC
 };
 import { InterviewScheduleDialog } from "./interview-schedule-dialog";
 import { HiredConfirmDialog } from "./hired-confirm-dialog";
-import { EmploymentEndDialog } from "./employment-end-dialog";
+import { EmploymentEndDialog, type EmploymentEndData } from "./employment-end-dialog";
+import { NoArrivalDialog, type NoArrivalData } from "./no-arrival-dialog";
 import { SubStatusPickerDialog, type SubStatusPickerConfig } from "./sub-status-picker-dialog";
 import { RejectionReasonDialog } from "./rejection-reason-dialog";
 import { StartWorkDialog } from "./start-work-dialog";
@@ -49,11 +57,15 @@ const DATE_EDITABLE_STATUSES = new Set<string>([
 // עריכת תאריך בלבד, בלי מעבר סטטוס — changeLeadStatus יוצא מוקדם כשהסטטוס
 // לא משתנה, אז הכתיבה עוברת דרך ה-PATCH של כרטיס הליד (כולל audit).
 async function patchLeadDate(leadId: string, field: string, value: string): Promise<string | null> {
+  return patchLeadFields(leadId, { [field]: value });
+}
+
+async function patchLeadFields(leadId: string, fields: Record<string, string>): Promise<string | null> {
   try {
     const res = await fetch(`/api/leads/${leadId}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ [field]: value }),
+      body: JSON.stringify(fields),
     });
     if (!res.ok) {
       const data = (await res.json().catch(() => ({}))) as { error?: string };
@@ -82,6 +94,13 @@ function getStatusStyle(status: string) {
   };
 }
 
+// true רק בדפדפן אחרי ה-hydration — בשרת וברינדור הראשון false, כך שהפורטל
+// של החלונות לא יוצר אי-התאמה בין השרת ללקוח
+const noopSubscribe = () => () => {};
+function useIsClient() {
+  return useSyncExternalStore(noopSubscribe, () => true, () => false);
+}
+
 export function StatusSelect({
   leadId,
   leadName,
@@ -100,6 +119,7 @@ export function StatusSelect({
   const [status, setStatus] = useState(currentStatus);
   const [subStatus, setSubStatus] = useState<string | null>(currentSubStatus ?? null);
   const [open, setOpen] = useState(false);
+  const isClient = useIsClient();
   const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(null);
   const [loading, setLoading] = useState(false);
   const [showInterviewDialog, setShowInterviewDialog] = useState(false);
@@ -107,6 +127,8 @@ export function StatusSelect({
   const [showHiredDialog, setShowHiredDialog] = useState(false);
   const [showEmploymentEndDialog, setShowEmploymentEndDialog] = useState(false);
   const [showRejectionDialog, setShowRejectionDialog] = useState(false);
+  // "לא הגיע" / "ביטל הגעה" — איזה מהשניים נבחר, כשהדיאלוג פתוח
+  const [noArrivalTarget, setNoArrivalTarget] = useState<LeadStatusValue | null>(null);
   const [showStartWorkDialog, setShowStartWorkDialog] = useState(false);
   const [callbackFor, setCallbackFor] = useState<string | null>(null);
   // "מעקב" מחייב מועד; "לא זמין במיידי" רק מציע אותו
@@ -226,6 +248,12 @@ export function StatusSelect({
       return;
     }
 
+    // Intercept NO_SHOW / CANCELLED_ARRIVAL — a structured reason is mandatory
+    if (newStatus === LeadStatus.NO_SHOW || newStatus === LeadStatus.CANCELLED_ARRIVAL) {
+      setNoArrivalTarget(newStatus);
+      return;
+    }
+
     // Intercept CONTACTED / NOT_SUITABLE — require a sub-status
     if (newStatus === LeadStatus.CONTACTED || newStatus === LeadStatus.NOT_SUITABLE) {
       setSubStatusDialog({ open: true, targetStatus: newStatus as LeadStatusValue });
@@ -328,19 +356,23 @@ export function StatusSelect({
     }
   }
 
-  async function handleEmploymentEndConfirm(data: { employmentEndDate: string }) {
+  async function handleEmploymentEndConfirm(data: EmploymentEndData) {
     setLoading(true);
 
-    // כבר "סיום העסקה" — רק מתקנים את התאריך
+    // כבר "סיום העסקה" — רק מתקנים את התאריך והסיבה
     if (status === LeadStatus.EMPLOYMENT_ENDED) {
-      const error = await patchLeadDate(leadId, "employment_end_date", data.employmentEndDate);
+      const error = await patchLeadFields(leadId, {
+        employment_end_date: data.employmentEndDate,
+        employment_end_reason: data.employmentEndReason,
+        employment_end_notes: data.employmentEndNotes,
+      });
       setLoading(false);
       if (error) {
         setToast({ message: error, type: "error" });
         return;
       }
       setShowEmploymentEndDialog(false);
-      setToast({ message: "תאריך סיום ההעסקה עודכן", type: "success" });
+      setToast({ message: "פרטי סיום ההעסקה עודכנו", type: "success" });
       router.refresh();
       return;
     }
@@ -350,7 +382,11 @@ export function StatusSelect({
       newStatus: LeadStatus.EMPLOYMENT_ENDED,
       userId: "user",
       notes: `סיום העסקה בתאריך ${data.employmentEndDate}`,
-      extra: { employmentEndDate: data.employmentEndDate },
+      extra: {
+        employmentEndDate: data.employmentEndDate,
+        employmentEndReason: data.employmentEndReason,
+        employmentEndNotes: data.employmentEndNotes,
+      },
     });
 
     setLoading(false);
@@ -425,6 +461,32 @@ export function StatusSelect({
     setStatus(LeadStatus.NOT_ACCEPTED);
     setSubStatus(null);
     setToast({ message: "נשמר — לא התקבל", type: "success" });
+  }
+
+  async function handleNoArrivalConfirm(data: NoArrivalData) {
+    const target = noArrivalTarget;
+    if (!target) return;
+    setLoading(true);
+
+    const result = await changeLeadStatus({
+      leadId,
+      newStatus: target,
+      userId: "user",
+      notes: `${STATUS_LABELS[target]}: ${noArrivalReasonLabel(data.noArrivalReason)}`,
+      extra: { noArrivalReason: data.noArrivalReason, noArrivalNotes: data.noArrivalNotes },
+    });
+
+    setLoading(false);
+
+    if (!result.success) {
+      setToast({ message: result.error ?? "שגיאה בעדכון", type: "error" });
+      return;
+    }
+
+    setNoArrivalTarget(null);
+    setStatus(target);
+    setSubStatus(null);
+    setToast({ message: `${STATUS_LABELS[target]} — נשמר`, type: "success" });
   }
 
   async function handleSubStatusConfirm(chosenSub: string) {
@@ -560,7 +622,7 @@ export function StatusSelect({
           type="button"
           onClick={() => setOpen(!open)}
           disabled={loading}
-          className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold cursor-pointer transition-all hover:ring-2 hover:ring-offset-1 hover:ring-gray-300 ${current.color} ${loading ? "opacity-50" : ""}`}
+          className={`inline-flex items-center gap-1.5 h-6 px-2 rounded-md text-xs font-medium cursor-pointer transition-colors bg-white text-gray-700 ring-1 ring-inset ring-gray-200 hover:bg-gray-50 hover:ring-gray-300 ${loading ? "opacity-50" : ""}`}
         >
           <span className={`w-1.5 h-1.5 rounded-full ${current.dot}`} />
           {current.label}
@@ -615,7 +677,7 @@ export function StatusSelect({
           <select
             value={subStatus ?? ""}
             onChange={(e) => handleSubStatusChange(e.target.value)}
-            className="mt-1 w-full h-6 text-[11px] border border-gray-200 rounded-md px-1.5 text-gray-600 bg-white truncate focus:outline-none focus:ring-1 focus:ring-cyan-400"
+            className="block mt-1 w-full h-6 text-[11px] border border-gray-200 rounded-md px-1.5 text-gray-600 bg-white truncate focus:outline-none focus:ring-1 focus:ring-cyan-400"
           >
             <option value="">— תת-סטטוס —</option>
             {SUB_STATUSES[status].map((sub) => (
@@ -633,91 +695,109 @@ export function StatusSelect({
         )}
       </div>
 
-      <InterviewScheduleDialog
-        open={showInterviewDialog}
-        onConfirm={handleInterviewConfirm}
-        onCancel={() => setShowInterviewDialog(false)}
-        loading={loading}
-      />
+      {/* החלונות נפתחים ישירות תחת body — לא בתוך תא הטבלה, שאחרת היו יורשים
+          ממנו את העיצוב (למשל שורה אחת בלי שבירה) ונשפכים מחוץ לחלון */}
+      {isClient &&
+        createPortal(
+          <>
+          <InterviewScheduleDialog
+            open={showInterviewDialog}
+            onConfirm={handleInterviewConfirm}
+            onCancel={() => setShowInterviewDialog(false)}
+            loading={loading}
+          />
 
-      {/* "דחה הגעה" — pick the new interview date */}
-      <InterviewScheduleDialog
-        open={showPostponeDialog}
-        onConfirm={handlePostponeConfirm}
-        onCancel={() => setShowPostponeDialog(false)}
-        loading={loading}
-      />
+          {/* "דחה הגעה" — pick the new interview date */}
+          <InterviewScheduleDialog
+            open={showPostponeDialog}
+            onConfirm={handlePostponeConfirm}
+            onCancel={() => setShowPostponeDialog(false)}
+            loading={loading}
+          />
 
-      <HiredConfirmDialog
-        open={showHiredDialog}
-        onConfirm={handleHiredConfirm}
-        onCancel={() => setShowHiredDialog(false)}
-        loading={loading}
-      />
+          <HiredConfirmDialog
+            open={showHiredDialog}
+            onConfirm={handleHiredConfirm}
+            onCancel={() => setShowHiredDialog(false)}
+            loading={loading}
+          />
 
-      {showEmploymentEndDialog && (
-        <EmploymentEndDialog
-          leadId={leadId}
-          leadName={leadName}
-          editOnly={status === LeadStatus.EMPLOYMENT_ENDED}
-          onConfirm={handleEmploymentEndConfirm}
-          onCancel={() => setShowEmploymentEndDialog(false)}
-          loading={loading}
-        />
-      )}
+          {showEmploymentEndDialog && (
+            <EmploymentEndDialog
+              leadId={leadId}
+              leadName={leadName}
+              editOnly={status === LeadStatus.EMPLOYMENT_ENDED}
+              onConfirm={handleEmploymentEndConfirm}
+              onCancel={() => setShowEmploymentEndDialog(false)}
+              loading={loading}
+            />
+          )}
 
-      {sentToInterview && (
-        <SentToInterviewDialog
-          leadId={leadId}
-          leadName={leadName ?? ""}
-          onDone={() => {
-            setSentToInterview(false);
-            setSubStatus(SENT_TO_INTERVIEW);
-            setToast({ message: "נשלח לראיון — נשמר", type: "success" });
-          }}
-          onCancel={() => setSentToInterview(false)}
-        />
-      )}
+          {noArrivalTarget && (
+            <NoArrivalDialog
+              title={STATUS_LABELS[noArrivalTarget]}
+              leadName={leadName}
+              onConfirm={handleNoArrivalConfirm}
+              onCancel={() => setNoArrivalTarget(null)}
+              loading={loading}
+            />
+          )}
 
-      {callbackFor && (
-        <CallbackReminderDialog
-          leadName={leadName}
-          reason={callbackFor}
-          onConfirm={handleCallbackConfirm}
-          onSkip={() => { setCallbackFor(null); setCallbackRequired(false); }}
-          loading={loading}
-          required={callbackRequired}
-        />
-      )}
+          {sentToInterview && (
+            <SentToInterviewDialog
+              leadId={leadId}
+              leadName={leadName ?? ""}
+              onDone={() => {
+                setSentToInterview(false);
+                setSubStatus(SENT_TO_INTERVIEW);
+                setToast({ message: "נשלח לראיון — נשמר", type: "success" });
+              }}
+              onCancel={() => setSentToInterview(false)}
+            />
+          )}
 
-      {showStartWorkDialog && (
-        <StartWorkDialog
-          leadId={leadId}
-          leadName={leadName}
-          editOnly={status === LeadStatus.STARTED}
-          onConfirm={handleStartWorkConfirm}
-          onCancel={() => setShowStartWorkDialog(false)}
-          loading={loading}
-        />
-      )}
+          {callbackFor && (
+            <CallbackReminderDialog
+              leadName={leadName}
+              reason={callbackFor}
+              onConfirm={handleCallbackConfirm}
+              onSkip={() => { setCallbackFor(null); setCallbackRequired(false); }}
+              loading={loading}
+              required={callbackRequired}
+            />
+          )}
 
-      {showRejectionDialog && (
-        <RejectionReasonDialog
-          open
-          leadName={leadName}
-          onConfirm={handleRejectionConfirm}
-          onCancel={() => setShowRejectionDialog(false)}
-          loading={loading}
-        />
-      )}
+          {showStartWorkDialog && (
+            <StartWorkDialog
+              leadId={leadId}
+              leadName={leadName}
+              editOnly={status === LeadStatus.STARTED}
+              onConfirm={handleStartWorkConfirm}
+              onCancel={() => setShowStartWorkDialog(false)}
+              loading={loading}
+            />
+          )}
 
-      <SubStatusPickerDialog
-        open={subStatusDialog.open}
-        config={subStatusDialog.targetStatus ? SUB_STATUS_DIALOG_CONFIG[subStatusDialog.targetStatus] ?? null : null}
-        onConfirm={handleSubStatusConfirm}
-        onCancel={() => setSubStatusDialog({ open: false, targetStatus: null })}
-        loading={loading}
-      />
+          {showRejectionDialog && (
+            <RejectionReasonDialog
+              open
+              leadName={leadName}
+              onConfirm={handleRejectionConfirm}
+              onCancel={() => setShowRejectionDialog(false)}
+              loading={loading}
+            />
+          )}
+
+          <SubStatusPickerDialog
+            open={subStatusDialog.open}
+            config={subStatusDialog.targetStatus ? SUB_STATUS_DIALOG_CONFIG[subStatusDialog.targetStatus] ?? null : null}
+            onConfirm={handleSubStatusConfirm}
+            onCancel={() => setSubStatusDialog({ open: false, targetStatus: null })}
+            loading={loading}
+          />
+          </>,
+          document.body,
+        )}
     </>
   );
 }

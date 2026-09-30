@@ -37,6 +37,16 @@ export interface Lead {
   start_date: string | null;
   /** set when the lead moves to EMPLOYMENT_ENDED */
   employment_end_date: string | null;
+  /** code from EMPLOYMENT_END_REASONS (00092); null on older records */
+  employment_end_reason?: string | null;
+  employment_end_notes?: string | null;
+  /** code from CANDIDATE_SEGMENTS (00093) */
+  candidate_segment?: string | null;
+  comes_with_friend?: boolean | null;
+  companion_name?: string | null;
+  /** code from NO_ARRIVAL_REASONS — kept after the lead moves on (00093) */
+  no_arrival_reason?: string | null;
+  no_arrival_notes?: string | null;
   recruitment_status: RecruitmentStatus;
   rejection_reason: string | null;
   hired_client: string | null;

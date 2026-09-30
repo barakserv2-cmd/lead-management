@@ -45,7 +45,7 @@ export function EscalationsView({ rows }: { rows: EscalationRow[] }) {
   if (items.length === 0) {
     return (
       <div className="text-center text-gray-400 py-16 bg-white border border-gray-200 rounded-xl">
-        אין כרגע אסקלציות פתוחות — גובגט מטפל בהכול 🎉
+        אין כרגע אסקלציות פתוחות — גובגט מטפל בהכול
       </div>
     );
   }
@@ -59,7 +59,7 @@ export function EscalationsView({ rows }: { rows: EscalationRow[] }) {
         >
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2 flex-wrap">
-              <span className="text-[11px] font-bold bg-red-100 text-red-700 rounded-full px-2 py-0.5">🔴 דורש התערבות</span>
+              <span className="text-[11px] font-bold bg-red-100 text-red-700 rounded-full px-2 py-0.5">דורש התערבות</span>
               <Link href={`/leads/${r.id}`} className="font-semibold text-gray-900 hover:text-blue-700 hover:underline">
                 {r.name || "ללא שם"}
               </Link>

@@ -213,7 +213,11 @@ async function handleFetchEmails(req: NextRequest) {
             const { error: repeatErr } = await supabase.rpc("record_repeat_inquiry", {
               p_lead_id: existingByPhone[0].id,
               p_channel: detectSource(email.from, email.subject, email.body),
-              p_detail: email.subject?.slice(0, 200) || null,
+              p_detail:
+                (maskyooCall
+                  ? notes ?? ""
+                  : [email.subject, job_title].filter(Boolean).join(" · ")
+                ).slice(0, 200) || null,
               p_occurrence_key: `repeat:${email.id}`,
             });
             if (repeatErr) {

@@ -185,7 +185,7 @@ export function PrivacySection({
   }
 
   return (
-    <div className="bg-white rounded-xl border shadow-sm">
+    <div className="bg-white rounded-xl border border-gray-200">
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}

@@ -232,7 +232,7 @@ export function ComposerDialog({
                 <option value="">בלי לשייך למשרה</option>
                 {openJobs.map((j) => (
                   <option key={j.id} value={j.id}>
-                    {j.urgent ? "🔥 " : ""}
+                    {j.urgent ? "דחוף · " : ""}
                     {j.title}
                     {j.client_name ? ` — ${j.client_name}` : ""}
                   </option>

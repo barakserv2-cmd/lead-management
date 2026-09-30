@@ -14,6 +14,13 @@ import { normalizeEmployerName } from "@/lib/employerNormalization";
 import { logAudit } from "@/lib/audit";
 import { setMachineConversationMode } from "@/lib/machineBridge";
 import { completeLeadReminders, REMINDER_CLEARING_STATUSES } from "@/lib/reminders";
+import { isClosedStatus } from "@/lib/attention";
+import {
+  isEmploymentEndReason,
+  employmentEndReasonLabel,
+  isNoArrivalReason,
+  noArrivalReasonLabel,
+} from "@/lib/constants";
 
 function getSupabase() {
   return createServerClient(
@@ -35,6 +42,12 @@ export interface ChangeStatusInput {
     hiredPosition?: string;
     startDate?: string;
     employmentEndDate?: string;
+    /** code from EMPLOYMENT_END_REASONS */
+    employmentEndReason?: string;
+    employmentEndNotes?: string;
+    /** code from NO_ARRIVAL_REASONS — NO_SHOW / CANCELLED_ARRIVAL */
+    noArrivalReason?: string;
+    noArrivalNotes?: string;
     interviewDate?: string;
     interviewType?: "phone" | "in_person" | "video";
     interviewNotes?: string;
@@ -53,6 +66,19 @@ const LEAD_CLOSED_STATUSES = new Set<string>([
   "REJECTED", "NOT_SUITABLE", "LOST_CONTACT", "NOT_ACCEPTED", "INVALID_PHONE",
   "EMPLOYMENT_ENDED", "NO_SHOW", "CANCELLED_ARRIVAL", "HIRED", "STARTED",
 ]);
+/** סיבת הדגל הנוכחי, או null אם אין דגל פתוח. */
+async function currentAttention(
+  supabase: ReturnType<typeof getSupabase>,
+  leadId: string
+): Promise<string | null> {
+  const { data } = await supabase
+    .from("leads")
+    .select("needs_attention, attention_reason")
+    .eq("id", leadId)
+    .maybeSingle();
+  if (!data?.needs_attention) return null;
+  return (data.attention_reason as string | null) || "ללא סיבה";
+}
 
 export interface ChangeStatusResult {
   success: boolean;
@@ -123,6 +149,16 @@ export async function changeLeadStatus(input: ChangeStatusInput): Promise<Change
     updateData.human_attention_raised_at = null;
   }
 
+  // סגירת ליד מכבה את הדגל "דורש תשומת לב" — ההחלטה כבר התקבלה. בלי זה
+  // נצברו 255 דגלים על לידים סגורים (29/09) והדגל הפסיק להגיד משהו.
+  // הסיבה נשמרת ביומן (7b) כדי שלא תיעלם.
+  const clearedAttention = isClosedStatus(newStatus) ? await currentAttention(supabase, leadId) : null;
+  if (clearedAttention) {
+    updateData.needs_attention = false;
+    updateData.needs_attention_at = null;
+    updateData.attention_reason = null;
+  }
+
   // Status-specific field updates
   // "נדחה" ו"לא התקבל" חולקים את אותו שדה סיבה — שניהם סגירה של מועמד,
   // וההפרדה ביניהם היא בסטטוס עצמו.
@@ -169,6 +205,28 @@ export async function changeLeadStatus(input: ChangeStatusInput): Promise<Change
     updateData.employment_end_date =
       extra?.employmentEndDate ??
       new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Jerusalem" }).format(new Date());
+    // סיבת העזיבה — הבסיס לדוח השימור. קוד לא מוכר נדחה ולא נשמר כטקסט חופשי.
+    if (extra?.employmentEndReason) {
+      if (!isEmploymentEndReason(extra.employmentEndReason)) {
+        return { success: false, error: `סיבת סיום לא חוקית: ${extra.employmentEndReason}` };
+      }
+      updateData.employment_end_reason = extra.employmentEndReason;
+    }
+    const endNotes = extra?.employmentEndNotes?.trim();
+    if (endNotes) updateData.employment_end_notes = endNotes;
+  }
+
+  // "לא הגיע" / "ביטל הגעה" — הסיבה נשארת על הליד גם כשהוא מתקדם הלאה
+  // (למשל תיאום הגעה מחדש), כך שדוח ההגעה יודע שהיה ניסיון שנכשל ולמה.
+  if (
+    (newStatus === LeadStatus.NO_SHOW || newStatus === LeadStatus.CANCELLED_ARRIVAL) &&
+    extra?.noArrivalReason
+  ) {
+    if (!isNoArrivalReason(extra.noArrivalReason)) {
+      return { success: false, error: `סיבת אי-הגעה לא חוקית: ${extra.noArrivalReason}` };
+    }
+    updateData.no_arrival_reason = extra.noArrivalReason;
+    updateData.no_arrival_notes = extra.noArrivalNotes?.trim() || null;
   }
 
   if (newStatus === LeadStatus.INTERVIEW_BOOKED) {
@@ -263,6 +321,30 @@ export async function changeLeadStatus(input: ChangeStatusInput): Promise<Change
     journalRows.push({
       event_type: isNotAccepted ? "לא התקבל" : "דחייה",
       event_text: `${isNotAccepted ? "סיבת אי-קבלה" : "סיבת דחייה"}: ${extra.rejectionReason}`,
+    });
+  }
+  if (newStatus === LeadStatus.EMPLOYMENT_ENDED && extra?.employmentEndReason) {
+    const endNotes = extra.employmentEndNotes?.trim();
+    journalRows.push({
+      event_type: "סיום העסקה",
+      event_text:
+        `סיבת סיום: ${employmentEndReasonLabel(extra.employmentEndReason)}` + (endNotes ? ` — ${endNotes}` : ""),
+    });
+  }
+  if (
+    (newStatus === LeadStatus.NO_SHOW || newStatus === LeadStatus.CANCELLED_ARRIVAL) &&
+    extra?.noArrivalReason
+  ) {
+    const naNotes = extra.noArrivalNotes?.trim();
+    journalRows.push({
+      event_type: newStatus === LeadStatus.NO_SHOW ? "לא הגיע" : "ביטל הגעה",
+      event_text: `סיבה: ${noArrivalReasonLabel(extra.noArrivalReason)}` + (naNotes ? ` — ${naNotes}` : ""),
+    });
+  }
+  if (clearedAttention) {
+    journalRows.push({
+      event_type: "דגל נוקה",
+      event_text: `הליד נסגר (${newStatus}) — הדגל "דורש תשומת לב" כובה. הסיבה שהייתה: ${clearedAttention}`,
     });
   }
   if (extra?.interviewNotes) journalRows.push({ event_type: "ראיון", event_text: `הערות ראיון: ${extra.interviewNotes}` });
