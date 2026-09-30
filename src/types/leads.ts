@@ -42,6 +42,8 @@ export interface Lead {
   employment_end_notes?: string | null;
   /** code from CANDIDATE_SEGMENTS (00093) */
   candidate_segment?: string | null;
+  /** איפה שמע/ה עלינו (00100, lib/leadChannel.ts) */
+  channel?: string | null;
   comes_with_friend?: boolean | null;
   companion_name?: string | null;
   /** code from NO_ARRIVAL_REASONS — kept after the lead moves on (00093) */

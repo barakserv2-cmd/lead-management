@@ -82,3 +82,27 @@ describe("classifyLead — first contact wins", () => {
     expect(classifyLead({ source: "וואטסאפ", source_number: "0738021099", manual: true })).toEqual({ channel: "גוגל ממומן", method: "וואטסאפ", campaign: null });
   });
 });
+
+import { channelFromAnswer } from "./leadChannel";
+describe("channelFromAnswer — what the candidate told Gubget", () => {
+  it.each([
+    ["חבר שלי עבד אצלכם", "חבר מביא חבר"],
+    ["כבר עבדתי אצלכם בקיץ", "עובד/ת חוזר/ת"],
+    ["חבר שלי אמר לי", "חבר מביא חבר"],
+    ["ראיתי בקבוצה בפייסבוק", "קבוצות פייסבוק"],
+    ["בפייסבוק", "פייסבוק (לפי המועמד/ת)"],
+    ["חיפשתי בגוגל", "גוגל (לפי המועמד/ת)"],
+    ["באינסטה", "אינסטגרם"],
+    ["טיקטוק", "טיקטוק (לפי המועמד/ת)"],
+    ["alljobs", "AllJobs"],
+    ["בצ'אט GPT", "צ'אט GPT"],
+    ["ראיתי מדבקה", "מדבקות"],
+    ["מהאתר שלכם", "אתר (אורגני/ישיר)"],
+  ])("%s → %s", (answer, expected) => {
+    expect(channelFromAnswer(answer)).toBe(expected);
+  });
+  it("an unclear answer stays unknown", () => {
+    expect(channelFromAnswer("לא זוכר")).toBeNull();
+    expect(channelFromAnswer("")).toBeNull();
+  });
+});

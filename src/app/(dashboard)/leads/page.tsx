@@ -242,7 +242,7 @@ export default async function LeadsPage({
   const LEAD_LIST_COLUMNS =
     "id, created_at, name, phone, phone2, email, age, location, experience, job_title, source, status, sub_status, " +
     "rejection_reason, hired_client, hired_position, start_date, arrival_date, interview_date, interview_type, " +
-    "candidate_segment, comes_with_friend, companion_name, " +
+    "candidate_segment, comes_with_friend, companion_name, channel, " +
     "interview_notes, followup_notes, notes, tags, screening_score, screening_motivation_score, " +
     "screening_fit_score, screening_availability_score, screening_experience_score, extracted_availability, " +
     "extracted_salary_expectation, extracted_location_pref, extracted_interests, needs_attention, " +

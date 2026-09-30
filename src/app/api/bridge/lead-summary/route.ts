@@ -20,7 +20,7 @@ export async function GET(req: NextRequest) {
   const db = getSupabaseAdmin();
   const { data: lead } = await db
     .from("leads")
-    .select("job_title, source, updated_at, extracted_availability, extracted_salary_expectation, extracted_location_pref, extracted_interests")
+    .select("job_title, source, channel, updated_at, extracted_availability, extracted_salary_expectation, extracted_location_pref, extracted_interests")
     .eq("phone", phone)
     .maybeSingle();
 
@@ -39,5 +39,6 @@ export async function GET(req: NextRequest) {
   if (lead.extracted_salary_expectation) parts.push(`ציפיית שכר: ${lead.extracted_salary_expectation}`);
   if (lead.extracted_interests) parts.push(`תחומי עניין: ${lead.extracted_interests}`);
 
-  return NextResponse.json({ exists: true, summary: parts.join(" · ") });
+  // channel: כדי שגובגט ישאל "איך שמעת עלינו?" רק כשהערוץ לא ידוע
+  return NextResponse.json({ exists: true, summary: parts.join(" · "), channel: lead.channel ?? null });
 }

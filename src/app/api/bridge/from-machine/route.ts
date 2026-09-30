@@ -9,6 +9,7 @@ import { hasMachineKey } from "@/lib/secrets";
 import { applyDeliveryStatus } from "@/lib/deliveryStatus";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { completeLeadReminders } from "@/lib/reminders";
+import { channelFromAnswer, isUnknownChannel } from "@/lib/leadChannel";
 
 /**
  * POST /api/bridge/from-machine — the autonomous machine ("גובגט") reports
@@ -81,6 +82,8 @@ type Body = {
   screeningScore?: number;
   // עדכוני מסירה (נמסרה / נקראה / נכשלה) להודעות שגובגט שלח
   statuses?: InStatus[];
+  // התשובה החופשית ל"איך שמעת עלינו?" (סער, 30.09)
+  heardFrom?: string;
 };
 
 // accept exactly the naive wall-clock shape v1 stores (YYYY-MM-DDTHH:mm[:ss])
@@ -115,7 +118,7 @@ export async function POST(req: NextRequest) {
   }
   const onlyStatuses =
     (body.statuses?.length ?? 0) > 0 &&
-    !body.messages?.length && !body.status && !body.escalation && !body.note && !body.interviewAt && !body.name;
+    !body.messages?.length && !body.status && !body.escalation && !body.note && !body.interviewAt && !body.name && !body.heardFrom;
   if (onlyStatuses) {
     return NextResponse.json({ ok: true, statusesApplied });
   }
@@ -271,6 +274,23 @@ export async function POST(req: NextRequest) {
   // 4. Human-attention flag — surfaces a red banner on the lead so recruiters
   //    (not just an admin phone) see they need to step in.
   let escalated = false;
+  // המועמד/ת סיפר/ה לגובגט איך שמע/ה עלינו. מחליף ערוץ רק כשהוא לא ידוע —
+  // מספר מסקיו או קוד מודעה אמינים יותר מזיכרון של מועמד/ת.
+  if (body.heardFrom && body.heardFrom.trim()) {
+    const answer = body.heardFrom.trim().slice(0, 200);
+    const mapped = channelFromAnswer(answer);
+    const { data: cur } = await db.from("leads").select("channel").eq("id", leadId).maybeSingle();
+    if (mapped && isUnknownChannel(cur?.channel as string | null)) {
+      await db.from("leads").update({ channel: mapped, channel_set_by: "candidate" }).eq("id", leadId);
+    }
+    await db.from("lead_events").insert({
+      lead_id: leadId,
+      event_type: "ערוץ",
+      event_text: `איך שמע/ה עלינו (לפי המועמד/ת): "${answer}"${mapped ? ` → ${mapped}` : ""}`,
+      created_by: "גובגט",
+    });
+  }
+
   if (body.escalation && body.escalation.reason) {
     const patch: Record<string, unknown> = {
       needs_human_attention: true,

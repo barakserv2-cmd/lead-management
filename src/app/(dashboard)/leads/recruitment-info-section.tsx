@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import type { Lead } from "@/types/leads";
 import { validateInterviewLocal } from "@/lib/interviewTime";
 import { CANDIDATE_SEGMENTS, candidateSegmentLabel } from "@/lib/constants";
+import { RECRUITER_CHANNELS } from "@/lib/leadChannel";
 
 /** תוויות סוג ראיון. מוגדרות כאן ולא ב-lib/booking, שמושך node:crypto. */
 const INTERVIEW_TYPE_LABELS: Record<string, string> = {
@@ -29,6 +30,7 @@ type Form = {
   candidate_segment: string;
   comes_with_friend: "" | "true" | "false";
   companion_name: string;
+  channel: string;
 };
 
 type Values = Pick<
@@ -45,6 +47,7 @@ type Values = Pick<
   | "candidate_segment"
   | "comes_with_friend"
   | "companion_name"
+  | "channel"
 >;
 
 const pad = (n: number) => String(n).padStart(2, "0");
@@ -90,6 +93,7 @@ function pick(lead: Lead): Values {
     candidate_segment: lead.candidate_segment ?? null,
     comes_with_friend: lead.comes_with_friend ?? null,
     companion_name: lead.companion_name ?? null,
+    channel: lead.channel ?? null,
   };
 }
 
@@ -106,6 +110,7 @@ function toForm(v: Values): Form {
     candidate_segment: v.candidate_segment ?? "",
     comes_with_friend: v.comes_with_friend == null ? "" : v.comes_with_friend ? "true" : "false",
     companion_name: v.companion_name ?? "",
+    channel: v.channel ?? "",
   };
 }
 
@@ -174,6 +179,8 @@ export function RecruitmentInfoSection({ lead }: { lead: Lead }) {
         comes_with_friend: form.comes_with_friend,
         // שם החבר רלוונטי רק כשמגיעים עם חבר
         companion_name: form.comes_with_friend === "true" ? form.companion_name : "",
+        // נשלח רק כשהשתנה — כדי לא לסמן כ"נבחר ביד" ערוץ שהמערכת קבעה
+        ...(form.channel && form.channel !== (values.channel ?? "") ? { channel: form.channel } : {}),
       };
       const res = await fetch(`/api/leads/${lead.id}`, {
         method: "PATCH",
@@ -256,6 +263,7 @@ export function RecruitmentInfoSection({ lead }: { lead: Lead }) {
             <Row label="תאריך הגעה" value={formatDate(values.arrival_date)} />
             <Row label="סוג מועמד" value={values.candidate_segment ? candidateSegmentLabel(values.candidate_segment) : null} />
             <Row label="מגיע עם חבר" value={friendLabel(values.comes_with_friend, values.companion_name)} />
+            <Row label="איך שמע/ה עלינו" value={values.channel} />
           </>
         ) : (
           <>
@@ -301,6 +309,18 @@ export function RecruitmentInfoSection({ lead }: { lead: Lead }) {
                 <option value="">לא ידוע</option>
                 <option value="true">כן</option>
                 <option value="false">לא, מגיע לבד</option>
+              </select>
+            </Field>
+            <Field label="איך שמע/ה עלינו">
+              <select value={form.channel} onChange={(e) => set("channel", e.target.value)} className={inputCls}>
+                {/* ערוץ שנקבע אוטומטית ואינו ברשימה (למשל "אתר") נשאר מוצג */}
+                {form.channel && !(RECRUITER_CHANNELS as readonly string[]).includes(form.channel) && (
+                  <option value={form.channel}>{form.channel}</option>
+                )}
+                {!form.channel && <option value="">לא סומן</option>}
+                {RECRUITER_CHANNELS.map((c) => (
+                  <option key={c} value={c}>{c}</option>
+                ))}
               </select>
             </Field>
             {form.comes_with_friend === "true" && (

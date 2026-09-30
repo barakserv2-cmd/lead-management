@@ -9,6 +9,7 @@ import { normalizeEmployerName } from "@/lib/employerNormalization";
 import { pushNameToMachine } from "@/lib/machineBridge";
 import { isEmploymentEndReason, isCandidateSegment } from "@/lib/constants";
 import { getAuthedUser } from "@/lib/api-auth";
+import { RECRUITER_CHANNELS } from "@/lib/leadChannel";
 
 // עדכון פרטי מועמד מחלון העריכה הצף. fetch+API ולא server action —
 // הדפוס הקבוע בפרויקט (Next 16 מפיל טפסים דרך server actions).
@@ -40,6 +41,8 @@ const EDITABLE_FIELDS = new Set([
   "candidate_segment",
   "comes_with_friend",
   "companion_name",
+  // ערוץ גיוס (00100) — נבחר ביד מכרטיס הליד; נשמר כ"recruiter" ולא נדרס אוטומטית
+  "channel",
   // הערות חופשיות — הוצגו בכרטיס לקריאה בלבד ולא היה שום מסך שמאפשר לתקן
   "notes",
   "followup_notes",
@@ -111,6 +114,13 @@ export async function PATCH(
       updateData.name = name;
     } else if (key === "phone") {
       updateData.phone = normalizePhone(String(value ?? ""));
+    } else if (key === "channel") {
+      const c = String(value ?? "").trim();
+      if (!(RECRUITER_CHANNELS as readonly string[]).includes(c)) {
+        return NextResponse.json({ error: "ערוץ לא מוכר" }, { status: 400 });
+      }
+      updateData.channel = c;
+      updateData.channel_set_by = "recruiter";
     } else if (key === "screening_score") {
       if (value === "" || value == null) {
         updateData.screening_score = null;

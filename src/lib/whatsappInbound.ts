@@ -24,6 +24,7 @@ import {
   matchPublication,
   recordResponse,
 } from "@/lib/fbInbound";
+import { SITE_WHATSAPP_MARKER, isUnknownChannel } from "@/lib/leadChannel";
 
 function getSupabase() {
   return createServerClient(
@@ -175,6 +176,17 @@ export async function handleInboundMessage(
 
   if (publication) {
     await recordResponse(lead.id, publication);
+  }
+
+  // כפתור הוואטסאפ באתר שולח "היי, הגעתי מהאתר..." — מסמן את הערוץ, אם
+  // עוד לא ידוע (177 פניות וואטסאפ ב-60 יום היו בלי מקור, 30.09).
+  if (isIncoming && SITE_WHATSAPP_MARKER.test(msg.text ?? "")) {
+    const { data: cur } = await supabase.from("leads").select("channel").eq("id", lead.id).maybeSingle();
+    if (isUnknownChannel(cur?.channel as string | null)) {
+      await supabase.from("leads")
+        .update({ channel: "אתר (אורגני/ישיר)", contact_method: "וואטסאפ", channel_set_by: "auto" })
+        .eq("id", lead.id);
+    }
   }
 
   // קובץ מהמועמד/ת נשמר במסמכים לפני שההודעה נרשמת, כדי שהשיחה תגיד
