@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/api-auth";
 import { normalizePhone } from "@/lib/phone";
-import { isValidStatus, validateTransition, STATUS_LABELS, type LeadStatusValue } from "@/lib/stateMachine";
+import { isValidStatus, STATUS_LABELS, type LeadStatusValue } from "@/lib/stateMachine";
+import { changeLeadStatus } from "@/lib/actions/changeLeadStatus";
+import { appendBridgeMessages, noteOnce, sameSlot, slotLabel, type InboundMessage } from "@/lib/bridgeInbound";
 import { GUBGET_SOURCE } from "@/lib/constants";
 import { closureFor } from "@/lib/israelHolidays";
 import { ensureClosuresLoaded } from "@/lib/closures";
@@ -166,36 +168,21 @@ export async function POST(req: NextRequest) {
     currentStatus = created.status;
   }
 
-  // 2. Append conversation messages (dedup on identical content already stored)
-  let appended = 0;
+  // 2. Append conversation messages. גובגט may send the same request again
+  //    (a retry); a candidate may also really answer "כן" twice. Matching on
+  //    text alone dropped every repeated answer — see findBridgeDuplicate.
+  const inbound: InboundMessage[] = [];
   for (const m of body.messages ?? []) {
     const content = (m.content ?? "").trim();
     if (!content) continue;
-    const role = m.role === "user" ? "user" : "assistant";
-    const providerMsgId = typeof m.provider_msg_id === "string" && m.provider_msg_id.trim() ? m.provider_msg_id.trim() : null;
-    const { data: dupe } = await db
-      .from("messages")
-      .select("id, provider_msg_id")
-      .eq("lead_id", leadId)
-      .eq("content", content)
-      .limit(1)
-      .maybeSingle();
-    if (dupe) {
-      // אותה הודעה נשלחה שוב מגובגט — אם הפעם יש מזהה, מחברים אותו
-      if (providerMsgId && !dupe.provider_msg_id) {
-        await db.from("messages").update({ provider_msg_id: providerMsgId, delivery_status: "sent" }).eq("id", dupe.id);
-      }
-      continue;
-    }
-    await db.from("messages").insert({
-      lead_id: leadId,
-      role,
+    inbound.push({
+      role: m.role === "user" ? "user" : "assistant",
       content,
-      ...(providerMsgId && role === "assistant" ? { provider_msg_id: providerMsgId, delivery_status: "sent" } : {}),
-      ...(m.created_at && !isNaN(Date.parse(m.created_at)) ? { created_at: new Date(m.created_at).toISOString() } : {}),
+      providerMsgId: typeof m.provider_msg_id === "string" && m.provider_msg_id.trim() ? m.provider_msg_id.trim() : null,
+      createdAt: m.created_at && !isNaN(Date.parse(m.created_at)) ? new Date(m.created_at).toISOString() : null,
     });
-    appended++;
   }
+  const appended = await appendBridgeMessages(db, leadId, inbound);
 
   // 3. Move status — through the state machine, as actor "machine". That
   //    scope is what keeps the interview-reconciliation cron (which re-pushes
@@ -217,33 +204,30 @@ export async function POST(req: NextRequest) {
     typeof body.screeningScore === "number" && body.screeningScore >= 0 && body.screeningScore <= 100
       ? Math.round(body.screeningScore)
       : null;
+  // דרך changeLeadStatus, כמו כל שינוי סטטוס אחר: היסטוריה ויומן ביקורת,
+  // איפוס תת-סטטוס, ובעיקר — ליד שרכזת הקפיאה (bot_paused) לא זז. עד 30.09
+  // הגשר כתב את הסטטוס בעצמו, והסנכרון של גובגט (כל 10 דקות) החזיר ל"נקבע
+  // ראיון" 37 ראיונות שרכזות ביטלו בחודש האחרון.
+  let statusBlockedReason: string | null = null;
   if (body.status && isValidStatus(body.status) && body.status !== currentStatus) {
     const target = body.status as LeadStatusValue;
-    const from = isValidStatus(currentStatus ?? "") ? (currentStatus as LeadStatusValue) : null;
-    const check = from
-      ? validateTransition(from, target, {
-          actor: "machine",
-          screening_score: screeningScore,
-          interview_date: validInterviewAt ? body.interviewAt : existing?.interview_date ?? null,
-          human_approval: false,
-        })
-      : { valid: true };
-    if (!check.valid) {
-      statusBlocked = check.error ?? "blocked";
+    const res = await changeLeadStatus({
+      leadId,
+      newStatus: target,
+      userId: GUBGET_EMAIL,
+      notes: `עדכון אוטומטי מגובגט (${STATUS_LABELS[target] ?? target})`,
+      extra: {
+        ...(screeningScore != null ? { screeningScore } : {}),
+        ...(validInterviewAt && body.interviewAt
+          ? { interviewDate: body.interviewAt, ...(body.interviewType ? { interviewType: body.interviewType } : {}) }
+          : {}),
+      },
+    });
+    if (res.success) {
+      statusChanged = true;
     } else {
-      const patch: Record<string, unknown> = { status: target };
-      if (target === "FIT_FOR_INTERVIEW" && screeningScore != null) patch.screening_score = screeningScore;
-      const { error: upErr } = await db.from("leads").update(patch).eq("id", leadId);
-      if (!upErr) {
-        statusChanged = true;
-        await db.from("lead_status_history").insert({
-          lead_id: leadId,
-          from_status: from,
-          to_status: target,
-          changed_by: GUBGET_EMAIL,
-          notes: `עדכון אוטומטי מגובגט (${STATUS_LABELS[target] ?? target})`,
-        });
-      }
+      statusBlocked = res.error ?? "blocked";
+      statusBlockedReason = res.reason ?? null;
     }
   }
 
@@ -260,6 +244,16 @@ export async function POST(req: NextRequest) {
   const statusNow = statusChanged ? (body.status as string) : (currentStatus ?? "");
   const leadLocked = CLOSED.has(statusNow) || !!existing?.bot_paused;
   let interviewSet = false;
+  // ליד מוקפא ומועד שונה ממה ששמור: לא מעדכנים, אבל גם לא מעלימים. רשומה
+  // אחת ביומן לכל מועד (הסנכרון שולח אותו שוב כל 10 דקות).
+  if (validInterviewAt && body.interviewAt && existing?.bot_paused && !sameSlot(existing.interview_date, body.interviewAt)) {
+    await noteOnce(
+      db,
+      leadId,
+      GUBGET_EMAIL,
+      `גובגט דיווח על ראיון ב-${slotLabel(body.interviewAt)}. הליד בטיפול רכזת, ולכן הכרטיס לא עודכן — לבדוק מול המועמד/ת אם צריך.`
+    );
+  }
   if (validInterviewAt && body.interviewAt && !leadLocked) {
     const patch: Record<string, unknown> = { interview_date: body.interviewAt };
     if (body.interviewType) patch.interview_type = body.interviewType;
@@ -327,7 +321,7 @@ export async function POST(req: NextRequest) {
   }
 
   return NextResponse.json(
-    { ok: true, leadId, appended, statusChanged, statusBlocked, interviewSet, escalated, noted },
+    { ok: true, leadId, appended, statusChanged, statusBlocked, statusBlockedReason, interviewSet, escalated, noted },
     { status: 200 }
   );
 }

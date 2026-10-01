@@ -499,11 +499,14 @@ export function StatusSelect({
     if (!target) return;
     setLoading(true);
 
+    // הסטטוס והתת-סטטוס בבקשה אחת — כשהם נשמרו בשתיים והשנייה נכשלה, הליד
+    // נשאר בסטטוס החדש בלי "אין מענה" ובלי שאיש ידע
     const statusRes = await changeLeadStatus({
       leadId,
       newStatus: target,
       userId: "user",
       notes: `${STATUS_LABELS[target]}: ${chosenSub}`,
+      extra: { subStatus: chosenSub },
     });
     if (!statusRes.success) {
       setLoading(false);
@@ -512,8 +515,6 @@ export function StatusSelect({
       return;
     }
     setStatus(target);
-
-    await updateLeadSubStatus(leadId, chosenSub);
     setSubStatus(chosenSub);
 
     // Auto-transition for CONTACTED + "אין מענה 3"

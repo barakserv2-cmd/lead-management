@@ -59,6 +59,12 @@ export interface ChangeStatusInput {
     humanApproval?: boolean;
     /** explicit "קח שליטה" — the only way ownership moves off another recruiter */
     claimOwnership?: boolean;
+    /**
+     * Sub-status that goes with the move ("אין מענה 1", "מעקב"…). Written in
+     * the same step as the status — it used to be a second request, and when
+     * that one failed the lead kept the new status with no sub-status.
+     */
+    subStatus?: string;
   };
 }
 
@@ -86,14 +92,26 @@ async function currentAttention(
 export interface ChangeStatusResult {
   success: boolean;
   error?: string;
+  /**
+   * Why it failed, for callers that react differently:
+   * bot_paused — an automated actor tried to move a lead a recruiter froze;
+   * conflict — someone else changed the status since it was read.
+   */
+  reason?: "invalid" | "not_found" | "bot_paused" | "conflict" | "db";
 }
+
+/** בעלות אנושית עוצרת כל שינוי אוטומטי, עד שרכזת מחזירה את השיחה ("החזר לגובגט"). */
+export const BOT_PAUSED_ERROR =
+  "הליד בטיפול רכזת — שינויים אוטומטיים (גובגט / הבוט) לא חלים עליו עד שהשיחה מוחזרת לגובגט";
+
+export const CONFLICT_ERROR = "הסטטוס של הליד השתנה בינתיים על ידי מישהו אחר. רעננו את הדף ונסו שוב.";
 
 export async function changeLeadStatus(input: ChangeStatusInput): Promise<ChangeStatusResult> {
   const { leadId, newStatus, userId, notes, extra } = input;
 
   // 1. Validate target status
   if (!isValidStatus(newStatus)) {
-    return { success: false, error: `סטטוס לא חוקי: ${newStatus}` };
+    return { success: false, error: `סטטוס לא חוקי: ${newStatus}`, reason: "invalid" };
   }
 
   const supabase = getSupabase();
@@ -101,26 +119,36 @@ export async function changeLeadStatus(input: ChangeStatusInput): Promise<Change
   // 2. Fetch current lead data
   const { data: lead, error: fetchError } = await supabase
     .from("leads")
-    .select("status, screening_score, human_approval, interview_date, phone, handled_by")
+    .select("status, screening_score, human_approval, interview_date, phone, handled_by, bot_paused")
     .eq("id", leadId)
     .single();
 
   if (fetchError || !lead) {
-    return { success: false, error: `ליד לא נמצא: ${leadId}` };
+    return { success: false, error: `ליד לא נמצא: ${leadId}`, reason: "not_found" };
   }
 
   const currentStatus = lead.status as LeadStatusValue;
+  const actor = actorFromUserId(userId);
 
-  // Don't do anything if status unchanged
+  // Status unchanged. A sub-status that came with it (another "אין מענה" on a
+  // lead already in "נוצר קשר") is still a real event — write just that.
   if (currentStatus === newStatus) {
+    if (extra?.subStatus !== undefined) return writeSubStatusOnly(supabase, leadId, extra.subStatus, userId, actor);
     return { success: true };
+  }
+
+  // 2b. A recruiter froze this lead (took the conversation, or moved it by
+  // hand). Until someone hands it back, no automated actor moves it.
+  // 30.09: 37 times in a month a recruiter cancelled an interview and גובגט's
+  // sync booked it again within ten minutes.
+  if (actor === "machine" && lead.bot_paused) {
+    return { success: false, error: BOT_PAUSED_ERROR, reason: "bot_paused" };
   }
 
   // 3. Build guardrail data (merge DB data + incoming extra).
   //    "Human approval" for a hire = a human made the move (the hire dialog
   //    is human-only), or it was explicitly granted, or it was already on
   //    the lead. Automated actors can never satisfy it on their own.
-  const actor = actorFromUserId(userId);
   const guardrailData: LeadGuardrailData = {
     actor,
     screening_score: extra?.screeningScore ?? lead.screening_score,
@@ -131,14 +159,15 @@ export async function changeLeadStatus(input: ChangeStatusInput): Promise<Change
   // 4. Validate transition
   const validation = validateTransition(currentStatus, newStatus, guardrailData);
   if (!validation.valid) {
-    return { success: false, error: validation.error };
+    return { success: false, error: validation.error, reason: "invalid" };
   }
 
   // 5. Build update payload
+  const subStatus = extra?.subStatus?.trim().slice(0, 100) || null;
   const updateData: Record<string, unknown> = {
     status: newStatus,
-    sub_status: null,
-    sub_status_at: null,
+    sub_status: subStatus,
+    sub_status_at: subStatus ? new Date().toISOString() : null,
   };
   // A human moving the lead is now driving it: Gubget stays silent until a
   // recruiter explicitly hands the conversation back ("החזר לגובגט").
@@ -211,7 +240,7 @@ export async function changeLeadStatus(input: ChangeStatusInput): Promise<Change
     // סיבת העזיבה — הבסיס לדוח השימור. קוד לא מוכר נדחה ולא נשמר כטקסט חופשי.
     if (extra?.employmentEndReason) {
       if (!isEmploymentEndReason(extra.employmentEndReason)) {
-        return { success: false, error: `סיבת סיום לא חוקית: ${extra.employmentEndReason}` };
+        return { success: false, error: `סיבת סיום לא חוקית: ${extra.employmentEndReason}`, reason: "invalid" };
       }
       updateData.employment_end_reason = extra.employmentEndReason;
     }
@@ -226,7 +255,7 @@ export async function changeLeadStatus(input: ChangeStatusInput): Promise<Change
     extra?.noArrivalReason
   ) {
     if (!isNoArrivalReason(extra.noArrivalReason)) {
-      return { success: false, error: `סיבת אי-הגעה לא חוקית: ${extra.noArrivalReason}` };
+      return { success: false, error: `סיבת אי-הגעה לא חוקית: ${extra.noArrivalReason}`, reason: "invalid" };
     }
     updateData.no_arrival_reason = extra.noArrivalReason;
     updateData.no_arrival_notes = extra.noArrivalNotes?.trim() || null;
@@ -270,7 +299,9 @@ export async function changeLeadStatus(input: ChangeStatusInput): Promise<Change
   // still attributed in lead_status_history.changed_by. Ownership moves only
   // when the lead is unowned / owned by גובגט, or on an explicit takeover
   // (extra.claimOwnership, set by the "קח שליטה" routes).
-  if (userId && userId.includes("@")) {
+  // Recruiters only: גובגט claims its own leads in the bridge, and a move by
+  // a machine is not a conversation with the candidate.
+  if (actor === "human" && userId && userId.includes("@")) {
     const currentOwner = (lead.handled_by as string | null)?.trim() || null;
     const ownedByAnotherRecruiter =
       !!currentOwner && currentOwner !== GUBGET_EMAIL && currentOwner.toLowerCase() !== userId.toLowerCase();
@@ -283,14 +314,23 @@ export async function changeLeadStatus(input: ChangeStatusInput): Promise<Change
     updateData.last_contact_at = new Date().toISOString();
   }
 
-  // 6. Update the leads table
-  const { error: updateError } = await supabase
-    .from("leads")
-    .update(updateData)
-    .eq("id", leadId);
+  // 6. Update the lead and write its history in one step — and only if the
+  // status is still the one validated above (migration 00102). Two people
+  // moving the same lead at once used to both pass validation, and the later
+  // write won silently; a failed history insert went unnoticed.
+  const { data: applied, error: updateError } = await supabase.rpc("transition_lead_status", {
+    p_lead_id: leadId,
+    p_from: currentStatus,
+    p_patch: updateData,
+    p_changed_by: userId ?? "system",
+    p_notes: notes ?? null,
+  });
 
   if (updateError) {
-    return { success: false, error: `שגיאה בעדכון: ${updateError.message}` };
+    return { success: false, error: `שגיאה בעדכון: ${updateError.message}`, reason: "db" };
+  }
+  if (applied !== true) {
+    return { success: false, error: CONFLICT_ERROR, reason: "conflict" };
   }
 
   // Tell Gubget to stop talking to this candidate — best-effort: bot_paused
@@ -307,14 +347,7 @@ export async function changeLeadStatus(input: ChangeStatusInput): Promise<Change
     await completeLeadReminders(supabase, leadId);
   }
 
-  // 7. Log to status history
-  await supabase.from("lead_status_history").insert({
-    lead_id: leadId,
-    from_status: currentStatus,
-    to_status: newStatus,
-    changed_by: userId ?? "system",
-    notes: notes ?? null,
-  });
+  // 7. (the status history row was written with the update, in step 6)
 
   // 7b. כל טקסט חופשי שהרכזת כתבה במעבר נרשם גם ביומן האירועים,
   // כדי שההיסטוריה תשמור אותו גם אחרי שהשדה יידרס בעדכון הבא.
@@ -362,7 +395,7 @@ export async function changeLeadStatus(input: ChangeStatusInput): Promise<Change
   // 7c. Audit trail (תקנה 10) — who moved which record, from/to, plus any
   // extra fields that were written in the same transition.
   const extraWritten = Object.entries(updateData).filter(
-    ([k]) => k !== "status" && k !== "sub_status"
+    ([k, v]) => k !== "status" && !(k === "sub_status" && v === null)
   );
   await logAudit({
     action: "status_change",
@@ -381,5 +414,31 @@ export async function changeLeadStatus(input: ChangeStatusInput): Promise<Change
   revalidatePath("/interviews");
   revalidatePath("/reports");
 
+  return { success: true };
+}
+
+/** אותו סטטוס, תת-סטטוס חדש — ניסיון חיוג נוסף ("אין מענה 2") על ליד שכבר ב"נוצר קשר". */
+async function writeSubStatusOnly(
+  supabase: ReturnType<typeof getSupabase>,
+  leadId: string,
+  rawSubStatus: string,
+  userId: string | undefined,
+  actor: ReturnType<typeof actorFromUserId>
+): Promise<ChangeStatusResult> {
+  const subStatus = rawSubStatus.trim().slice(0, 100) || null;
+  const now = new Date().toISOString();
+  const patch: Record<string, unknown> = { sub_status: subStatus, sub_status_at: subStatus ? now : null };
+  // ניסיון חיוג הוא נקודת הזמן שמתעדת את הקשר האחרון
+  if (actor === "human") patch.last_contact_at = now;
+  const { error } = await supabase.from("leads").update(patch).eq("id", leadId);
+  if (error) return { success: false, error: `שגיאה בעדכון: ${error.message}`, reason: "db" };
+  await logAudit({
+    action: "update",
+    leadId,
+    actor: userId ?? "system",
+    changes: { sub_status: { from: null, to: subStatus } },
+  });
+  revalidatePath("/leads");
+  revalidatePath("/today");
   return { success: true };
 }
