@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import Anthropic from "@anthropic-ai/sdk";
-import { businessAccount, sendWhatsAppMessage } from "@/lib/whatsappService";
+import { alertAdmin } from "@/lib/adminAlert";
+import { withHeartbeat } from "@/lib/jobHealth";
 import { hasCronSecret } from "@/lib/secrets";
 
 // Daily digest of open recruiter feedback → WhatsApp to the admin.
@@ -40,7 +41,7 @@ async function summarize(items: { category: string; author: string; body: string
   }
 }
 
-export async function GET(req: NextRequest) {
+export const GET = withHeartbeat("feedback-digest", async (req: NextRequest) => {
   if (!isAuthorized(req)) {
     return NextResponse.json({ ok: false, error: "unauthorized" }, { status: 401 });
   }
@@ -56,15 +57,22 @@ export async function GET(req: NextRequest) {
   }
 
   const summary = await summarize(items);
-  const phone = process.env.FEEDBACK_DIGEST_PHONE ?? "0547000992";
   const message = `📋 סיכום דיווחי רכזות (${items.length} פתוחים)\n\n${summary}\n\nלטיפול: /feedback`;
 
-  const res = await sendWhatsAppMessage(phone, message, businessAccount(), { skipGate: true });
-  if (res.success) {
+  const res = await alertAdmin(
+    {
+      title: "סיכום דיווחי רכזות",
+      subject: `${items.length} דיווחים פתוחים`,
+      reason: `${summary} · לטיפול: /feedback`,
+      text: message,
+    },
+    { phone: process.env.FEEDBACK_DIGEST_PHONE }
+  );
+  if (res.sent) {
     await db
       .from("recruiter_feedback")
       .update({ digested_at: new Date().toISOString() })
       .in("id", items.map((i) => i.id));
   }
-  return NextResponse.json({ ok: res.success, sent: res.success, count: items.length, error: res.error });
-}
+  return NextResponse.json({ ok: res.sent, sent: res.sent, via: res.via, count: items.length, error: res.error });
+});

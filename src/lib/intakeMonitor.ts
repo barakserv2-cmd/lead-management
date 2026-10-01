@@ -1,5 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { businessAccount, sendWhatsAppMessage } from "@/lib/whatsappService";
+import { alertAdmin } from "@/lib/adminAlert";
 
 // ============================================================
 // ניטור בריאות ערוצי הלידים — ועדת נפח הלידים 12.09, החלטה 3.
@@ -100,14 +100,18 @@ export async function runIntakeMonitor(db: SupabaseClient): Promise<IntakeMonito
       `ב-14 הימים האחרונים: ${count} לידים, אבל אפס כבר ${days} ימים ` +
       `(האחרון: ${new Date(lastAt).toLocaleDateString("he-IL")}).\n` +
       `שווה לבדוק: קמפיין שנעצר, תקציב שנגמר, או ספק ששינה פורמט מייל.`;
-    const adminPhone = (process.env.ADMIN_ALERT_PHONE ?? "0547000992").trim();
-    const res = await sendWhatsAppMessage(adminPhone, alertMsg, businessAccount(), {
-      skipGate: true,
+    const res = await alertAdmin({
+      title: "ערוץ לידים נדם",
+      subject: source,
+      reason: `${count} לידים ב-14 הימים האחרונים, ואפס כבר ${days} ימים. לבדוק קמפיין, תקציב או פורמט מייל.`,
+      text: alertMsg,
     });
-    if (res.success) {
+    if (res.sent) {
       summary.alerts++;
       summary.details.push(`התראה: ${source} שקט ${days} ימים`);
     } else {
+      // ההתראה לא יצאה — משחררים את המפתח כדי שהריצה של מחר תנסה שוב
+      await db.from("cron_reminders").delete().eq("occurrence_key", key);
       summary.details.push(`שליחת התראה נכשלה (${source}): ${res.error}`);
     }
   }

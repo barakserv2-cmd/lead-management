@@ -17,6 +17,8 @@ import { noteExistingCandidateCall, flushMissedCallAlerts } from "@/lib/missedCa
 import { fillMissingChannels, refineUnknownChannel } from "@/lib/leadChannelFill";
 import { getAuthedUser } from "@/lib/api-auth";
 import { hasCronSecret } from "@/lib/secrets";
+import { pushLeadToMachine } from "@/lib/machineBridge";
+import { withHeartbeat } from "@/lib/jobHealth";
 
 // Let the run finish instead of being cut off mid-batch — a truncated run left
 // newer lead emails un-ingested. Pro allows up to 300s.
@@ -52,13 +54,9 @@ function delay(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-export async function GET(req: NextRequest) {
-  return handleFetchEmails(req);
-}
-
-export async function POST(req: NextRequest) {
-  return handleFetchEmails(req);
-}
+// כל ריצה נרשמת (job_heartbeats) — כשהחיבור ל-Gmail פג, האדמין מקבל התראה
+export const GET = withHeartbeat("gmail", handleFetchEmails);
+export const POST = withHeartbeat("gmail", handleFetchEmails);
 
 async function handleFetchEmails(req: NextRequest) {
   const auth = await authorize(req);
@@ -300,28 +298,18 @@ async function handleFetchEmails(req: NextRequest) {
         summary.details.push(`New lead: ${name} (${phone || "no phone"})`);
         console.log(`[Gmail] New lead created: ${name}`);
 
-        // גשר למכונת הגיוס (shadow): כל ליד חדש נשלח גם למערכת החדשה
-        // לצורך אימון. כשל כאן לעולם לא מפיל את הזרימה הקיימת.
-        if (process.env.MACHINE_INGEST_URL && process.env.MACHINE_INGEST_KEY && phone) {
-          try {
-            await fetch(`${process.env.MACHINE_INGEST_URL}/api/v1/leads`, {
-              method: "POST",
-              headers: {
-                "Content-Type": "application/json",
-                "x-ingest-key": process.env.MACHINE_INGEST_KEY,
-              },
-              body: JSON.stringify({
-                phone,
-                name,
-                city: location ?? undefined,
-                source_key: "lead_management_bridge",
-                campaign: insertedLead?.source ?? undefined,
-                job_hint: job_title ?? undefined,
-              }),
-            });
-          } catch (e) {
-            console.error("[Gmail] machine bridge failed:", e);
-          }
+        // גובגט עונה ראשון לכל ליד חדש. כשל כאן לא מפיל את הקליטה — הליד
+        // נשאר בתור ו-cron/sync-new-leads מנסה שוב (lib/machineBridge.ts).
+        if (insertedLead?.id) {
+          await pushLeadToMachine(supabase, {
+            id: insertedLead.id,
+            phone,
+            name,
+            location: location ?? null,
+            source: insertedLead.source ?? null,
+            job_title: job_title ?? null,
+            handled_by: null,
+          });
         }
 
         // בוט הפתיחה (שלב 1): רישום לתור בלבד — השליחה עם מרווחים

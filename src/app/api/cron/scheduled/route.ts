@@ -5,7 +5,6 @@ import {
   resolveSender,
   getInstanceState,
   getAccountByInstance,
-  businessAccount,
   type WhatsAppAccount,
   type InstanceState,
 } from "@/lib/whatsappService";
@@ -13,6 +12,8 @@ import { runWelcomeBatch } from "@/lib/whatsappWelcome";
 import { runAutomationRules, type EngineSummary } from "@/lib/rulesEngine";
 import { hasCronSecret } from "@/lib/secrets";
 import { isTemporaryBlock } from "@/lib/sendGate";
+import { alertAdmin } from "@/lib/adminAlert";
+import { runWatchdog, withHeartbeat } from "@/lib/jobHealth";
 
 // ============================================================
 // /api/cron/scheduled — every 5 minutes (vercel.json).
@@ -31,7 +32,7 @@ function isAuthorized(req: NextRequest): boolean {
   return hasCronSecret(req);
 }
 
-export async function GET(req: NextRequest) {
+export const GET = withHeartbeat("scheduled", async (req: NextRequest) => {
   if (!isAuthorized(req)) {
     return NextResponse.json({ ok: false, error: "unauthorized" }, { status: 401 });
   }
@@ -50,6 +51,8 @@ export async function GET(req: NextRequest) {
   let sent = 0;
   let failed = 0;
   let deferred = 0;
+  let sendFailed = 0; // כשלי שליחה בלבד (לא "לליד אין טלפון")
+  let lastSendError: string | undefined;
   for (const row of due ?? []) {
     const lead = (Array.isArray(row.leads) ? row.leads[0] : row.leads) as
       | { phone: string | null; name: string | null }
@@ -96,6 +99,8 @@ export async function GET(req: NextRequest) {
         .eq("id", row.id);
     } else {
       failed++;
+      sendFailed++;
+      lastSendError = res.error ?? "send failed";
       await db
         .from("scheduled_messages")
         .update({ status: "failed", error: res.error ?? "send failed" })
@@ -130,8 +135,20 @@ export async function GET(req: NextRequest) {
     console.error("[cron/scheduled] rules engine failed:", e);
   }
 
+  // ── שלב 4: השומר — משימה שנתקעה → התראה לאדמין (lib/jobHealth.ts) ──
+  let watchdog: Awaited<ReturnType<typeof runWatchdog>> | { error: string };
+  try {
+    watchdog = await runWatchdog(db);
+  } catch (e) {
+    console.error("[cron/scheduled] watchdog failed:", e);
+    watchdog = { error: e instanceof Error ? e.message : String(e) };
+  }
+
+  // כל ההודעות המתוזמנות שהגיע זמנן נכשלו — הערוץ נפל, לא הודעה בודדת
+  const outage = sendFailed > 0 && sent === 0;
   return NextResponse.json({
-    ok: true,
+    ok: !outage,
+    ...(outage ? { error: `${sendFailed} הודעות מתוזמנות נכשלו — ${lastSendError}` } : {}),
     due: due?.length ?? 0,
     sent,
     deferred,
@@ -139,8 +156,9 @@ export async function GET(req: NextRequest) {
     monitored,
     welcome,
     automation,
+    watchdog,
   });
-}
+});
 
 const BAD_STATES: InstanceState[] = ["yellowCard", "blocked", "notAuthorized"];
 
@@ -197,7 +215,6 @@ async function monitorInstances(db: ReturnType<typeof admin>): Promise<number> {
         .eq("instance_id", acc.instanceId);
     }
 
-    const adminPhone = (process.env.ADMIN_ALERT_PHONE ?? "0547000992").trim();
     const alertMsg =
       `⚠️ התראת וואטסאפ — ${a.label ?? acc.instanceId}\n` +
       `המספר עבר למצב: ${state}\n` +
@@ -206,15 +223,17 @@ async function monitorInstances(db: ReturnType<typeof admin>): Promise<number> {
         ? "מטא חוסמת שליחה מהמספר — בדוק ב-360dialog וב-WhatsApp Manager."
         : `בדוק את ה-instance בקונסולת GreenAPI.`);
 
-    // שולחים את ההתראה מכל מספר תקין אחר (או המספר העסקי)
-    const others = (accounts ?? []).filter(
-      (o) => String(o.instance_id) !== acc.instanceId && !BAD_STATES.includes(o.last_state as InstanceState)
+    // מכל ערוץ תקין אחר — לא מהמספר שנפל
+    const res = await alertAdmin(
+      {
+        title: "מספר וואטסאפ נפל",
+        subject: String(a.label ?? acc.instanceId),
+        reason: `המספר עבר למצב ${state}.${a.bot_enabled ? " הוצא אוטומטית מסבב הבוט." : ""}`,
+        text: alertMsg,
+      },
+      { exclude: [acc.instanceId] }
     );
-    const alertSender: WhatsAppAccount = others.length
-      ? await getAccountByInstance(String(others[0].instance_id))
-      : businessAccount();
-    const res = await sendWhatsAppMessage(adminPhone, alertMsg, alertSender, { skipGate: true });
-    if (!res.success) {
+    if (!res.sent) {
       console.error(`[cron/scheduled] admin alert failed for ${acc.instanceId}:`, res.error);
     }
   }
