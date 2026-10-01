@@ -3,6 +3,8 @@ import { createClient } from "@supabase/supabase-js";
 import { LeadStatus } from "@/lib/stateMachine";
 import { sweepVerdict, type SweepLead } from "@/lib/staleLeadSweep";
 import { hasCronSecret } from "@/lib/secrets";
+import { postLeadToMachine } from "@/lib/machineBridge";
+import { withHeartbeat } from "@/lib/jobHealth";
 
 // הרשת השנייה מתחת ל-sync-new-leads: ליד שהחלון בן 3 הדקות פספס (גובגט
 // היה מנותק, הגשר נפל) או שרכזת מחזיקה אותו שעות בלי לכתוב — חוזר לגובגט.
@@ -24,7 +26,7 @@ function isAuthorized(req: NextRequest): boolean {
   return hasCronSecret(req);
 }
 
-export async function GET(req: NextRequest) {
+export const GET = withHeartbeat("sync-stale-leads", async (req: NextRequest) => {
   if (!isAuthorized(req)) return NextResponse.json({ ok: false, error: "unauthorized" }, { status: 401 });
   const url = process.env.MACHINE_INGEST_URL;
   const key = process.env.MACHINE_INGEST_KEY;
@@ -56,6 +58,9 @@ export async function GET(req: NextRequest) {
 
   const now = new Date();
   let pushed = 0;
+  let failed = 0;
+  let streak = 0;
+  let lastError: string | undefined;
   const reasons: Record<string, number> = {};
   for (const r of rows ?? []) {
     const lead: SweepLead = {
@@ -67,24 +72,19 @@ export async function GET(req: NextRequest) {
     reasons[v.why] = (reasons[v.why] ?? 0) + 1;
     if (!v.push) continue;
     if (pushed >= MAX_PER_RUN) { reasons.capped = (reasons.capped ?? 0) + 1; continue; }
-    try {
-      await fetch(`${url}/api/v1/leads`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "x-ingest-key": key },
-        body: JSON.stringify({
-          phone: r.phone,
-          name: r.name ?? undefined,
-          city: r.location ?? undefined,
-          source_key: "lead_management_bridge",
-          campaign: r.source ?? undefined,
-          job_hint: r.job_title ?? undefined,
-        }),
-      });
+    // גובגט לא עונה — לא שורפים את הריצה על timeouts; הריצה הבאה תנסה שוב,
+    // וזו בדיוק הנקודה
+    if (streak >= 3) { reasons.bridge_down = (reasons.bridge_down ?? 0) + 1; continue; }
+    const res = await postLeadToMachine(r);
+    if (res.ok) {
       pushed++;
-    } catch {
-      // best-effort — הריצה הבאה תנסה שוב, וזו בדיוק הנקודה
+      streak = 0;
+    } else {
+      failed++;
+      streak++;
+      lastError = res.error;
     }
   }
 
-  return NextResponse.json({ ok: true, considered: rows?.length ?? 0, pushed, reasons });
-}
+  return NextResponse.json({ ok: true, considered: rows?.length ?? 0, pushed, failed, lastError, reasons });
+});

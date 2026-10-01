@@ -11,6 +11,8 @@ import { runIntakeMonitor } from "@/lib/intakeMonitor";
 import { runSiteMonitor } from "@/lib/siteMonitor";
 import { runArrivalCompanion } from "@/lib/arrivalCompanionRun";
 import { hasCronSecret } from "@/lib/secrets";
+import { alertAdmin } from "@/lib/adminAlert";
+import { outageOf, runWatchdog, withHeartbeat } from "@/lib/jobHealth";
 import { isTemporaryBlock, restPeriodAt, REST_ENDS_HOUR } from "@/lib/sendGate";
 
 // Vercel cron pings this URL every hour at :30 (see vercel.json).
@@ -307,11 +309,15 @@ async function runWeeklyDigest(admin: ReturnType<typeof getAdmin>): Promise<RunS
     top.map(([s, n]) => `• ${s} — ${n}`).join("\n") +
     `\n\nהפירוט המלא: דוחות ← משפך`;
 
-  const adminPhone = (process.env.ADMIN_ALERT_PHONE ?? "0547000992").trim();
-  const res = await sendWhatsAppMessage(adminPhone, message, businessAccount(), { skipGate: true });
-  if (res.success) {
+  const res = await alertAdmin({
+    title: "סיכום שבועי",
+    subject: "ברק שירותים",
+    reason: `לידים חדשים: ${newLeads ?? 0} · ראיונות שנקבעו: ${interviews} · השמות: ${hires}`,
+    text: message,
+  });
+  if (res.sent) {
     summary.succeeded = 1;
-    summary.details.push("הסיכום השבועי נשלח");
+    summary.details.push(`הסיכום השבועי נשלח (${res.via})`);
   } else {
     summary.failed = 1;
     summary.details.push(`כשל: ${res.error}`);
@@ -410,14 +416,31 @@ async function runDailyCron() {
     runSiteHealth(admin),
     runArrivalCompanionRule(admin),
   ]);
-  return { ok: true, ran_at: new Date().toISOString(), rules: results };
+  const outage = outageOf(results);
+
+  // השומר: משימה שנתקעה → התראה לאדמין. רץ גם מ-cron/scheduled; כל אחד
+  // מהם משגיח גם על השני.
+  let watchdog: Awaited<ReturnType<typeof runWatchdog>> | { error: string };
+  try {
+    watchdog = await runWatchdog(admin);
+  } catch (e) {
+    watchdog = { error: e instanceof Error ? e.message : String(e) };
+  }
+
+  return {
+    ok: !outage,
+    ...(outage ? { error: outage } : {}),
+    ran_at: new Date().toISOString(),
+    rules: results,
+    watchdog,
+  };
 }
 
 function isAuthorized(req: NextRequest): boolean {
   return hasCronSecret(req);
 }
 
-export async function GET(req: NextRequest) {
+export const GET = withHeartbeat("daily", async (req: NextRequest) => {
   if (!isAuthorized(req)) {
     return NextResponse.json({ ok: false, error: "unauthorized" }, { status: 401 });
   }
@@ -431,8 +454,6 @@ export async function GET(req: NextRequest) {
       { status: 500 }
     );
   }
-}
+});
 
-export async function POST(req: NextRequest) {
-  return GET(req);
-}
+export const POST = GET;

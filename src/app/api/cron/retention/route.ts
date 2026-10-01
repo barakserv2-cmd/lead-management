@@ -8,6 +8,7 @@ import {
   privacyAdmin,
 } from "@/lib/privacy";
 import { hasCronSecret } from "@/lib/secrets";
+import { withHeartbeat } from "@/lib/jobHealth";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -26,7 +27,7 @@ function isAuthorized(req: NextRequest): boolean {
   return hasCronSecret(req);
 }
 
-export async function GET(req: NextRequest) {
+export const GET = withHeartbeat("retention", async (req: NextRequest) => {
   if (!isAuthorized(req)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
@@ -89,6 +90,6 @@ export async function GET(req: NextRequest) {
   });
 
   return NextResponse.json(summary);
-}
+});
 
 export const POST = GET;

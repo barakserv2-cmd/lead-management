@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { hasCronSecret } from "@/lib/secrets";
+import { withHeartbeat } from "@/lib/jobHealth";
 
 // Push v1's OPEN jobs to גובגט so it screens against the real, current set.
 // Guarded by CRON_SECRET. Uses MACHINE_INGEST_URL + MACHINE_INGEST_KEY
@@ -13,7 +14,7 @@ function isAuthorized(req: NextRequest): boolean {
   return hasCronSecret(req);
 }
 
-export async function GET(req: NextRequest) {
+export const GET = withHeartbeat("sync-jobs", async (req: NextRequest) => {
   if (!isAuthorized(req)) return NextResponse.json({ ok: false, error: "unauthorized" }, { status: 401 });
   const url = process.env.MACHINE_INGEST_URL;
   const key = process.env.MACHINE_INGEST_KEY;
@@ -70,8 +71,13 @@ export async function GET(req: NextRequest) {
       body: JSON.stringify({ jobs: mapped }),
     });
     const body = await res.json().catch(() => ({}));
-    return NextResponse.json({ ok: res.ok, pushed: mapped.length, machine: body });
+    return NextResponse.json({
+      ok: res.ok,
+      ...(res.ok ? {} : { error: `גובגט החזיר HTTP ${res.status}` }),
+      pushed: mapped.length,
+      machine: body,
+    });
   } catch (e) {
     return NextResponse.json({ ok: false, error: (e as Error).message }, { status: 502 });
   }
-}
+});
