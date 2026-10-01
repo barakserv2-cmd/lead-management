@@ -1,6 +1,6 @@
 ---
 name: ship
-description: Deploy the v1 CRM (lead-management) to production safely. Use for any request to deploy, ship, release, push live, "תעלה לאוויר", "תפרוס", or after finishing a code change that needs to reach production. Runs typecheck with its own exit code, tests, a real Next build, brings the checkout up to date with main, pushes to main on GitHub (Vercel deploys main automatically — never `vercel --prod`), and verifies the production deployment of that exact commit is Ready.
+description: Deploy the v1 CRM (lead-management) to production safely. Use for any request to deploy, ship, release, push live, "תעלה לאוויר", "תפרוס", or after finishing a code change that needs to reach production. Runs typecheck with its own exit code, tests, a real Next build, brings the branch up to date with main, opens a PR to main, waits for CI ("check") and the Vercel preview to pass, merges (Vercel deploys main automatically — never `vercel --prod`, never a direct push to main), and verifies the production deployment of the merge commit is Ready.
 ---
 
 # Ship — פריסת מערכת גיוס לפרודקשן
@@ -25,10 +25,16 @@ npx tsc --noEmit > /tmp/tsc.txt 2>&1; RC=$?; echo "tsc=$RC"
 npx next build > /tmp/b.txt 2>&1; echo "build=$?"
 ```
 
-**3. פרודקשן עולה רק דרך GitHub. לעולם לא `vercel --prod`.**
+**3. פרודקשן עולה רק דרך PR שמוזג ל-main. לעולם לא `vercel --prod`.**
 
-Vercel מחובר ל-GitHub ופורס את `main` לפרודקשן לבד, תוך דקה מכל דחיפה או
-מיזוג. זו הדרך היחידה להעלות לאוויר.
+Vercel מחובר ל-GitHub ופורס את `main` לפרודקשן לבד, תוך דקה מכל מיזוג. זו
+הדרך היחידה להעלות לאוויר.
+
+`main` מוגן (ועדת בחינה 29/09, F1): דחיפה ישירה אליו נדחית, ו-PR אפשר למזג
+רק אחרי שה-CI (`check`: lint, typecheck, בדיקות ו-build אמיתי) עבר. עד
+01.10, 40 מתוך 50 הקומיטים האחרונים נדחפו ישר ל-main, וה-CI רץ במקביל
+לפריסה ולא לפניה — קומיט שבור היה באוויר לפני שמישהו ידע. אם `git push`
+ל-main נדחה, זה המנגנון עובד, לא תקלה לעקוף.
 
 `vercel --prod` מעלה את **מה שיש בתיקייה המקומית**, לא את main. תקלה שחזרה
 על עצמה (28–29/09): פריסות CLI מעותק מקומי ישן החזירו את הפרודקשן לעיצוב
@@ -37,8 +43,9 @@ Vercel מחובר ל-GitHub ופורס את `main` לפרודקשן לבד, תו
 הפרודקשן תמיד שווה ל-main, ואין דרך להעלות גרסה ישנה בטעות.
 
 גם ה-build עצמו אוכף את זה: `scripts/guard-production-build.mjs` רץ לפני
-`next build` בכל build של פרודקשן, שואל את GitHub אם הקומיט מכיל את כל main,
-ומפיל את ה-build אם לא (או אם הקומיט בכלל לא נדחף). האתר החי לא מתחלף.
+`next build` בכל build של פרודקשן, ומפיל אותו כשהקומיט אינו main עצמו: ענף
+אחר, קומיט שלא מוזג, קומיט שחסרים בו קומיטים מ-main, או קומיט שלא נדחף בכלל.
+האתר החי לא מתחלף.
 
 אסור גם `vercel deploy --prod`, `vercel promote` או "Redeploy" על פריסה של
 ענף. אם צריך לשחזר — Promote בלוח של Vercel **רק** לפריסה של הקומיט האחרון
@@ -49,21 +56,30 @@ Vercel מחובר ל-GitHub ופורס את `main` לפרודקשן לבד, תו
 ```bash
 cd "C:/Users/Barak/Projects/lead-management"
 
-# 0. להתעדכן ב-main לפני הכל — עבודה על עותק ישן היא בדיוק התקלה
+# 0. לעבוד בענף, לא על main — דחיפה ל-main נדחית
+[ "$(git branch --show-current)" = main ] && git switch -c "ship/$(date +%m%d-%H%M)"
+
+# 1. להתעדכן ב-main לפני הכל — עבודה על עותק ישן היא בדיוק התקלה
 git fetch origin main
 git merge origin/main || { echo "STOP: קונפליקט מול main — לפתור ורק אז להמשיך"; exit 1; }
 
-# 1. בדיקות — כל אחת עם קוד היציאה שלה
+# 2. בדיקות — כל אחת עם קוד היציאה שלה (אותן בדיקות ירוצו שוב ב-CI)
 npx tsc --noEmit > /tmp/tsc.txt 2>&1; RC=$?; echo "tsc=$RC"; [ $RC -ne 0 ] && head -20 /tmp/tsc.txt
 npx vitest run
 npx next build > /tmp/b.txt 2>&1; echo "build=$?"; grep -iE "Failed to compile|Error:" /tmp/b.txt | head -5
 
-# 2. קומיט ודחיפה ל-main — זו הפריסה. Vercel לוקח משם.
+# 3. קומיט, דחיפה של הענף ו-PR
 git add -A && git commit -m "..."
-git push origin HEAD:main || { echo "STOP: הדחיפה ל-main נכשלה (מישהו דחף בינתיים?) — git pull origin main ושוב מההתחלה"; exit 1; }
-SHA=$(git rev-parse HEAD)
+git push -u origin HEAD
+gh pr create --base main --fill
 
-# 3. לחכות שהפריסה של הקומיט הזה תהיה Ready (סטטוס "Vercel" על הקומיט ב-GitHub)
+# 4. לחכות ש-CI (check) וה-preview של Vercel יעברו, ואז למזג — זו הפריסה
+sleep 20   # הבדיקות נרשמות על ה-PR כמה שניות אחרי שהוא נפתח
+gh pr checks --watch --fail-fast || { echo "STOP: בדיקה נכשלה — לתקן בענף ולדחוף שוב, לא לעקוף"; exit 1; }
+gh pr merge --merge --delete-branch
+SHA=$(gh pr view --json mergeCommit -q .mergeCommit.oid)
+
+# 5. לחכות שהפריסה של קומיט המיזוג תהיה Ready (סטטוס "Vercel" על הקומיט ב-GitHub)
 for i in $(seq 1 60); do
   ST=$(curl -s "https://api.github.com/repos/barakserv2-cmd/lead-management/commits/$SHA/status" \
     | node -e 'let d="";process.stdin.on("data",c=>d+=c).on("end",()=>{const s=(JSON.parse(d).statuses||[]).find(x=>x.context==="Vercel");console.log(s?s.state:"none")})')
@@ -73,12 +89,17 @@ for i in $(seq 1 60); do
 done
 ```
 
-אם העבודה נעשית בענף (PR): לא פורסים מהענף. ממזגים את ה-PR ל-main, ו-Vercel
-פורס את main לבד. אחרי המיזוג — אותה בדיקה של שלב 3 על קומיט המיזוג.
+**בלי `gh`:** `git push` מדפיס קישור לפתיחת PR. לפתוח אותו, ליצור את ה-PR,
+לחכות שהבדיקות (`check` ו-`Vercel`) יהיו ירוקות, וללחוץ "Merge pull request".
+את ה-SHA של המיזוג לוקחים מה-PR, ובודקים אותו כמו בשלב 5.
+
+**בסשן בענן (Claude Code on the web):** אין `gh` — פותחים, בודקים וממזגים את
+ה-PR דרך כלי ה-GitHub של הסשן, באותו סדר.
 
 ## מיגרציות
 
-DDL מגיע **רק** דרך קובץ מיגרציה — לא ידנית בקונסולה.
+DDL מגיע **רק** דרך קובץ מיגרציה — לא ידנית בקונסולה. מיגרציה מוחלת **לפני**
+המיזוג (הקוד החדש מצפה לה), וכתובה כך שהקוד הישן ממשיך לעבוד איתה.
 
 ```bash
 node scripts/apply-migration.mjs supabase/migrations/000NN_name.sql
