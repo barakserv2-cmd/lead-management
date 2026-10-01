@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { NextResponse } from "next/server";
 
 const rpc = vi.fn<(fn: string, params: unknown) => Promise<{ error: null }>>(async () => ({ error: null }));
@@ -194,6 +194,15 @@ function fakeDb(rows: HeartbeatRow[]) {
 }
 
 describe("runWatchdog", () => {
+  // The watchdog reads the real clock; pin it to the fixtures' "now", or the
+  // result depends on the time of day the tests run (it passed at 10:00 and
+  // failed in CI at 21:28).
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(NOW);
+  });
+  afterEach(() => vi.useRealTimers());
+
   const broken = () =>
     row({ job: "gmail", last_ok_at: minsAgo(60 * 24), consecutive_failures: 9, last_error: "invalid_grant" });
 
