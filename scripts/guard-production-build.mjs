@@ -8,8 +8,12 @@
 // that is missing commits from main fails, and the live site is left alone.
 //
 // Only production builds are checked. Previews and local builds pass
-// straight through. Network or API problems never block a deploy (fail
-// open); only a definite "this commit is missing commits from main" does.
+// straight through. A production build must be main itself: a commit from
+// another branch (a promoted preview, `vercel --prod` from a branch), one
+// that was never merged, or one missing commits from main is stopped.
+// When GitHub can't be asked (down, rate limit) the build is allowed — a
+// GitHub outage must not freeze production. The PR checks on main are the
+// first gate; this one catches what goes around them.
 
 const REPO = "barakserv2-cmd/lead-management";
 
@@ -25,21 +29,50 @@ if (!sha) {
   process.exit(1);
 }
 
-let res;
-try {
-  res = await fetch(`https://api.github.com/repos/${REPO}/compare/main...${sha}`, {
+// Vercel names the branch a git deployment came from. Production is main only.
+const ref = process.env.VERCEL_GIT_COMMIT_REF;
+if (ref && ref !== "main") {
+  console.error(
+    `\n✖ Production build from branch "${ref}" — production is built only from main.\n` +
+      "  Merge the PR to main and Vercel deploys it. Do not promote a preview or use `vercel --prod`.\n"
+  );
+  process.exit(1);
+}
+
+/** Can't ask GitHub — allow the build rather than freeze production on an outage. */
+function cannotVerify(why) {
+  console.warn(`⚠ build guard: could not verify against main (${why}), allowing the build.`);
+  process.exit(0);
+}
+
+async function compare(token) {
+  return fetch(`https://api.github.com/repos/${REPO}/compare/main...${sha}`, {
     headers: {
       Accept: "application/vnd.github+json",
       "User-Agent": "lead-management-build-guard",
       // optional: without a token GitHub allows 60 anonymous calls/hour per IP,
-      // and Vercel build machines share IPs — past the limit the guard fails open
-      ...(process.env.GITHUB_TOKEN ? { Authorization: `Bearer ${process.env.GITHUB_TOKEN}` } : {}),
+      // and Vercel build machines share IPs
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
     },
     signal: AbortSignal.timeout(10_000),
   });
-} catch (err) {
-  console.warn(`⚠ build guard: GitHub unreachable (${err}), allowing the build.`);
-  process.exit(0);
+}
+
+let token = process.env.GITHUB_TOKEN || null;
+let res;
+for (let attempt = 1; attempt <= 3; attempt++) {
+  try {
+    res = await compare(token);
+    // a token GitHub rejects (expired, wrong scope) — ask again without it
+    if (res.status === 401 && token) {
+      token = null;
+      continue;
+    }
+    if (res.ok || res.status === 404 || res.status < 500) break;
+  } catch (err) {
+    if (attempt === 3) cannotVerify(`GitHub unreachable: ${err}`);
+  }
+  await new Promise((r) => setTimeout(r, 3000));
 }
 
 if (res.status === 404) {
@@ -50,21 +83,25 @@ if (res.status === 404) {
   );
   process.exit(1);
 }
-if (!res.ok) {
-  console.warn(`⚠ build guard: GitHub answered ${res.status}, allowing the build.`);
+if (!res.ok) cannotVerify(`GitHub answered ${res.status}`);
+
+const { status, behind_by: behind, ahead_by: ahead } = await res.json();
+// identical = this commit is main. Anything else is not what main holds.
+if (status === "identical") {
+  console.log(`✓ build guard: ${sha.slice(0, 7)} is main.`);
   process.exit(0);
 }
-
-const { status, behind_by: behind } = await res.json();
-// identical = this is main; ahead = main plus more commits. Both contain all of main.
-if (status === "identical" || status === "ahead") {
-  console.log(`✓ build guard: ${sha.slice(0, 7)} contains all of main (${status}).`);
-  process.exit(0);
+if (status === "ahead") {
+  console.error(
+    `\n✖ Commit ${sha.slice(0, 7)} has ${ahead} commit(s) that are not on main — it was never merged.\n` +
+      "  Production is built only from main. Merge the PR, and Vercel deploys main.\n"
+  );
+  process.exit(1);
 }
 
 console.error(
   `\n✖ Commit ${sha.slice(0, 7)} is missing ${behind} commit(s) that are already on main (${status}).\n` +
     "  Deploying it would roll production back. Stopping the build — the live site is unchanged.\n" +
-    "  Fix: git pull origin main, then merge to main and let Vercel deploy. Never `vercel --prod`.\n"
+    "  Fix: open a PR from an up-to-date branch and merge it; Vercel deploys main. Never `vercel --prod`.\n"
 );
 process.exit(1);

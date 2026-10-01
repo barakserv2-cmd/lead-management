@@ -1,13 +1,23 @@
 name: CI
 
+# The job is named "check", and main's protection rule requires it: a PR can be
+# merged only after lint, typecheck, tests and a real build pass. The build is
+# here because tsc alone has passed while `next build` failed (a server-only
+# module pulled into a client component) — review committee 29/09, F1.
+
 on:
   push:
     branches: [main]
   pull_request:
 
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   check:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -18,3 +28,12 @@ jobs:
       - run: npm run lint
       - run: npm run typecheck
       - run: npm test
+      - name: build
+        run: npm run build
+        env:
+          # The build needs the variables to exist, not real values — nothing
+          # here talks to a database.
+          NEXT_PUBLIC_SUPABASE_URL: https://example.supabase.co
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: ci-placeholder
+          SUPABASE_SERVICE_ROLE_KEY: ci-placeholder
+          NEXT_TELEMETRY_DISABLED: "1"
