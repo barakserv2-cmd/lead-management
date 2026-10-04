@@ -10,8 +10,9 @@
 //   checkin:{lead}:{day} · guarantee:{lead}
 
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { getAccountForEmail, sendWhatsAppMessage, businessAccount } from "@/lib/whatsappService";
-import { isTemporaryBlock } from "@/lib/sendGate";
+import { getAccountForEmail, sendWhatsAppMessage } from "@/lib/whatsappService";
+import { isTemporaryBlock, restPeriodAt } from "@/lib/sendGate";
+import { alertViaGubget } from "@/lib/gubgetAlert";
 import { LeadStatus } from "@/lib/stateMachine";
 import { GUARANTEE_PREFIX, GUARANTEE_FLAG_TTL_DAYS } from "@/lib/attention";
 
@@ -21,6 +22,11 @@ export const CHECKIN_DAYS = [3, 14, 30, 60, 90] as const;
 
 export function checkinOwnerEmail(): string {
   return (process.env.CHECKIN_OWNER_EMAIL ?? "barakserv@eilatjobs.com").trim().toLowerCase();
+}
+
+/** השם שגובגט מכיר לאחראית הליווי — אליה הולכות התראות תום האחריות. */
+export function checkinOwnerGubgetName(): string {
+  return (process.env.CHECKIN_OWNER_GUBGET_NAME ?? "מלי").trim();
 }
 
 function firstName(name: string | null): string {
@@ -189,57 +195,124 @@ export async function runPostPlacementCare(db: SupabaseClient): Promise<CareSumm
     }
   }
 
-  // ── התראת תום אחריות (שבוע לפני) ───────────────────────────
-  const ownerPhone = await db
-    .from("whatsapp_accounts")
-    .select("phone")
-    .eq("user_email", owner)
-    .eq("is_active", true)
-    .maybeSingle();
+  // ── התראת תום אחריות (עד שבוע לפני) ─────────────────────────
+  // 04.10: ההתראה יצאה מהמספר העסקי שנמחק ב-GreenAPI — 62 נכשלו מאז 15.09,
+  // נרשמו כ"טופלו" ולא נשלחו שוב, ו-8 מהן ניסו לצאת בשבת. עכשיו: הודעה אחת
+  // מרוכזת ביום דרך גובגט לאחראית הליווי (ואם גובגט לא מגיע אליה — לאדמין),
+  // שנחשבת שנשלחה רק כשגובגט אישר. לא בשבת/חג — תצא כשהמנוחה נגמרת.
+  if (!restPeriodAt(new Date())) {
+    const due = guaranteeDue(leads, defaults, byClient, today);
+    if (due.length > 0) {
+      const { data: prior } = await db
+        .from("cron_reminders")
+        .select("occurrence_key, success")
+        .in("occurrence_key", due.map((d) => d.key));
+      const seen = new Set((prior ?? []).map((r) => String(r.occurrence_key)));
+      const sent = new Set((prior ?? []).filter((r) => r.success).map((r) => String(r.occurrence_key)));
+      const pending = due.filter((d) => !sent.has(d.key));
 
+      // דגל על הכרטיס — רק בפעם הראשונה, כדי לא להחזיר דגל שרכזת כבר סגרה
+      for (const d of pending.filter((d) => !seen.has(d.key))) {
+        await db
+          .from("leads")
+          .update({
+            needs_attention: true,
+            needs_attention_at: new Date().toISOString(),
+            attention_reason: guaranteeReason(d),
+          })
+          .eq("id", d.lead.id);
+      }
+
+      if (pending.length > 0) {
+        const res = await sendGuaranteeDigest(pending);
+        await db.from("cron_reminders").upsert(
+          pending.map((d) => ({
+            lead_id: d.lead.id,
+            reminder_type: "guarantee_ending",
+            occurrence_key: d.key,
+            payload: { remaining: d.remaining, ...(res.ok ? { via: res.via } : {}) },
+            success: res.ok,
+            error: res.ok ? null : res.error.slice(0, 300),
+          })),
+          { onConflict: "occurrence_key" }
+        );
+        if (res.ok) summary.guaranteeAlerts += pending.length;
+        else summary.failed += pending.length;
+      }
+    }
+  }
+
+  return summary;
+}
+
+// ── תום אחריות: מי, ואיך מנסחים ─────────────────────────────
+
+export interface GuaranteeDue {
+  lead: { id: string; name: string | null; hired_client: string | null };
+  remaining: number;
+  key: string;
+}
+
+/**
+ * עובדים שתקופת האחריות שלהם נגמרת בעוד 1–7 ימים. חלון של שבוע ולא של
+ * יומיים: ריצה שנפלה על שבת, או התראה שנכשלה, עדיין נתפסת למחרת.
+ */
+export function guaranteeDue(
+  leads: { id: string; name: string | null; hired_client: string | null; start_date: string | null }[],
+  defaults: number,
+  byClient: Map<string, number>,
+  today: string
+): GuaranteeDue[] {
+  const out: GuaranteeDue[] = [];
   for (const lead of leads) {
     if (!lead.start_date) continue;
     const days = byClient.get((lead.hired_client ?? "").trim()) ?? defaults;
     if (days <= 0) continue;
-    const since = daysBetween(lead.start_date.slice(0, 10), today);
-    const remaining = days - since;
-    if (remaining > 7 || remaining < 6) continue; // חלון יומיים סביב "שבוע לפני"
-
-    const key = `guarantee:${lead.id}`;
-    const exists = await existingKeys(db, [key]);
-    if (exists.has(key)) continue;
-
-    const alert =
-      `⏳ תקופת האחריות של ${lead.name ?? "עובד/ת"}` +
-      (lead.hired_client ? ` ב${lead.hired_client}` : "") +
-      ` נגמרת בעוד ${remaining} ימים. שווה בדיקת שלומות אחרונה 🙏`;
-
-    let ok = true;
-    if (ownerPhone.data?.phone) {
-      const res = await sendWhatsAppMessage(String(ownerPhone.data.phone), alert, businessAccount(), {
-        skipGate: true,
-      });
-      ok = res.success;
-    }
-    await db
-      .from("leads")
-      .update({
-        needs_attention: true,
-        needs_attention_at: new Date().toISOString(),
-        attention_reason: alert,
-      })
-      .eq("id", lead.id);
-    await db.from("cron_reminders").insert({
-      lead_id: lead.id,
-      reminder_type: "guarantee_ending",
-      occurrence_key: key,
-      payload: { remaining },
-      success: ok,
-    });
-    summary.guaranteeAlerts++;
+    const remaining = days - daysBetween(lead.start_date.slice(0, 10), today);
+    if (remaining < 1 || remaining > 7) continue;
+    out.push({ lead, remaining, key: `guarantee:${lead.id}` });
   }
+  return out.sort((a, b) => a.remaining - b.remaining);
+}
 
-  return summary;
+function guaranteeLine(d: GuaranteeDue): string {
+  return `${d.lead.name ?? "עובד/ת"}${d.lead.hired_client ? ` (${d.lead.hired_client})` : ""} — עוד ${d.remaining} ${d.remaining === 1 ? "יום" : "ימים"}`;
+}
+
+function guaranteeReason(d: GuaranteeDue): string {
+  return `⏳ תקופת האחריות של ${guaranteeLine(d)}. שווה בדיקת שלומות אחרונה 🙏`;
+}
+
+/** ההודעה המרוכזת: פרמטרי התבנית (שורה אחת כל אחד) והטקסט המלא. */
+export function guaranteeDigest(items: GuaranteeDue[]): { title: string; subject: string; reason: string; text: string } {
+  const lines = items.map(guaranteeLine);
+  const one = lines.join(" · ") + " — שווה בדיקת שלומות אחרונה";
+  return {
+    title: "תקופת אחריות נגמרת",
+    subject: items.length === 1 ? lines[0] : `${items.length} עובדים`,
+    reason: one.length > 900 ? `${one.slice(0, 899)}…` : one,
+    text:
+      `⏳ תקופת האחריות נגמרת בקרוב:\n${lines.map((l) => `• ${l}`).join("\n")}\n\n` +
+      `שווה בדיקת שלומות אחרונה 🙏 הכרטיסים מסומנים "דורש תשומת לב".`,
+  };
+}
+
+/** לאחראית הליווי דרך גובגט; אם גובגט לא מגיע אליה — לאדמין, עם ציון למי זה. */
+export async function sendGuaranteeDigest(
+  items: GuaranteeDue[]
+): Promise<{ ok: true; via: string } | { ok: false; error: string }> {
+  const msg = guaranteeDigest(items);
+  const owner = checkinOwnerGubgetName();
+  const toOwner = await alertViaGubget({ ...msg, to: owner });
+  if (!toOwner) return { ok: true, via: owner };
+  const toAdmin = await alertViaGubget({
+    ...msg,
+    title: `${msg.title} (ל${owner})`,
+    text: `נשלח אליך כי גובגט לא הצליח להגיע ל${owner}.\n\n${msg.text}`,
+    to: "admins",
+  });
+  if (!toAdmin) return { ok: true, via: "admins" };
+  return { ok: false, error: `${owner}: ${toOwner} · admins: ${toAdmin}` };
 }
 
 // ── דוח "אחריות פעילה" ──────────────────────────────────────
