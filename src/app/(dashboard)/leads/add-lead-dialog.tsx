@@ -31,12 +31,9 @@ export function AddLeadDialog() {
       toast.error("שם הוא שדה חובה");
       return;
     }
-    // בלי ערוץ הדוח "איזה ערוץ עובד" נשאר חלקי (סער, 30.09)
+    // רשות (סער, 04.10 — עד אז חובה). ליד בלי ערוץ מקבל סיווג אוטומטי
+    // בסריקה הבאה, וכשמסקיו מזהה את המספר שהתקשר — הערוץ מתעדכן לבד.
     const channel = (form.get("channel") as string) || "";
-    if (!channel) {
-      toast.error("צריך לבחור איך המועמד/ת שמע/ה עלינו");
-      return;
-    }
 
     setSubmitting(true);
     try {
@@ -116,20 +113,15 @@ export function AddLeadDialog() {
             <Input id="job_title" name="job_title" />
           </div>
 
-          {/* חובה (סער, 30.09). השדה עצמו נשכח בקומיט שהוסיף את הבדיקה, ומ-30.09
-              עד 04.10 אף רכזת לא הצליחה לשמור ליד ידנית — הבדיקה חיפשה שדה שלא היה. */}
           <div className="space-y-2">
-            <Label htmlFor="channel">איך שמע/ה עלינו? *</Label>
+            <Label htmlFor="channel">איך שמע/ה עלינו?</Label>
             <select
               id="channel"
               name="channel"
               defaultValue=""
-              required
               className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
             >
-              <option value="" disabled>
-                בחרו ערוץ…
-              </option>
+              <option value="">לא נבחר</option>
               {RECRUITER_CHANNELS.map((c) => (
                 <option key={c} value={c}>
                   {c}
