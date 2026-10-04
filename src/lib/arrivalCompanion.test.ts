@@ -8,6 +8,9 @@ import {
   arrivalCompanionEnabledFor,
   planFirstDayTouch,
   firstDayMessage,
+  ARRIVAL_TEMPLATES,
+  templateParams,
+  renderTemplate,
   type PlanInput,
   type TouchType,
 } from "./arrivalCompanion";
@@ -161,5 +164,29 @@ describe("first days at work", () => {
     const r = signalReason(s, "דני", "רוצה לעזוב", { kind: "first_days", day: 2 });
     expect(r).toContain("ביום 2 לעבודה");
     expect(r?.startsWith("🚩")).toBe(true);
+  });
+});
+
+describe("official-number templates", () => {
+  it("has a template for every touch, with as many params as placeholders", () => {
+    const lead = { name: "דני כהן", interview_date: "2026-10-01T10:00:00+00:00", hired_client: "אסטרל" };
+    for (const touch of ["confirm", "travel_check", "day_of", "first_day"] as const) {
+      const tpl = ARRIVAL_TEMPLATES[touch];
+      const placeholders = new Set(tpl.body.match(/\{\{\d+\}\}/g) ?? []).size;
+      const params = templateParams(touch, lead);
+      expect(params).toHaveLength(placeholders);
+      expect(params.every((p) => p.trim().length > 0)).toBe(true);
+      expect(renderTemplate(tpl.body, params)).not.toMatch(/\{\{/);
+    }
+  });
+
+  it("never sends an empty param when the name or employer is missing", () => {
+    expect(templateParams("first_day", { name: null, hired_client: null })).toEqual(["חבר/ה", "עבודה"]);
+    expect(templateParams("confirm", { name: "  ", interview_date: null })).toEqual(["חבר/ה", "בקרוב"]);
+  });
+
+  it("renders the confirm template with the interview time", () => {
+    const params = templateParams("confirm", { name: "דני כהן", interview_date: "2026-10-01T10:00:00+00:00" });
+    expect(renderTemplate(ARRIVAL_TEMPLATES.confirm.body, params)).toContain("היי דני, כאן ברק שירותים. הראיון שלך באילת נקבע ביום חמישי 1.10 בשעה 10:00");
   });
 });

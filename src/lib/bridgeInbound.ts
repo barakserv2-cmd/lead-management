@@ -97,7 +97,9 @@ export async function appendBridgeMessages(
   db: SupabaseClient,
   leadId: string,
   inbound: InboundMessage[],
-  now?: Date
+  now?: Date,
+  /** אם הועבר — נאספות לתוכו ההודעות שנשמרו עכשיו בפועל (לא כפילויות) */
+  appendedOut?: InboundMessage[]
 ): Promise<number> {
   const resend = await isResentPayload(db, leadId, inbound);
   let appended = 0;
@@ -122,6 +124,7 @@ export async function appendBridgeMessages(
       ...(m.createdAt ? { created_at: m.createdAt } : {}),
     });
     appended++;
+    appendedOut?.push(m);
   }
   return appended;
 }

@@ -341,3 +341,59 @@ export async function applyArrivalSignals(
     });
   }
 }
+
+// ── Templates for the official number (Gubget) ─────────────
+//
+// המלווה שולח ממספר גובגט (הערוץ הרשמי, officialReminderAccount). שם טקסט
+// חופשי עובר רק בתוך 24 שעות מההודעה האחרונה של המועמד; מחוץ לחלון רק תבנית
+// שמטא אישרה. כל נקודת מגע מנסה קודם טקסט חופשי (המלא, עם שאלת החבר וכו'),
+// ואם החלון סגור — את התבנית המקבילה כאן. את התבניות צריך ליצור ולאשר אצל
+// 360dialog בשמות ובנוסח האלה בדיוק (קטגוריה Utility, שפה he).
+
+export type CompanionTouch = TouchType | "first_day";
+
+export interface CompanionTemplate {
+  name: string;
+  /** הנוסח שמוגש לאישור; {{1}}, {{2}} לפי הסדר */
+  body: string;
+}
+
+export const ARRIVAL_TEMPLATES: Record<CompanionTouch, CompanionTemplate> = {
+  confirm: {
+    name: "arrival_confirm",
+    body:
+      "היי {{1}}, כאן ברק שירותים. הראיון שלך באילת נקבע {{2}}. " +
+      "מגיע/ה לבד או עם חבר/ה? אם משהו משתנה, אפשר לכתוב לנו כאן.",
+  },
+  travel_check: {
+    name: "arrival_travel_check",
+    body:
+      "היי {{1}}, עוד יומיים הראיון שלך באילת. כבר יש כרטיס לאוטובוס? באיזו שעה יוצאים? " +
+      "אם צריך עזרה לפני הנסיעה, אפשר לכתוב לנו כאן.",
+  },
+  day_of: {
+    name: "arrival_day_of",
+    body: "בוקר טוב {{1}}, היום הראיון שלך באילת. בהצלחה! אם משהו השתנה בדרך, אפשר לכתוב לנו כאן.",
+  },
+  first_day: {
+    name: "arrival_first_day",
+    body:
+      "היי {{1}}, כאן ברק שירותים. איך היה היום הראשון ב{{2}}? הכל בסדר עם המגורים והמשמרות? " +
+      "אם משהו לא מסתדר, כתבו לנו ונטפל בזה מהר.",
+  },
+};
+
+/** פרמטרים לתבנית — אף אחד לא ריק (מטא דוחה פרמטר ריק). */
+export function templateParams(
+  touch: CompanionTouch,
+  lead: { name: string | null; interview_date?: string | null; hired_client?: string | null }
+): string[] {
+  const n = firstName(lead.name) || "חבר/ה";
+  if (touch === "confirm") return [n, lead.interview_date ? whenLabel(lead.interview_date) : "בקרוב"];
+  if (touch === "first_day") return [n, (lead.hired_client ?? "").trim() || "עבודה"];
+  return [n];
+}
+
+export function renderTemplate(body: string, params: string[]): string {
+  return body.replace(/\{\{(\d+)\}\}/g, (_, i) => params[Number(i) - 1] ?? "");
+}
