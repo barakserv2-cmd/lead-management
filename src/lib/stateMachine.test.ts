@@ -74,6 +74,11 @@ describe("recruiter (human) moves", () => {
     expect(validateTransition(S.INTERVIEW_BOOKED, S.ARRIVED).valid).toBe(true);
   });
 
+  it("a postponed candidate can arrive on the new date", () => {
+    // "דחה הגעה" holds the new date; "בוצע" on the phone board sends ARRIVED
+    expect(validateTransition(S.POSTPONED_ARRIVAL, S.ARRIVED).valid).toBe(true);
+  });
+
   it("never regresses a hired candidate into the funnel", () => {
     for (const from of [S.HIRED, S.STARTED, S.EMPLOYMENT_ENDED]) {
       for (const to of [S.NEW_LEAD, S.SCREENING_IN_PROGRESS, S.FIT_FOR_INTERVIEW, S.INTERVIEW_BOOKED]) {

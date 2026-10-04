@@ -14,6 +14,33 @@ const BOARD_STATUSES: LeadStatusValue[] = [
   LeadStatus.REJECTED,
 ];
 
+/**
+ * An interview that already has its final outcome is done work — it leaves the
+ * board unless the recruiter asks to see handled ones. INTERVIEW_BOOKED,
+ * POSTPONED_ARRIVAL and ARRIVED stay: they still need something from a human.
+ */
+export const HANDLED_STATUSES = new Set<string>([
+  LeadStatus.NO_SHOW,
+  LeadStatus.CANCELLED_ARRIVAL,
+  LeadStatus.HIRED,
+  LeadStatus.STARTED,
+  LeadStatus.NOT_ACCEPTED,
+  LeadStatus.REJECTED,
+  LeadStatus.LOST_CONTACT,
+  LeadStatus.NOT_SUITABLE,
+]);
+
+/**
+ * The original-date row of a postponed candidate is a record of the day they
+ * didn't come. Once the lead has moved on from the postponement (arrived on
+ * the new date, back to "נוצר קשר · מעקב", closed…) there is nothing left to
+ * do on it — it was the row תמי kept trying to close on 04.10.
+ */
+export function isHandledRow(r: Pick<InterviewRow, "status" | "current_status" | "postponedOriginal">): boolean {
+  if (r.postponedOriginal) return r.current_status !== LeadStatus.POSTPONED_ARRIVAL;
+  return HANDLED_STATUSES.has(r.status);
+}
+
 const LEAD_SELECT =
   "id, name, phone, job_title, location, status, sub_status, interview_date, interview_type, interview_notes, rejection_reason, sent_interview_at, jobs:sent_to_job_id (title, clients(name)), hired_client, hired_position, handled_by, source, preferences, notes, postponed_from_date";
 
@@ -126,12 +153,13 @@ export async function fetchInterviewRows(
     const status = l.status as InterviewRow["status"];
     const out: InterviewRow[] = [];
     if (inWindow(l.interview_date) && BOARD_STATUSES.includes(status)) {
-      out.push({ ...base, status, interview_date: l.interview_date as string });
+      out.push({ ...base, status, current_status: status, interview_date: l.interview_date as string });
     }
     if (inWindow(l.postponed_from_date)) {
       out.push({
         ...base,
         status: LeadStatus.POSTPONED_ARRIVAL as InterviewRow["status"],
+        current_status: status,
         interview_date: l.postponed_from_date as string,
         postponedOriginal: true,
       });
