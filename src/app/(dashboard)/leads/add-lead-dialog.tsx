@@ -116,8 +116,30 @@ export function AddLeadDialog() {
             <Input id="job_title" name="job_title" />
           </div>
 
+          {/* חובה (סער, 30.09). השדה עצמו נשכח בקומיט שהוסיף את הבדיקה, ומ-30.09
+              עד 04.10 אף רכזת לא הצליחה לשמור ליד ידנית — הבדיקה חיפשה שדה שלא היה. */}
           <div className="space-y-2">
-            <Label htmlFor="source">מקור</Label>
+            <Label htmlFor="channel">איך שמע/ה עלינו? *</Label>
+            <select
+              id="channel"
+              name="channel"
+              defaultValue=""
+              required
+              className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+            >
+              <option value="" disabled>
+                בחרו ערוץ…
+              </option>
+              {RECRUITER_CHANNELS.map((c) => (
+                <option key={c} value={c}>
+                  {c}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="source">איך פנה/תה אלינו (מקור)</Label>
             <select
               id="source"
               name="source"

@@ -41,6 +41,7 @@ export async function POST(request: NextRequest) {
     phone?: string;
     job_title?: string;
     source?: string;
+    channel?: string;
     status?: string;
   };
   try {
@@ -65,6 +66,9 @@ export async function POST(request: NextRequest) {
   // בלי זה הליד נולד בלי בעלים, הגשר מעביר אותו לגובגט כאילו הוא ליד קר,
   // וגובגט שולח הודעת פתיחה למישהו שכבר בטיפול.
   const now = new Date().toISOString();
+  // הערוץ שהרכזת בחרה ("איך שמע/ה עלינו?"). עד 04.10 הוא נשלח מהטופס ולא נשמר —
+  // הליד קיבל ניחוש אוטומטי מהמקור במקום התשובה של המועמד/ת.
+  const channel = isRecruiterChannel(body.channel) ? body.channel : null;
   const { data: lead, error } = await supabase
     .from("leads")
     .insert({
@@ -75,6 +79,9 @@ export async function POST(request: NextRequest) {
       status: body.status || LeadStatus.NEW_LEAD,
       handled_by: user.email,
       handled_at: now,
+      ...(channel
+        ? { channel, contact_method: methodForManualSource(body.source), channel_set_by: "recruiter" }
+        : {}),
     })
     .select("id")
     .single();
