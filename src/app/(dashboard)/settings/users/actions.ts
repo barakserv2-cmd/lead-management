@@ -26,6 +26,8 @@ export interface UserProfile {
   email: string;
   role: string;
   created_at: string;
+  /** false = רואה רק את השיחות שלה (במספר שלה, וגובגט רק בלידים שבטיפולה) */
+  sees_shared_chats?: boolean;
 }
 
 export async function getUsers() {
@@ -44,6 +46,7 @@ export async function createUser(user: {
   name: string;
   email: string;
   role: string;
+  sees_shared_chats?: boolean;
 }) {
   if (!(await requireAdminActor())) return { user: null, error: NOT_ADMIN };
 
@@ -53,6 +56,7 @@ export async function createUser(user: {
       name: user.name,
       email: user.email.trim().toLowerCase(),
       role: user.role,
+      ...(typeof user.sees_shared_chats === "boolean" ? { sees_shared_chats: user.sees_shared_chats } : {}),
     })
     .select()
     .single();
@@ -70,7 +74,7 @@ export async function createUser(user: {
 
 export async function updateUser(
   id: string,
-  user: { name: string; email: string; role: string }
+  user: { name: string; email: string; role: string; sees_shared_chats?: boolean }
 ) {
   if (!(await requireAdminActor())) return { user: null, error: NOT_ADMIN };
 
@@ -80,6 +84,7 @@ export async function updateUser(
       name: user.name,
       email: user.email.trim().toLowerCase(),
       role: user.role,
+      ...(typeof user.sees_shared_chats === "boolean" ? { sees_shared_chats: user.sees_shared_chats } : {}),
     })
     .eq("id", id)
     .select()

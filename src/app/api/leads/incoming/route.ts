@@ -26,18 +26,47 @@ export async function GET(request: NextRequest) {
   // Pop-ups only for conversations this recruiter may see.
   const scope = await getMessageScope(user.email);
   if (!scope.notify) return NextResponse.json({ items: [] });
-  let q = admin
-    .from("messages")
-    .select("id, lead_id, content, created_at")
-    .eq("role", "user")
-    .gt("created_at", sinceIso)
-    .order("created_at", { ascending: true })
-    .limit(20);
-  const f = scopeFilter(scope);
-  if (f) q = q.or(f);
-  const { data: msgs, error } = await q;
+  const incoming = () =>
+    admin
+      .from("messages")
+      .select("id, lead_id, content, created_at")
+      .eq("role", "user")
+      .gt("created_at", sinceIso)
+      .order("created_at", { ascending: true })
+      .limit(20);
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  let msgs: { id: string; lead_id: string; content: string; created_at: string }[];
+  if (scope.all || scope.shared) {
+    let q = incoming();
+    const f = scopeFilter(scope);
+    if (f) q = q.or(f);
+    const { data, error } = await q;
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    msgs = data ?? [];
+  } else {
+    // Limited to her own (sees_shared_chats = false): her number, plus גובגט's
+    // conversations only on leads she handles. Filtered in the query, not
+    // after it — a page of other leads' messages would otherwise hide hers.
+    const [own, onHerLeads] = await Promise.all([
+      incoming().or(scopeFilter(scope)!),
+      admin
+        .from("messages")
+        .select("id, lead_id, content, created_at, leads!inner(handled_by)")
+        .eq("role", "user")
+        .is("via_instance", null)
+        .eq("leads.handled_by", scope.email!)
+        .gt("created_at", sinceIso)
+        .order("created_at", { ascending: true })
+        .limit(20),
+    ]);
+    const error = own.error ?? onHerLeads.error;
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    const byId = new Map<string, { id: string; lead_id: string; content: string; created_at: string }>();
+    for (const m of [...(own.data ?? []), ...(onHerLeads.data ?? [])]) {
+      byId.set(m.id, { id: m.id, lead_id: m.lead_id, content: m.content, created_at: m.created_at });
+    }
+    msgs = [...byId.values()].sort((a, b) => a.created_at.localeCompare(b.created_at)).slice(0, 20);
+  }
   if (!msgs || msgs.length === 0) return NextResponse.json({ items: [] });
 
   // שולפים את הלידים של ההודעות (ייחודיים) כדי שהחלון יוכל להיפתח
