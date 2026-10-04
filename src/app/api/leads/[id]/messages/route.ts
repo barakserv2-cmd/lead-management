@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient as createServerClient } from "@supabase/supabase-js";
-import { getMessageScope, scopeFilter } from "@/lib/messageVisibility";
+import { getMessageScope, handlesLead, scopeFilter } from "@/lib/messageVisibility";
 import { getAuthedUser } from "@/lib/api-auth";
 
 // GET /api/leads/[id]/messages — the lead's chat, limited to conversations the
@@ -20,17 +20,6 @@ export async function GET(
     process.env.SUPABASE_SERVICE_ROLE_KEY!
   );
 
-  let q = admin
-    .from("messages")
-    .select("id, role, content, created_at, sent_by, via_instance, delivery_status, delivery_error")
-    .eq("lead_id", id)
-    .order("created_at", { ascending: true });
-  const f = scopeFilter(scope);
-  if (f) q = q.or(f);
-
-  const { data, error } = await q;
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-
   // human-takeover flag: when a recruiter owns the conversation the chat box
   // sends for real (not the screening simulator) and the bot backs off.
   // "Owns" = an open escalation OR Gubget paused for this lead (after
@@ -38,9 +27,22 @@ export async function GET(
   // without this the box silently fell back to the simulator).
   const { data: leadRow } = await admin
     .from("leads")
-    .select("needs_human_attention, bot_paused")
+    .select("needs_human_attention, bot_paused, handled_by")
     .eq("id", id)
     .maybeSingle();
+
+  let q = admin
+    .from("messages")
+    .select("id, role, content, created_at, sent_by, via_instance, delivery_status, delivery_error")
+    .eq("lead_id", id)
+    .order("created_at", { ascending: true });
+  // A recruiter limited to her own conversations still sees גובגט's history
+  // on a lead she handles — that's the context she takes over with.
+  const f = scopeFilter(scope, { ownsLead: handlesLead(scope, leadRow?.handled_by as string | null) });
+  if (f) q = q.or(f);
+
+  const { data, error } = await q;
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
   return NextResponse.json({
     messages: data ?? [],

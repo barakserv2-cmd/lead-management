@@ -37,6 +37,7 @@ export function UsersContent({ users: initialUsers }: { users: UserProfile[] }) 
   const [formName, setFormName] = useState("");
   const [formEmail, setFormEmail] = useState("");
   const [formRole, setFormRole] = useState("מגייס");
+  const [formSharedChats, setFormSharedChats] = useState(true);
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState("");
 
@@ -101,6 +102,7 @@ export function UsersContent({ users: initialUsers }: { users: UserProfile[] }) 
     setFormName("");
     setFormEmail("");
     setFormRole("מגייס");
+    setFormSharedChats(true);
     setFormError("");
     setDialogOpen(true);
   }
@@ -110,6 +112,7 @@ export function UsersContent({ users: initialUsers }: { users: UserProfile[] }) 
     setFormName(user.name);
     setFormEmail(user.email);
     setFormRole(user.role);
+    setFormSharedChats(user.sees_shared_chats !== false);
     setFormError("");
     setDialogOpen(true);
   }
@@ -126,6 +129,7 @@ export function UsersContent({ users: initialUsers }: { users: UserProfile[] }) 
       name: formName.trim(),
       email: formEmail.trim(),
       role: formRole,
+      sees_shared_chats: formSharedChats,
     };
 
     const result = editingUser
@@ -213,6 +217,11 @@ export function UsersContent({ users: initialUsers }: { users: UserProfile[] }) 
                     }>
                       {user.role}
                     </Badge>
+                    {user.sees_shared_chats === false && user.role !== "אדמין" && (
+                      <Badge className="mr-1 bg-gray-100 text-gray-700 hover:bg-gray-100" title="רואה רק שיחות במספר שלה, ושיחות גובגט רק בלידים שבטיפולה">
+                        רק השיחות שלה
+                      </Badge>
+                    )}
                   </td>
                   <td className="px-4 py-3">
                     <span className="text-sm text-gray-500">
@@ -301,6 +310,22 @@ export function UsersContent({ users: initialUsers }: { users: UserProfile[] }) 
                 ))}
               </select>
             </div>
+            {formRole !== "אדמין" && (
+              <label className="flex items-start gap-2 text-sm text-gray-700 cursor-pointer">
+                <input
+                  type="checkbox"
+                  className="mt-0.5"
+                  checked={formSharedChats}
+                  onChange={(e) => setFormSharedChats(e.target.checked)}
+                />
+                <span>
+                  רואה גם שיחות משותפות (גובגט והודעות אוטומטיות) בכל הלידים
+                  <span className="block text-xs text-gray-500">
+                    בלי הסימון: רק שיחות במספר הוואטסאפ שלה, ושיחות גובגט רק בלידים שבטיפולה.
+                  </span>
+                </span>
+              </label>
+            )}
             {formError && (
               <div className="rounded-lg bg-red-50 border border-red-200 px-3 py-2 text-xs text-red-700 font-medium">
                 {formError}
