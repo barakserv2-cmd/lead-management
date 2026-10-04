@@ -159,10 +159,13 @@ export const TRANSITION_MAP: Record<LeadStatusValue, readonly LeadStatusValue[]>
   [ARRIVED]: [INTERVIEW_BOOKED, HIRED, NO_SHOW, NOT_ACCEPTED, REJECTED, LOST_CONTACT, NOT_SUITABLE],
 
   // Interview outcomes: candidate cancelled or postponed coming.
-  // CANCELLED = closed-ish (re-book, reopen, or close). POSTPONED = re-book is
-  // the main path, but can also be cancelled or closed.
+  // CANCELLED = closed-ish (re-book, reopen, or close). POSTPONED already
+  // carries the new date (changeLeadStatus writes it), so arriving on that
+  // date is its normal end — the phone board's "בוצע" sends ARRIVED, and
+  // without it the call couldn't be closed (תמי, 04.10). It can also be
+  // re-booked, cancelled or closed.
   [CANCELLED_ARRIVAL]: [INTERVIEW_BOOKED, CONTACTED, NO_SHOW, REJECTED, LOST_CONTACT, NOT_SUITABLE],
-  [POSTPONED_ARRIVAL]: [INTERVIEW_BOOKED, CONTACTED, CANCELLED_ARRIVAL, NO_SHOW, REJECTED, LOST_CONTACT, NOT_SUITABLE],
+  [POSTPONED_ARRIVAL]: [INTERVIEW_BOOKED, ARRIVED, CONTACTED, CANCELLED_ARRIVAL, NO_SHOW, REJECTED, LOST_CONTACT, NOT_SUITABLE],
 
   // Post-hire. ARRIVED / HIRED backwards are one-step undo of a mis-click.
   [HIRED]: [STARTED, EMPLOYMENT_ENDED, ARRIVED, NOT_ACCEPTED, REJECTED],

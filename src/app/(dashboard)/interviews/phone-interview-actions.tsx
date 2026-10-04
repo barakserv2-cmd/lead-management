@@ -33,6 +33,8 @@ export function PhoneInterviewActions({
     setBusy(false);
     if (!res.success) {
       toast.error(res.error ?? "העדכון נכשל");
+      // הסטטוס אולי השתנה בינתיים במסך אחר — מרעננים כדי שהשורה תציג את המצב האמיתי
+      router.refresh();
       return;
     }
     toast.success(`${leadName} — ${label}`);

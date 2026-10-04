@@ -8,6 +8,7 @@ import { RescheduleDialog } from "./reschedule-dialog";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { STATUS_LABELS, LeadStatus, type LeadStatusValue } from "@/lib/stateMachine";
+import { isHandledRow } from "@/lib/interviewsBoard";
 import { StatusSelect } from "../leads/status-select";
 
 export interface InterviewRow {
@@ -16,7 +17,14 @@ export interface InterviewRow {
   phone: string | null;
   job_title: string | null;
   location: string | null;
+  /** What the row shows: "דחה הגעה" on a postponed candidate's original date. */
   status: LeadStatusValue;
+  /**
+   * The lead's real status. Same as `status`, except on the original-date row
+   * of a postponed candidate — anything that changes the lead must start from
+   * this one, or the server rejects the move ("מעבר לא חוקי").
+   */
+  current_status: LeadStatusValue;
   interview_date: string; // ISO
   interview_type: "phone" | "in_person" | "video" | null;
   interview_notes: string | null;
@@ -82,22 +90,6 @@ function normPhone(p: string): string {
   if (digits.startsWith("0")) return "972" + digits.slice(1);
   return digits;
 }
-
-/**
- * An interview that already has its final outcome is done work — it leaves the
- * board unless the recruiter asks to see handled ones. INTERVIEW_BOOKED,
- * POSTPONED_ARRIVAL and ARRIVED stay: they still need something from a human.
- */
-const HANDLED_STATUSES = new Set<string>([
-  LeadStatus.NO_SHOW,
-  LeadStatus.CANCELLED_ARRIVAL,
-  LeadStatus.HIRED,
-  LeadStatus.STARTED,
-  LeadStatus.NOT_ACCEPTED,
-  LeadStatus.REJECTED,
-  LeadStatus.LOST_CONTACT,
-  LeadStatus.NOT_SUITABLE,
-]);
 
 // The only statuses selectable from the interviews board.
 const INTERVIEW_STATUSES: LeadStatusValue[] = [
@@ -184,7 +176,7 @@ export function InterviewsContent({
       }
       // handled interviews leave the work queue (unless explicitly shown, or
       // the recruiter filtered to that exact status)
-      if (!showHandled && !status && HANDLED_STATUSES.has(r.status)) return false;
+      if (!showHandled && !status && isHandledRow(r)) return false;
       if (role && r.job_title !== role) return false;
       if (client && r.client !== client) return false;
       if (recruiter && r.recruiter !== recruiter) return false;
@@ -201,7 +193,7 @@ export function InterviewsContent({
 
   // how many finished interviews are currently hidden from the queue
   const handledHidden = useMemo(
-    () => (showHandled || status ? 0 : rows.filter((r) => HANDLED_STATUSES.has(r.status)).length),
+    () => (showHandled || status ? 0 : rows.filter(isHandledRow).length),
     [rows, showHandled, status]
   );
 
@@ -493,6 +485,12 @@ export function InterviewsContent({
                                 {r.postponedOriginal ? "דחה הגעה · מועד מקורי" : "דחה הגעה · מועד חדש"}
                               </span>
                             )}
+                            {r.current_status !== r.status && (
+                              <span className="text-[11px] rounded px-1.5 py-0.5 bg-slate-100 text-slate-700">
+                                כעת: {STATUS_LABELS[r.current_status] ?? r.current_status}
+                                {r.sub_status ? ` · ${r.sub_status}` : ""}
+                              </span>
+                            )}
                           </div>
                           <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1 text-sm text-slate-500">
                             {r.phone ? (
@@ -576,8 +574,11 @@ export function InterviewsContent({
                             recruiter={r.recruiter}
                           />
                           <LeadNotesDialog leadId={r.id} leadName={r.name} size="xs" />
-                          {/* ראיון טלפוני שעוד לא נסגר — שלוש התשובות שסוגרות אותו */}
+                          {/* ראיון טלפוני שעוד לא נסגר — שלוש התשובות שסוגרות אותו.
+                              לא בשורת המועד המקורי: השיחה שנשארה פתוחה היא זו
+                              שבמועד החדש */}
                           {r.interview_type === "phone" &&
+                            !r.postponedOriginal &&
                             (r.status === LeadStatus.INTERVIEW_BOOKED ||
                               r.status === LeadStatus.POSTPONED_ARRIVAL) && (
                               <PhoneInterviewActions leadId={r.id} leadName={r.name} />
@@ -587,7 +588,7 @@ export function InterviewsContent({
                             <StatusSelect
                               leadId={r.id}
                               leadName={r.name}
-                              currentStatus={r.status}
+                              currentStatus={r.current_status}
                               currentSubStatus={r.sub_status}
                               allowedStatuses={INTERVIEW_STATUSES}
                             />
