@@ -1,11 +1,12 @@
 "use client";
 
-import { useState, useEffect, useRef, useCallback } from "react";
+import { Fragment, useState, useEffect, useRef, useCallback } from "react";
 import Link from "next/link";
 import { ReminderDialog } from "./reminder-dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { LeadStatus, type LeadStatusValue } from "@/lib/stateMachine";
+import { chatDayLabel, chatFullDateTime, chatTime, israelDayKey } from "@/lib/chatDates";
 
 interface Message {
   id: string;
@@ -67,13 +68,6 @@ interface SenderInfo {
 
 function senderShort(email: string): string {
   return email.split("@")[0];
-}
-
-function formatTime(dateStr: string): string {
-  return new Date(dateStr).toLocaleTimeString("he-IL", {
-    hour: "2-digit",
-    minute: "2-digit",
-  });
 }
 
 const POLL_INTERVAL = 5000;
@@ -334,11 +328,20 @@ export function ChatHistory({
         ) : (
           messages
             .filter((m) => m.role !== "system")
-            .map((msg) => {
+            .map((msg, i, shown) => {
               const outgoing = isOutgoing(msg.role);
+              // כותרת יום כמו בוואטסאפ — בהודעה הראשונה ובכל מעבר יום
+              const newDay = i === 0 || israelDayKey(msg.created_at) !== israelDayKey(shown[i - 1].created_at);
               return (
+                <Fragment key={msg.id}>
+                {newDay && (
+                  <div className="flex justify-center py-1" role="separator">
+                    <span className="rounded-full bg-white px-3 py-0.5 text-[11px] font-medium text-gray-500 shadow-sm border border-gray-100">
+                      {chatDayLabel(msg.created_at)}
+                    </span>
+                  </div>
+                )}
                 <div
-                  key={msg.id}
                   className={`flex ${outgoing ? "justify-end" : "justify-start"}`}
                 >
                   <div
@@ -368,8 +371,8 @@ export function ChatHistory({
                       }`}
                       dir="ltr"
                     >
-                      <span className="text-[10px]">
-                        {formatTime(msg.created_at)}
+                      <span className="text-[10px]" title={chatFullDateTime(msg.created_at)}>
+                        {chatTime(msg.created_at)}
                       </span>
                       {outgoing && <DeliveryTicks status={msg.delivery_status} />}
                       {msg.role === "assistant" && (
@@ -383,6 +386,7 @@ export function ChatHistory({
                     </div>
                   </div>
                 </div>
+                </Fragment>
               );
             })
         )}
