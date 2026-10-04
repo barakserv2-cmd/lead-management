@@ -4,6 +4,7 @@ import { normalizePhone } from "@/lib/phone";
 import { isValidStatus, STATUS_LABELS, type LeadStatusValue } from "@/lib/stateMachine";
 import { changeLeadStatus } from "@/lib/actions/changeLeadStatus";
 import { appendBridgeMessages, noteOnce, sameSlot, slotLabel, type InboundMessage } from "@/lib/bridgeInbound";
+import { applyArrivalSignals, arrivalCompanionEnabledFor } from "@/lib/arrivalCompanion";
 import { GUBGET_SOURCE } from "@/lib/constants";
 import { closureFor } from "@/lib/israelHolidays";
 import { ensureClosuresLoaded } from "@/lib/closures";
@@ -182,7 +183,8 @@ export async function POST(req: NextRequest) {
       createdAt: m.created_at && !isNaN(Date.parse(m.created_at)) ? new Date(m.created_at).toISOString() : null,
     });
   }
-  const appended = await appendBridgeMessages(db, leadId, inbound);
+  const freshMessages: InboundMessage[] = [];
+  const appended = await appendBridgeMessages(db, leadId, inbound, undefined, freshMessages);
 
   // 3. Move status — through the state machine, as actor "machine". That
   //    scope is what keeps the interview-reconciliation cron (which re-pushes
@@ -242,6 +244,17 @@ export async function POST(req: NextRequest) {
     "INVALID_PHONE", "EMPLOYMENT_ENDED", "NO_SHOW", "CANCELLED_ARRIVAL",
   ]);
   const statusNow = statusChanged ? (body.status as string) : (currentStatus ?? "");
+
+  // מלווה ההגעה: המועמד ענה למספר גובגט (גובגט מעביר כל הודעה נכנסת לכאן).
+  // רק הודעות שנשמרו עכשיו — שליחה חוזרת של אותו payload לא מרימה דגל שוב.
+  const freshUserText = freshMessages.filter((m) => m.role === "user").map((m) => m.content).join("\n");
+  if (freshUserText && arrivalCompanionEnabledFor(phone)) {
+    await applyArrivalSignals(
+      db,
+      { id: leadId, name: (existing?.name as string | null) ?? body.name ?? null, status: statusNow },
+      freshUserText
+    ).catch((err) => console.error(`[bridge] arrival signals failed for lead ${leadId}:`, err));
+  }
   const leadLocked = CLOSED.has(statusNow) || !!existing?.bot_paused;
   let interviewSet = false;
   // ליד מוקפא ומועד שונה ממה ששמור: לא מעדכנים, אבל גם לא מעלימים. רשומה

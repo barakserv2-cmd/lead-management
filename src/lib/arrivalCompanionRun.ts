@@ -1,12 +1,26 @@
 // הריצה של מלווה ההגעה — נקראת מ-cron/daily כל שעה. הלוגיקה (מתי, מה
 // לשלוח, איך לזהות היסוס) ב-arrivalCompanion.ts.
+//
+// שולח ממספר גובגט (officialReminderAccount — הערוץ הרשמי), כמו תזכורות
+// הראיון. התשובות מגיעות לגובגט, שמעביר אותן ל-V1 דרך ה-bridge, ושם נבדקים
+// סימני ההיסוס. בלי מספר רשמי מוגדר — המספר העסקי, כמו קודם.
 
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { businessAccount, sendWhatsAppMessage } from "@/lib/whatsappService";
+import {
+  businessAccount,
+  officialReminderAccount,
+  sendWhatsAppMessage,
+  sendWhatsAppTemplate,
+  type SendResult,
+} from "@/lib/whatsappService";
 import { isTemporaryBlock } from "@/lib/sendGate";
 import {
+  ARRIVAL_TEMPLATES,
   ARRIVAL_WINDOW_STATUSES,
   arrivalCompanionEnabledFor,
+  renderTemplate,
+  templateParams,
+  type CompanionTouch,
   firstDayMessage,
   planFirstDayTouch,
   planTouch,
@@ -17,6 +31,30 @@ import {
 import { LeadStatus } from "@/lib/stateMachine";
 
 const SILENT_AFTER_HOURS = 24;
+
+/**
+ * שליחת נקודת מגע: טקסט חופשי (המלא) אם המועמד כתב ביממה האחרונה, ואחרת
+ * התבנית המאושרת המקבילה. מחזיר גם את הנוסח שיצא בפועל, לשמירה בצ'אט.
+ */
+async function sendTouch(
+  phone: string,
+  touch: CompanionTouch,
+  text: string,
+  lead: { name: string | null; interview_date?: string | null; hired_client?: string | null }
+): Promise<SendResult & { sentText: string; via: "text" | "template" }> {
+  const official = officialReminderAccount();
+  if (!official) {
+    const r = await sendWhatsAppMessage(phone, text, businessAccount(), { automated: true });
+    return { ...r, sentText: text, via: "text" };
+  }
+  const free = await sendWhatsAppMessage(phone, text, official, { automated: true });
+  if (free.success || !free.windowClosed) return { ...free, sentText: text, via: "text" };
+
+  const tpl = ARRIVAL_TEMPLATES[touch];
+  const params = templateParams(touch, lead);
+  const r = await sendWhatsAppTemplate(phone, { name: tpl.name, language: "he", params }, official, { automated: true });
+  return { ...r, sentText: renderTemplate(tpl.body, params), via: "template" };
+}
 
 interface WindowLead {
   id: string;
@@ -79,7 +117,6 @@ async function runFirstDayTouches(
   const keys = leads.map((l) => `arrival:first_day:${l.id}:${l.start_date.slice(0, 10)}`);
   const { data: done } = await db.from("cron_reminders").select("occurrence_key").in("occurrence_key", keys);
   const sentKeys = new Set((done ?? []).map((r) => String(r.occurrence_key)));
-  const account = businessAccount();
 
   for (const lead of leads) {
     const key = `arrival:first_day:${lead.id}:${lead.start_date.slice(0, 10)}`;
@@ -91,20 +128,19 @@ async function runFirstDayTouches(
     });
     if (!go) continue;
 
-    const message = firstDayMessage(lead);
-    const res = await sendWhatsAppMessage(lead.phone!, message, account, { automated: true });
+    const res = await sendTouch(lead.phone!, "first_day", firstDayMessage(lead), lead);
     if (isTemporaryBlock(res.blocked)) continue;
     await db.from("cron_reminders").insert({
       lead_id: lead.id,
       reminder_type: "arrival_first_day",
       occurrence_key: key,
-      payload: { start_date: lead.start_date },
+      payload: { start_date: lead.start_date, via: res.via },
       success: res.success,
       error: res.error ?? null,
     });
     if (res.success) {
       summary.sent++;
-      await db.from("messages").insert({ lead_id: lead.id, role: "recruiter", content: message, sent_by: "מלווה ההגעה" });
+      await db.from("messages").insert({ lead_id: lead.id, role: "recruiter", content: res.sentText, sent_by: "מלווה ההגעה" });
       await db.from("lead_events").insert({
         lead_id: lead.id,
         event_type: "ליווי הגעה",
@@ -160,8 +196,6 @@ export async function runArrivalCompanion(db: SupabaseClient): Promise<Companion
     list.push({ key: String(r.occurrence_key), created_at: String(r.created_at), success: r.success !== false });
     byLead.set(String(r.lead_id), list);
   }
-
-  const account = businessAccount();
 
   for (const lead of leads) {
     const interviewDay = lead.interview_date.slice(0, 10);
@@ -228,8 +262,7 @@ export async function runArrivalCompanion(db: SupabaseClient): Promise<Companion
     });
     if (!touch) continue;
 
-    const message = touchMessage(touch, lead, daysAhead);
-    const res = await sendWhatsAppMessage(lead.phone!, message, account, { automated: true });
+    const res = await sendTouch(lead.phone!, touch, touchMessage(touch, lead, daysAhead), lead);
     // נחסם זמנית (לילה, שבת/חג) — לא רושמים, כדי שהריצה הבאה תנסה שוב
     if (isTemporaryBlock(res.blocked)) continue;
 
@@ -237,13 +270,13 @@ export async function runArrivalCompanion(db: SupabaseClient): Promise<Companion
       lead_id: lead.id,
       reminder_type: `arrival_${touch}`,
       occurrence_key: `arrival:${touch}:${lead.id}:${interviewDay}`,
-      payload: { interview_at: lead.interview_date, days_ahead: daysAhead },
+      payload: { interview_at: lead.interview_date, days_ahead: daysAhead, via: res.via },
       success: res.success,
       error: res.error ?? null,
     });
     if (res.success) {
       summary.sent++;
-      await db.from("messages").insert({ lead_id: lead.id, role: "recruiter", content: message, sent_by: "מלווה ההגעה" });
+      await db.from("messages").insert({ lead_id: lead.id, role: "recruiter", content: res.sentText, sent_by: "מלווה ההגעה" });
       await db.from("lead_events").insert({
         lead_id: lead.id,
         event_type: "ליווי הגעה",

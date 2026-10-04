@@ -85,6 +85,19 @@ describe("appendBridgeMessages — the transcript keeps every real answer", () =
     expect(db.messages).toHaveLength(2);
   });
 
+  it("reports only the messages it actually saved (for the arrival companion)", async () => {
+    const clock = { now: new Date(t(5)) };
+    const db = fakeDb(clock);
+    const payload = [user("החבר שלי התחרט"), bot("מצטערים לשמוע", "wamid.Q9", t(4))];
+    const first: InboundMessage[] = [];
+    await appendBridgeMessages(db as never, "L1", payload, undefined, first);
+    expect(first.map((m) => m.content)).toEqual(["החבר שלי התחרט", "מצטערים לשמוע"]);
+    clock.now = new Date(t(65)); // the same payload again
+    const again: InboundMessage[] = [];
+    await appendBridgeMessages(db as never, "L1", payload, undefined, again);
+    expect(again).toEqual([]);
+  });
+
   it("a request with no ids at all: a quick retry is a duplicate", async () => {
     const clock = { now: new Date(t(0)) };
     const db = fakeDb(clock);
