@@ -15,6 +15,8 @@ interface Message {
   created_at: string;
   /** recruiter email that sent it (manual / from their phone) */
   sent_by?: string | null;
+  /** the number it went out from; null = a shared number (see sentViaBot) */
+  via_instance?: string | null;
   /** מה הספק דיווח: נשלחה / נמסרה / נקראה / נכשלה. null = לא ידוע */
   delivery_status?: "sent" | "delivered" | "read" | "failed" | null;
   delivery_error?: string | null;
@@ -70,6 +72,14 @@ function senderShort(email: string): string {
   return email.split("@")[0];
 }
 
+// מ-16.09 הודעת רכזת בלי מספר יצאה ממספר הבוט: המועמד/ת מדברים עם הבוט והחלון
+// במספר של הרכזת סגור (send-manual). לפני כן — ממספר העסק הישן.
+const BOT_ROUTE_SINCE = "2026-09-16";
+const BOT_NUMBER = "050-700-8171";
+function sentViaBot(m: Message): boolean {
+  return m.role === "recruiter" && !m.via_instance && !m.id.startsWith("temp-") && m.created_at >= BOT_ROUTE_SINCE;
+}
+
 const POLL_INTERVAL = 5000;
 
 export function ChatHistory({
@@ -88,6 +98,8 @@ export function ChatHistory({
   const [inputText, setInputText] = useState("");
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // הודעה שיצאה ממספר הבוט לא תופיע בוואטסאפ של הרכזת — אומרים לה (תמי, 05.10)
+  const [notice, setNotice] = useState<string | null>(null);
   const [sender, setSender] = useState<SenderInfo | null>(null);
   const [canSend, setCanSend] = useState(true);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -259,6 +271,12 @@ export function ChatHistory({
           setMessages((prev) => prev.filter((m) => m.id !== tempMsg.id));
         }
       } else {
+        if (result.via === "bot") {
+          setNotice(
+            `נשלח ממספר הבוט ${BOT_NUMBER} — המועמד/ת מדברים עם הבוט ולא כתבו למספר שלך, ` +
+              "ולכן ההודעה לא תופיע בוואטסאפ שלך. התשובות יגיעו לכאן."
+          );
+        }
         await fetchMessages();
       }
     } catch {
@@ -383,6 +401,14 @@ export function ChatHistory({
                           {senderShort(msg.sent_by)}
                         </span>
                       )}
+                      {sentViaBot(msg) && (
+                        <span
+                          className="text-[9px] opacity-70"
+                          title={`נשלח ממספר הבוט ${BOT_NUMBER} — לכן לא מופיע בוואטסאפ של הרכזת`}
+                        >
+                          · ממספר הבוט
+                        </span>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -404,6 +430,15 @@ export function ChatHistory({
           </div>
         )}
       </div>
+
+      {notice && !error && (
+        <div className="px-3 py-2 text-xs text-sky-800 bg-sky-50 rounded-md mt-2 flex items-start gap-2">
+          <span className="flex-1">{notice}</span>
+          <button type="button" onClick={() => setNotice(null)} className="text-sky-600 hover:text-sky-900" aria-label="סגור">
+            ✕
+          </button>
+        </div>
+      )}
 
       {/* Error message */}
       {error && (
