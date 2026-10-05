@@ -37,6 +37,7 @@ export const CLOSED_STATUSES: string[] = [
   LeadStatus.NO_SHOW,
   LeadStatus.CANCELLED_ARRIVAL,
   LeadStatus.EMPLOYMENT_ENDED,
+  LeadStatus.NEVER_STARTED,
 ];
 
 export function isClosedStatus(status: string | null | undefined): boolean {

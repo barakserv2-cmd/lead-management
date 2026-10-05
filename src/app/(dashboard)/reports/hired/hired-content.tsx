@@ -5,14 +5,18 @@ import { useState, useMemo } from "react";
 import type { Lead } from "@/types/leads";
 import { StatusSelect } from "../../leads/status-select";
 import { LeadStatus, type LeadStatusValue } from "@/lib/stateMachine";
-import { employmentEndReasonLabel } from "@/lib/constants";
+import { employmentEndReasonLabel, neverStartedReasonLabel } from "@/lib/constants";
 
-// בדוח המועסקים מציגים רק את שלושת מצבי ההעסקה
+// בדוח המועסקים מציגים רק את מצבי ההעסקה — כולל מי שהתקבל ולא התחיל
 const HIRED_REPORT_STATUSES: LeadStatusValue[] = [
   LeadStatus.HIRED,
   LeadStatus.STARTED,
   LeadStatus.EMPLOYMENT_ENDED,
+  LeadStatus.NEVER_STARTED,
 ];
+
+// לא מועסקים כעת: סיימו, או לא התחילו בכלל
+const NOT_WORKING = new Set<string>([LeadStatus.EMPLOYMENT_ENDED, LeadStatus.NEVER_STARTED]);
 
 // המעסיק האמיתי: hired_client (נקבע בקבלה), עם fallback להתאמת הסוכן.
 function employerOf(lead: Lead): string | null {
@@ -39,6 +43,7 @@ const STAGE_OPTIONS: { value: string; label: string }[] = [
   { value: LeadStatus.HIRED, label: "התקבל — טרם התחיל" },
   { value: LeadStatus.STARTED, label: "התחיל לעבוד" },
   { value: LeadStatus.EMPLOYMENT_ENDED, label: "סיים העסקה" },
+  { value: LeadStatus.NEVER_STARTED, label: "לא התחיל לעבוד" },
 ];
 
 export function HiredContent({
@@ -119,11 +124,17 @@ export function HiredContent({
             : "סה״כ התקבלו"}
           {(dateFrom || dateTo) && ` · לפי ${DATE_BASIS_LABELS[dateBasis]}`}
         </span>
-        {!stageFilter && filtered.some((l) => l.status === "EMPLOYMENT_ENDED") && (
+        {!stageFilter && filtered.some((l) => NOT_WORKING.has(l.status)) && (
           <span className="text-sm text-cyan-700/80 border-r border-cyan-200 pr-3 mr-1">
-            מועסקים כעת {filtered.filter((l) => l.status !== "EMPLOYMENT_ENDED").length}
+            מועסקים כעת {filtered.filter((l) => !NOT_WORKING.has(l.status)).length}
             {" · "}
-            סיימו העסקה {filtered.filter((l) => l.status === "EMPLOYMENT_ENDED").length}
+            סיימו העסקה {filtered.filter((l) => l.status === LeadStatus.EMPLOYMENT_ENDED).length}
+            {filtered.some((l) => l.status === LeadStatus.NEVER_STARTED) && (
+              <>
+                {" · "}
+                לא התחילו {filtered.filter((l) => l.status === LeadStatus.NEVER_STARTED).length}
+              </>
+            )}
           </span>
         )}
       </div>
@@ -269,7 +280,17 @@ export function HiredContent({
                       : "—"}
                   </td>
                   <td className="px-4 py-3">
-                    {lead.employment_end_date ? (
+                    {lead.status === LeadStatus.NEVER_STARTED ? (
+                      <span
+                        className="text-orange-800 font-medium"
+                        title={lead.never_started_notes ?? undefined}
+                      >
+                        לא התחיל
+                        <span className="block text-xs font-normal text-gray-500">
+                          {neverStartedReasonLabel(lead.never_started_reason)}
+                        </span>
+                      </span>
+                    ) : lead.employment_end_date ? (
                       <span className="text-slate-600 font-medium">
                         {new Date(lead.employment_end_date).toLocaleDateString("he-IL")}
                         {lead.status === LeadStatus.EMPLOYMENT_ENDED && (

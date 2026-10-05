@@ -26,6 +26,7 @@ export const ARRIVED_STATUSES: string[] = [
   LeadStatus.HIRED,
   LeadStatus.STARTED,
   LeadStatus.EMPLOYMENT_ENDED,
+  LeadStatus.NEVER_STARTED,
   LeadStatus.NOT_ACCEPTED,
 ];
 

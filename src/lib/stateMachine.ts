@@ -11,7 +11,10 @@
 //
 //   1. "התחיל לעבוד" only after "התקבל" — the hire dialog is where the
 //      employer/position/start date get recorded.
-//   2. "סיום העסקה" only for someone who was hired.
+//   2. "סיום העסקה" only for someone who was hired; "לא התחיל לעבוד" only
+//      for someone hired who never started (or was closed as "סיום העסקה"
+//      by mistake — מלי, 05.10: a worker who never came isn't an end of
+//      employment), and always with a reason.
 //   3. "לא הגיע" only when an interview existed to miss.
 //   4. "לא התקבל" only after an interview stage.
 //   5. "הגיע לראיון" needs a booked (dated) interview first.
@@ -41,6 +44,7 @@ export const LeadStatus = {
   NOT_SUITABLE: "NOT_SUITABLE",
   INVALID_PHONE: "INVALID_PHONE",
   EMPLOYMENT_ENDED: "EMPLOYMENT_ENDED",
+  NEVER_STARTED: "NEVER_STARTED", // התקבל ולא התחיל לעבוד בפועל
 } as const;
 
 export type LeadStatusValue = (typeof LeadStatus)[keyof typeof LeadStatus];
@@ -68,6 +72,7 @@ export const STATUS_LABELS: Record<LeadStatusValue, string> = {
   [LeadStatus.NOT_SUITABLE]: "לא מתאים",
   [LeadStatus.INVALID_PHONE]: "מספר לא תקין",
   [LeadStatus.EMPLOYMENT_ENDED]: "סיום העסקה",
+  [LeadStatus.NEVER_STARTED]: "לא התחיל לעבוד",
 };
 
 // ── Status Colors ───────────────────────────────────────────
@@ -90,6 +95,7 @@ export const STATUS_COLORS: Record<LeadStatusValue, { bg: string; text: string; 
   [LeadStatus.NOT_SUITABLE]:          { bg: "bg-stone-200",  text: "text-stone-700",  dot: "bg-stone-500" },
   [LeadStatus.INVALID_PHONE]:         { bg: "bg-yellow-100", text: "text-yellow-800", dot: "bg-yellow-500" },
   [LeadStatus.EMPLOYMENT_ENDED]:      { bg: "bg-slate-200",  text: "text-slate-700",  dot: "bg-slate-500" },
+  [LeadStatus.NEVER_STARTED]:         { bg: "bg-orange-200", text: "text-orange-900", dot: "bg-orange-600" },
 };
 
 // ── Status Groups ───────────────────────────────────────────
@@ -125,6 +131,7 @@ export const CLOSED_STATUSES: readonly LeadStatusValue[] = [
   LeadStatus.LOST_CONTACT,
   LeadStatus.NOT_SUITABLE,
   LeadStatus.INVALID_PHONE,
+  LeadStatus.NEVER_STARTED, // hired, never came — not a placement
 ];
 
 // ── Transition Rules ────────────────────────────────────────
@@ -134,7 +141,7 @@ const {
   NEW_LEAD, CONTACTED, SCREENING_IN_PROGRESS, FIT_FOR_INTERVIEW, INTERVIEW_BOOKED,
   ARRIVED, HIRED, STARTED, NO_SHOW, CANCELLED_ARRIVAL, POSTPONED_ARRIVAL,
   NOT_ACCEPTED, REJECTED, LOST_CONTACT,
-  NOT_SUITABLE, INVALID_PHONE, EMPLOYMENT_ENDED,
+  NOT_SUITABLE, INVALID_PHONE, EMPLOYMENT_ENDED, NEVER_STARTED,
 } = LeadStatus;
 
 // Closures a lead can take before any interview existed.
@@ -168,10 +175,13 @@ export const TRANSITION_MAP: Record<LeadStatusValue, readonly LeadStatusValue[]>
   [POSTPONED_ARRIVAL]: [INTERVIEW_BOOKED, ARRIVED, CONTACTED, CANCELLED_ARRIVAL, NO_SHOW, REJECTED, LOST_CONTACT, NOT_SUITABLE],
 
   // Post-hire. ARRIVED / HIRED backwards are one-step undo of a mis-click.
-  [HIRED]: [STARTED, EMPLOYMENT_ENDED, ARRIVED, NOT_ACCEPTED, REJECTED],
+  [HIRED]: [STARTED, NEVER_STARTED, EMPLOYMENT_ENDED, ARRIVED, NOT_ACCEPTED, REJECTED],
   [STARTED]: [EMPLOYMENT_ENDED, HIRED],
-  // עובד שסיים העסקה — אפשר לחזור אליו לגיוס מחדש או לקבל אותו ישירות
-  [EMPLOYMENT_ENDED]: [CONTACTED, HIRED],
+  // עובד שסיים העסקה — אפשר לחזור אליו לגיוס מחדש או לקבל אותו ישירות.
+  // NEVER_STARTED מתקן "סיום העסקה" שנרשם למי שלא עבד יום אחד.
+  [EMPLOYMENT_ENDED]: [CONTACTED, HIRED, NEVER_STARTED],
+  // לא התחיל — חוזר לגיוס, מתקבל מחדש, או שבכל זאת התחיל (באיחור)
+  [NEVER_STARTED]: [CONTACTED, HIRED, STARTED],
 
   // Closed outcomes: reopen into the funnel, re-book, or reclassify.
   [NO_SHOW]: [NEW_LEAD, CONTACTED, INTERVIEW_BOOKED, ARRIVED, REJECTED, LOST_CONTACT, NOT_SUITABLE],

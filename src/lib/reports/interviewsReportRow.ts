@@ -22,13 +22,17 @@ export function leadToReportRow(l: Record<string, unknown>): InterviewReportRow 
   const prefs = (l.preferences as Record<string, unknown> | null) ?? null;
   const matched = typeof prefs?.matched_client === "string" ? (prefs.matched_client as string) : null;
   const arrived: InterviewReportRow["arrived"] =
-    status === LeadStatus.ARRIVED || status === LeadStatus.HIRED || status === LeadStatus.STARTED
+    status === LeadStatus.ARRIVED ||
+    status === LeadStatus.HIRED ||
+    status === LeadStatus.STARTED ||
+    status === LeadStatus.NEVER_STARTED
       ? "הגיע"
       : status === LeadStatus.NO_SHOW
         ? "לא הגיע"
         : "";
   const accepted: InterviewReportRow["accepted"] =
-    status === LeadStatus.HIRED || status === LeadStatus.STARTED
+    // "לא התחיל לעבוד" — בראיון עצמו הוא התקבל
+    status === LeadStatus.HIRED || status === LeadStatus.STARTED || status === LeadStatus.NEVER_STARTED
       ? "התקבל"
       : status === LeadStatus.NOT_ACCEPTED || status === LeadStatus.REJECTED
         ? "לא התקבל"

@@ -10,7 +10,7 @@ import { hasMachineKey } from "@/lib/secrets";
  * גובגט stays quiet. Auth: x-machine-key.
  */
 
-const TERMINAL = ["REJECTED", "LOST_CONTACT", "NOT_SUITABLE", "INVALID_PHONE", "NOT_ACCEPTED", "EMPLOYMENT_ENDED", "NO_SHOW"];
+const TERMINAL = ["REJECTED", "LOST_CONTACT", "NOT_SUITABLE", "INVALID_PHONE", "NOT_ACCEPTED", "EMPLOYMENT_ENDED", "NEVER_STARTED", "NO_SHOW"];
 const GUBGET = "gubget@eilatjobs.com";
 
 export async function GET(req: NextRequest) {

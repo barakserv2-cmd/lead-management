@@ -40,6 +40,7 @@ describe("analyzeRetention — who counts", () => {
       [
         worker("future", "2026-10-05", { status: "HIRED" }),
         left("ns", "2026-09-01", "2026-09-01", "never_started"),
+        worker("ns2", "2026-09-01", { status: "NEVER_STARTED" }),
         worker("nodate", null),
         worker("noend", "2026-08-01", { status: "EMPLOYMENT_ENDED" }),
       ],
@@ -47,7 +48,7 @@ describe("analyzeRetention — who counts", () => {
       TODAY
     );
     expect(r.upcoming).toBe(1);
-    expect(r.neverStarted).toBe(1);
+    expect(r.neverStarted).toBe(2);
     expect(r.undated).toBe(2);
     expect(r.totals.started).toBe(0);
   });
