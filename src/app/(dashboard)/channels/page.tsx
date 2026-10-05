@@ -7,7 +7,8 @@ import { classifyLead } from "@/lib/leadChannel";
 // before deciding where to spend. Median response = lead created → first
 // outbound (assistant=גובגט or recruiter).
 
-const INTERVIEW_PLUS = ["INTERVIEW_BOOKED", "ARRIVED", "HIRED", "STARTED", "NO_SHOW", "NOT_ACCEPTED", "EMPLOYMENT_ENDED"];
+const INTERVIEW_PLUS = ["INTERVIEW_BOOKED", "ARRIVED", "HIRED", "STARTED", "NO_SHOW", "NOT_ACCEPTED", "EMPLOYMENT_ENDED", "NEVER_STARTED"];
+// גיוס = מי שעבד או עומד להתחיל. "לא התחיל לעבוד" עבר ראיון אבל אינו גיוס.
 const HIRED = ["HIRED", "STARTED", "EMPLOYMENT_ENDED"];
 const DAYS = 30;
 

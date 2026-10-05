@@ -41,10 +41,20 @@ describe("recruiter (human) moves", () => {
   });
 
   it("blocks STARTED unless the lead was HIRED first", () => {
-    for (const from of ALL_STATUSES.filter((s) => s !== S.HIRED && s !== S.STARTED)) {
+    // NEVER_STARTED was hired too — a no-start who turns up late after all
+    for (const from of ALL_STATUSES.filter((s) => s !== S.HIRED && s !== S.STARTED && s !== S.NEVER_STARTED)) {
       expect(validateTransition(from, S.STARTED).valid, from).toBe(false);
     }
     expect(validateTransition(S.HIRED, S.STARTED).valid).toBe(true);
+    expect(validateTransition(S.NEVER_STARTED, S.STARTED).valid).toBe(true);
+  });
+
+  it("NEVER_STARTED only for someone hired, or closed as an end of employment by mistake", () => {
+    expect(validateTransition(S.HIRED, S.NEVER_STARTED).valid).toBe(true);
+    expect(validateTransition(S.EMPLOYMENT_ENDED, S.NEVER_STARTED).valid).toBe(true);
+    for (const from of [S.NEW_LEAD, S.CONTACTED, S.INTERVIEW_BOOKED, S.ARRIVED, S.NO_SHOW, S.STARTED]) {
+      expect(validateTransition(from, S.NEVER_STARTED).valid, from).toBe(false);
+    }
   });
 
   it("blocks EMPLOYMENT_ENDED for someone who was never hired", () => {

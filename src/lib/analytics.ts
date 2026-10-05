@@ -97,6 +97,7 @@ export const STAGE_OF_STATUS: Record<string, number> = {
   [LeadStatus.HIRED]: 6,
   [LeadStatus.STARTED]: 6,
   [LeadStatus.EMPLOYMENT_ENDED]: 6,
+  [LeadStatus.NEVER_STARTED]: 6, // התקבל, ולא התחיל — עדיין עבר את שלב הקבלה
 };
 
 const CLOSED = new Set<string>([
@@ -107,6 +108,7 @@ const CLOSED = new Set<string>([
   LeadStatus.LOST_CONTACT,
   LeadStatus.NOT_SUITABLE,
   LeadStatus.INVALID_PHONE,
+  LeadStatus.NEVER_STARTED,
 ]);
 
 // איפה עומד ליד פתוח עכשיו (לפי הסטטוס הנוכחי שלו)

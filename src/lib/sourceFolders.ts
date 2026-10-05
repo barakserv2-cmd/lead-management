@@ -11,6 +11,7 @@ const CLOSED_STATUSES = new Set<string>([
   LeadStatus.REJECTED,
   LeadStatus.LOST_CONTACT,
   LeadStatus.NOT_SUITABLE,
+  LeadStatus.NEVER_STARTED,
 ]);
 
 /**

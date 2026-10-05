@@ -23,6 +23,8 @@ import {
   employmentEndReasonLabel,
   isNoArrivalReason,
   noArrivalReasonLabel,
+  isNeverStartedReason,
+  neverStartedReasonLabel,
 } from "@/lib/constants";
 
 function getSupabase() {
@@ -51,6 +53,10 @@ export interface ChangeStatusInput {
     /** code from NO_ARRIVAL_REASONS — NO_SHOW / CANCELLED_ARRIVAL */
     noArrivalReason?: string;
     noArrivalNotes?: string;
+    /** code from NEVER_STARTED_REASONS — mandatory for NEVER_STARTED */
+    neverStartedReason?: string;
+    /** free text — mandatory when the reason is "other" */
+    neverStartedNotes?: string;
     interviewDate?: string;
     interviewType?: "phone" | "in_person" | "video";
     interviewNotes?: string;
@@ -73,7 +79,7 @@ const GUBGET_EMAIL = "gubget@eilatjobs.com";
 /** סטטוסים שבהם אין יותר מה לעשות עם המועמד — סוגרים גם את האסקלציות בגובגט */
 const LEAD_CLOSED_STATUSES = new Set<string>([
   "REJECTED", "NOT_SUITABLE", "LOST_CONTACT", "NOT_ACCEPTED", "INVALID_PHONE",
-  "EMPLOYMENT_ENDED", "NO_SHOW", "CANCELLED_ARRIVAL", "HIRED", "STARTED",
+  "EMPLOYMENT_ENDED", "NO_SHOW", "CANCELLED_ARRIVAL", "HIRED", "STARTED", "NEVER_STARTED",
 ]);
 /** סיבת הדגל הנוכחי, או null אם אין דגל פתוח. */
 async function currentAttention(
@@ -162,6 +168,18 @@ export async function changeLeadStatus(input: ChangeStatusInput): Promise<Change
     return { success: false, error: validation.error, reason: "invalid" };
   }
 
+  // "לא התחיל לעבוד" — בלי סיבה אין מעקב, ולכן אין דרך לעקוף אותה: לא מטבלה,
+  // לא מפעולה גורפת ולא מה-API (מלי, 05.10).
+  const neverStartedNotes = extra?.neverStartedNotes?.trim().slice(0, 1000) || null;
+  if (newStatus === LeadStatus.NEVER_STARTED) {
+    if (!isNeverStartedReason(extra?.neverStartedReason)) {
+      return { success: false, error: "חובה לבחור למה המועמד/ת לא התחיל/ה לעבוד", reason: "invalid" };
+    }
+    if (extra?.neverStartedReason === "other" && !neverStartedNotes) {
+      return { success: false, error: "בחרת \"אחר\" — חובה לפרט למה לא התחיל/ה לעבוד", reason: "invalid" };
+    }
+  }
+
   // 5. Build update payload
   const subStatus = extra?.subStatus?.trim().slice(0, 100) || null;
   const updateData: Record<string, unknown> = {
@@ -246,6 +264,17 @@ export async function changeLeadStatus(input: ChangeStatusInput): Promise<Change
     }
     const endNotes = extra?.employmentEndNotes?.trim();
     if (endNotes) updateData.employment_end_notes = endNotes;
+  }
+
+  if (newStatus === LeadStatus.NEVER_STARTED) {
+    updateData.never_started_reason = extra?.neverStartedReason;
+    updateData.never_started_notes = neverStartedNotes;
+    // מי שלא עבד לא "סיים העסקה" — סיום שנרשם בטעות נמחק (ההיסטוריה והיומן שומרים אותו)
+    if (currentStatus === LeadStatus.EMPLOYMENT_ENDED) {
+      updateData.employment_end_date = null;
+      updateData.employment_end_reason = null;
+      updateData.employment_end_notes = null;
+    }
   }
 
   // "לא הגיע" / "ביטל הגעה" — הסיבה נשארת על הליד גם כשהוא מתקדם הלאה
@@ -365,6 +394,13 @@ export async function changeLeadStatus(input: ChangeStatusInput): Promise<Change
       event_type: "סיום העסקה",
       event_text:
         `סיבת סיום: ${employmentEndReasonLabel(extra.employmentEndReason)}` + (endNotes ? ` — ${endNotes}` : ""),
+    });
+  }
+  if (newStatus === LeadStatus.NEVER_STARTED && extra?.neverStartedReason) {
+    journalRows.push({
+      event_type: "לא התחיל לעבוד",
+      event_text:
+        `סיבה: ${neverStartedReasonLabel(extra.neverStartedReason)}` + (neverStartedNotes ? ` — ${neverStartedNotes}` : ""),
     });
   }
   if (

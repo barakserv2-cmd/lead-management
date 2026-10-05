@@ -159,7 +159,8 @@ export const EMPLOYMENT_END_REASONS = [
   { code: "employer_ended", label: "המעסיק סיים את ההעסקה", planned: false },
   { code: "housing", label: "בעיה במגורים", planned: false },
   { code: "personal", label: "סיבה אישית / משפחתית", planned: false },
-  { code: "never_started", label: "לא התחיל לעבוד בפועל", planned: false },
+  // "לא התחיל לעבוד בפועל" היה כאן — עכשיו זה סטטוס בפני עצמו (NEVER_STARTED),
+  // כי מי שלא עבד יום אחד לא "סיים העסקה" (מלי, 05.10). אף רשומה לא השתמשה בו.
   { code: "other", label: "אחר", planned: false },
 ] as const;
 
@@ -196,6 +197,36 @@ export function isCandidateSegment(v: unknown): v is CandidateSegment {
 export function candidateSegmentLabel(code: string | null | undefined): string {
   if (!code) return "לא סומן";
   return CANDIDATE_SEGMENTS.find((s) => s.code === code)?.label ?? code;
+}
+
+// ── Never-started reasons ("לא התחיל לעבוד") ────────────────
+// מי שהתקבל ולא הגיע ליום הראשון. הסיבה חובה — זה הבסיס למעקב (מלי, 05.10).
+// הקוד נשמר ב-leads.never_started_reason, הפירוט ב-never_started_notes
+// (חובה כש"אחר").
+
+export const NEVER_STARTED_REASONS = [
+  { code: "changed_mind", label: "התחרט / החליט לא להגיע" },
+  { code: "found_other_job", label: "מצא עבודה אחרת" },
+  { code: "friend_backed_out", label: "החבר שהיה אמור להגיע התחרט" },
+  { code: "housing", label: "בעיה במגורים" },
+  { code: "travel_or_money", label: "נסיעה / כסף" },
+  { code: "conditions", label: "התנאים / השכר לא התאימו" },
+  { code: "employer_cancelled", label: "המעסיק ביטל / המשרה בוטלה" },
+  { code: "army", label: "צבא / גיוס" },
+  { code: "personal", label: "סיבה אישית / משפחתית" },
+  { code: "unreachable", label: "נעלם — לא עונה" },
+  { code: "other", label: "אחר" },
+] as const;
+
+export type NeverStartedReason = (typeof NEVER_STARTED_REASONS)[number]["code"];
+
+export function isNeverStartedReason(v: unknown): v is NeverStartedReason {
+  return NEVER_STARTED_REASONS.some((r) => r.code === v);
+}
+
+export function neverStartedReasonLabel(code: string | null | undefined): string {
+  if (!code) return "לא צוין";
+  return NEVER_STARTED_REASONS.find((r) => r.code === code)?.label ?? code;
 }
 
 // ── No-arrival reasons ("לא הגיע" / "ביטל הגעה") ───────────

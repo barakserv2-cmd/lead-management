@@ -194,6 +194,12 @@ export function analyzeRetention(
   let undated = 0;
 
   for (const l of leads) {
+    // לא עבד יום אחד — לא נכנס לחישוב הוותק. הסטטוס עצמו מ-05.10; לפניו
+    // סומן כ"סיום העסקה" עם סיבה never_started.
+    if (l.status === LeadStatus.NEVER_STARTED) {
+      neverStarted++;
+      continue;
+    }
     const ended = l.status === LeadStatus.EMPLOYMENT_ENDED;
     const working = l.status === LeadStatus.HIRED || l.status === LeadStatus.STARTED;
     if (!ended && !working) continue;
@@ -286,7 +292,7 @@ export async function computeRetention(db: SupabaseClient): Promise<RetentionRep
       .select(
         "id, source, status, start_date, employment_end_date, employment_end_reason, hired_client, candidate_segment, comes_with_friend"
       )
-      .in("status", [LeadStatus.HIRED, LeadStatus.STARTED, LeadStatus.EMPLOYMENT_ENDED])
+      .in("status", [LeadStatus.HIRED, LeadStatus.STARTED, LeadStatus.EMPLOYMENT_ENDED, LeadStatus.NEVER_STARTED])
       .limit(10000),
     db.from("job_transfers").select("lead_id, from_start_date").limit(10000),
   ]);

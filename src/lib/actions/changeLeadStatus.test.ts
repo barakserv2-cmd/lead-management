@@ -184,3 +184,88 @@ describe("ownership", () => {
     expect(patch).toMatchObject({ bot_paused: true, handled_by: "tami@eilatjobs.com" });
   });
 });
+
+describe("לא התחיל לעבוד — the reason is mandatory", () => {
+  const MALI = "barakserv@eilatjobs.com";
+  const patch = () => rpcCalls[0].args.p_patch as Record<string, unknown>;
+  const journal = () =>
+    inserts.filter((i) => i.table === "lead_events").flatMap((i) => i.rows as Record<string, unknown>[]);
+
+  beforeEach(() => {
+    lead.status = "HIRED";
+  });
+
+  it("no reason → refused, nothing written (a table click, a bulk move, the API)", async () => {
+    const res = await changeLeadStatus({ leadId: "L1", newStatus: "NEVER_STARTED", userId: MALI });
+    expect(res).toMatchObject({ success: false, reason: "invalid" });
+    expect(rpcCalls).toEqual([]);
+  });
+
+  it("an unknown reason code is refused too", async () => {
+    const res = await changeLeadStatus({
+      leadId: "L1",
+      newStatus: "NEVER_STARTED",
+      userId: MALI,
+      extra: { neverStartedReason: "whatever" },
+    });
+    expect(res.success).toBe(false);
+  });
+
+  it("\"אחר\" needs the details written out", async () => {
+    const res = await changeLeadStatus({
+      leadId: "L1",
+      newStatus: "NEVER_STARTED",
+      userId: MALI,
+      extra: { neverStartedReason: "other", neverStartedNotes: "   " },
+    });
+    expect(res.success).toBe(false);
+    expect(rpcCalls).toEqual([]);
+  });
+
+  it("with a reason: saved on the lead and in the journal", async () => {
+    const res = await changeLeadStatus({
+      leadId: "L1",
+      newStatus: "NEVER_STARTED",
+      userId: MALI,
+      extra: { neverStartedReason: "found_other_job", neverStartedNotes: " עבר לאילתנים " },
+    });
+    expect(res.success).toBe(true);
+    expect(patch()).toMatchObject({
+      status: "NEVER_STARTED",
+      never_started_reason: "found_other_job",
+      never_started_notes: "עבר לאילתנים",
+    });
+    expect(patch()).not.toHaveProperty("employment_end_date");
+    expect(journal()).toContainEqual(
+      expect.objectContaining({ event_type: "לא התחיל לעבוד", event_text: "סיבה: מצא עבודה אחרת — עבר לאילתנים" })
+    );
+  });
+
+  it("fixing a wrong \"סיום העסקה\": the end date and reason go away", async () => {
+    lead.status = "EMPLOYMENT_ENDED";
+    const res = await changeLeadStatus({
+      leadId: "L1",
+      newStatus: "NEVER_STARTED",
+      userId: MALI,
+      extra: { neverStartedReason: "unreachable" },
+    });
+    expect(res.success).toBe(true);
+    expect(patch()).toMatchObject({
+      never_started_notes: null,
+      employment_end_date: null,
+      employment_end_reason: null,
+      employment_end_notes: null,
+    });
+  });
+
+  it("only from a hire — not from someone who never got the job", async () => {
+    lead.status = "ARRIVED";
+    const res = await changeLeadStatus({
+      leadId: "L1",
+      newStatus: "NEVER_STARTED",
+      userId: MALI,
+      extra: { neverStartedReason: "changed_mind" },
+    });
+    expect(res).toMatchObject({ success: false, reason: "invalid" });
+  });
+});

@@ -20,6 +20,7 @@ import {
   SENT_TO_INTERVIEW,
   FOLLOW_UP,
   noArrivalReasonLabel,
+  neverStartedReasonLabel,
 } from "@/lib/constants";
 
 const SUB_STATUS_DIALOG_CONFIG: Partial<Record<LeadStatusValue, SubStatusPickerConfig>> = {
@@ -41,6 +42,7 @@ import { InterviewScheduleDialog } from "./interview-schedule-dialog";
 import { HiredConfirmDialog } from "./hired-confirm-dialog";
 import { EmploymentEndDialog, type EmploymentEndData } from "./employment-end-dialog";
 import { NoArrivalDialog, type NoArrivalData } from "./no-arrival-dialog";
+import { NeverStartedDialog, type NeverStartedData } from "./never-started-dialog";
 import { SubStatusPickerDialog, type SubStatusPickerConfig } from "./sub-status-picker-dialog";
 import { RejectionReasonDialog } from "./rejection-reason-dialog";
 import { StartWorkDialog } from "./start-work-dialog";
@@ -129,6 +131,7 @@ export function StatusSelect({
   const [showRejectionDialog, setShowRejectionDialog] = useState(false);
   // "לא הגיע" / "ביטל הגעה" — איזה מהשניים נבחר, כשהדיאלוג פתוח
   const [noArrivalTarget, setNoArrivalTarget] = useState<LeadStatusValue | null>(null);
+  const [showNeverStartedDialog, setShowNeverStartedDialog] = useState(false);
   const [showStartWorkDialog, setShowStartWorkDialog] = useState(false);
   const [callbackFor, setCallbackFor] = useState<string | null>(null);
   // "מעקב" מחייב מועד; "לא זמין במיידי" רק מציע אותו
@@ -251,6 +254,12 @@ export function StatusSelect({
     // Intercept NO_SHOW / CANCELLED_ARRIVAL — a structured reason is mandatory
     if (newStatus === LeadStatus.NO_SHOW || newStatus === LeadStatus.CANCELLED_ARRIVAL) {
       setNoArrivalTarget(newStatus);
+      return;
+    }
+
+    // Intercept NEVER_STARTED — a reason is mandatory (the server refuses without one)
+    if (newStatus === LeadStatus.NEVER_STARTED) {
+      setShowNeverStartedDialog(true);
       return;
     }
 
@@ -487,6 +496,31 @@ export function StatusSelect({
     setStatus(target);
     setSubStatus(null);
     setToast({ message: `${STATUS_LABELS[target]} — נשמר`, type: "success" });
+  }
+
+  async function handleNeverStartedConfirm(data: NeverStartedData) {
+    setLoading(true);
+
+    const result = await changeLeadStatus({
+      leadId,
+      newStatus: LeadStatus.NEVER_STARTED,
+      userId: "user",
+      notes: `לא התחיל לעבוד: ${neverStartedReasonLabel(data.neverStartedReason)}`,
+      extra: { neverStartedReason: data.neverStartedReason, neverStartedNotes: data.neverStartedNotes },
+    });
+
+    setLoading(false);
+
+    if (!result.success) {
+      setToast({ message: result.error ?? "שגיאה בעדכון", type: "error" });
+      return;
+    }
+
+    setShowNeverStartedDialog(false);
+    setStatus(LeadStatus.NEVER_STARTED);
+    setSubStatus(null);
+    setToast({ message: "נשמר — לא התחיל לעבוד", type: "success" });
+    router.refresh();
   }
 
   async function handleSubStatusConfirm(chosenSub: string) {
@@ -730,6 +764,15 @@ export function StatusSelect({
               editOnly={status === LeadStatus.EMPLOYMENT_ENDED}
               onConfirm={handleEmploymentEndConfirm}
               onCancel={() => setShowEmploymentEndDialog(false)}
+              loading={loading}
+            />
+          )}
+
+          {showNeverStartedDialog && (
+            <NeverStartedDialog
+              leadName={leadName}
+              onConfirm={handleNeverStartedConfirm}
+              onCancel={() => setShowNeverStartedDialog(false)}
               loading={loading}
             />
           )}

@@ -241,7 +241,7 @@ export async function POST(req: NextRequest) {
   //     for a rejected/paused candidate.
   const CLOSED = new Set([
     "REJECTED", "NOT_SUITABLE", "LOST_CONTACT", "NOT_ACCEPTED",
-    "INVALID_PHONE", "EMPLOYMENT_ENDED", "NO_SHOW", "CANCELLED_ARRIVAL",
+    "INVALID_PHONE", "EMPLOYMENT_ENDED", "NEVER_STARTED", "NO_SHOW", "CANCELLED_ARRIVAL",
   ]);
   const statusNow = statusChanged ? (body.status as string) : (currentStatus ?? "");
 

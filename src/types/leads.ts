@@ -46,6 +46,9 @@ export interface Lead {
   channel?: string | null;
   comes_with_friend?: boolean | null;
   companion_name?: string | null;
+  /** code from NEVER_STARTED_REASONS — set with NEVER_STARTED (00104) */
+  never_started_reason?: string | null;
+  never_started_notes?: string | null;
   /** code from NO_ARRIVAL_REASONS — kept after the lead moves on (00093) */
   no_arrival_reason?: string | null;
   no_arrival_notes?: string | null;

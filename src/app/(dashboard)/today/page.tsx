@@ -69,7 +69,7 @@ const SUMMARY: { label: string; statuses: LeadStatusValue[]; tone: string }[] = 
   { label: "התקבלו", statuses: [LeadStatus.HIRED, LeadStatus.STARTED], tone: "text-emerald-700" },
   {
     label: "לא מתאים / נדחה / לא התקבל",
-    statuses: [LeadStatus.NOT_SUITABLE, LeadStatus.REJECTED, LeadStatus.NOT_ACCEPTED, LeadStatus.LOST_CONTACT, LeadStatus.NO_SHOW, LeadStatus.CANCELLED_ARRIVAL],
+    statuses: [LeadStatus.NOT_SUITABLE, LeadStatus.REJECTED, LeadStatus.NOT_ACCEPTED, LeadStatus.LOST_CONTACT, LeadStatus.NO_SHOW, LeadStatus.CANCELLED_ARRIVAL, LeadStatus.NEVER_STARTED],
     tone: "text-slate-500",
   },
 ];

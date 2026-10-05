@@ -111,6 +111,11 @@ export function EmploymentEndDialog({
               {leadName ? ` — ${leadName}` : ""}
             </h3>
             <p className="text-sm text-gray-500">מתי ולמה העובד סיים לעבוד?</p>
+            {!editOnly && (
+              <p className="text-xs text-orange-700 mt-1">
+                לא עבד אפילו יום? בחרו בסטטוס &quot;לא התחיל לעבוד&quot; במקום.
+              </p>
+            )}
           </div>
         </div>
 
