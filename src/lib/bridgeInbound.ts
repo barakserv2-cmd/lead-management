@@ -8,6 +8,8 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 export const RETRY_WINDOW_MS = 60_000;
 /** שליחה חוזרת נושאת את אותה חותמת זמן; הודעה אמיתית חוזרת — חותמת משלה. */
 const SAME_MOMENT_MS = 1000;
+/** הודעת רכזת שיצאה דרך מספר הבוט חוזרת מגובגט תוך שניות; זה מרווח ביטחון. */
+export const RECRUITER_ECHO_WINDOW_MS = 15 * 60_000;
 
 export interface InboundMessage {
   role: "user" | "assistant";
@@ -31,6 +33,36 @@ export async function isResentPayload(
   const { data } = await db.from("messages").select("provider_msg_id").eq("lead_id", leadId).in("provider_msg_id", ids);
   const known = new Set((data ?? []).map((r) => r.provider_msg_id as string));
   return ids.every((id) => known.has(id));
+}
+
+/**
+ * רכזת ששולחת מהצ'אט למועמד/ת שמדברים עם הבוט — ההודעה יוצאת ממספר הבוט
+ * (send-manual → sendViaMachine) ונשמרת כ-recruiter בלי via_instance ובלי
+ * מזהה. גובגט מדווח עליה אחר כך כהודעת בוט, עם המזהה. זו אותה הודעה:
+ * מחזירים את השורה של הרכזת כדי לחבר אליה את המזהה, ולא נוספת שורת "AI".
+ * 04–05.10: 43 הודעות כאלה הופיעו פעמיים (תמי: "שולח את אותה ההודעה בפעם השנייה").
+ */
+async function findRecruiterEcho(
+  db: SupabaseClient,
+  leadId: string,
+  m: InboundMessage,
+  now?: Date
+): Promise<string | null> {
+  const ref = m.createdAt ? new Date(m.createdAt).getTime() : (now ?? new Date()).getTime();
+  const { data } = await db
+    .from("messages")
+    .select("id")
+    .eq("lead_id", leadId)
+    .eq("role", "recruiter")
+    .eq("content", m.content)
+    .is("via_instance", null)
+    .is("provider_msg_id", null)
+    .gte("created_at", new Date(ref - RECRUITER_ECHO_WINDOW_MS).toISOString())
+    .lte("created_at", new Date(ref + SAME_MOMENT_MS).toISOString())
+    .order("created_at", { ascending: true })
+    .limit(1)
+    .maybeSingle();
+  return data ? (data.id as string) : null;
 }
 
 /**
@@ -60,6 +92,11 @@ export async function findBridgeDuplicate(
       .limit(1)
       .maybeSingle();
     if (byId) return { id: byId.id as string, attachId: false };
+  }
+
+  if (m.role === "assistant") {
+    const echo = await findRecruiterEcho(db, leadId, m, ctx.now);
+    if (echo) return { id: echo, attachId: true };
   }
 
   const same = () =>

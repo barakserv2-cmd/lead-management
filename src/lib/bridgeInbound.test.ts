@@ -30,6 +30,7 @@ function fakeDb(clock: { now: Date }, events: Row[] = []) {
         },
         gte: (c: string, v: string) => (filters.push((r) => String(r[c]) >= v), q),
         lte: (c: string, v: string) => (filters.push((r) => String(r[c]) <= v), q),
+        is: (c: string, v: null) => (filters.push((r) => (r[c] ?? null) === v), q),
         order: (_c: string, o: { ascending: boolean }) => ((desc = !o.ascending), q),
         limit: (n: number) => ({
           then: (res: (v: unknown) => void) => res({ data: hits().slice(0, n), error: null }),
@@ -133,6 +134,63 @@ describe("appendBridgeMessages — the transcript keeps every real answer", () =
     await appendBridgeMessages(db as never, "L1", [{ role: "user", content: "כן", providerMsgId: "wamid.U", createdAt: null }]);
     expect(db.messages[0]).toMatchObject({ provider_msg_id: "wamid.U" });
     expect(db.messages[0]).not.toHaveProperty("delivery_status");
+  });
+});
+
+describe("appendBridgeMessages — a recruiter's message sent through the bot's number", () => {
+  // send-manual saves it as the recruiter's, with no number and no id; גובגט
+  // sends it and reports it back as a bot message, now with an id.
+  const viaBot = (id: string, content: string, at: string) => ({
+    id,
+    lead_id: "L1",
+    role: "recruiter",
+    content,
+    sent_by: "tami@eilatjobs.com",
+    via_instance: null,
+    provider_msg_id: null,
+    created_at: at,
+  });
+
+  it("the echo is the same message: the id goes on Tami's row, no second \"AI\" row", async () => {
+    // תמי, 05.10 12:28 — "היי סמי מה שלומך?" showed twice
+    const db = fakeDb({ now: new Date(t(19)) });
+    db.messages.push(viaBot("r1", "היי סמי מה שלומך?", t(0)));
+    expect(await appendBridgeMessages(db as never, "L1", [bot("היי סמי מה שלומך?", "wamid.S1", t(19))])).toBe(0);
+    expect(db.messages).toHaveLength(1);
+    expect(db.messages[0]).toMatchObject({ id: "r1", role: "recruiter", provider_msg_id: "wamid.S1", delivery_status: "sent" });
+  });
+
+  it("a resend of that echo adds nothing either", async () => {
+    const db = fakeDb({ now: new Date(t(30)) });
+    db.messages.push(viaBot("r1", "בוא נדבר", t(0)));
+    const payload = [bot("בוא נדבר", "wamid.S2", t(19))];
+    await appendBridgeMessages(db as never, "L1", payload);
+    expect(await appendBridgeMessages(db as never, "L1", payload)).toBe(0);
+    expect(db.messages).toHaveLength(1);
+  });
+
+  it("the same words sent twice: each echo finds its own row", async () => {
+    const db = fakeDb({ now: new Date(t(50)) });
+    db.messages.push(viaBot("r1", "תודה", t(0)), viaBot("r2", "תודה", t(30)));
+    await appendBridgeMessages(db as never, "L1", [bot("תודה", "wamid.A", t(5))]);
+    await appendBridgeMessages(db as never, "L1", [bot("תודה", "wamid.B", t(35))]);
+    expect(db.messages.map((m) => [m.id, m.provider_msg_id])).toEqual([
+      ["r1", "wamid.A"],
+      ["r2", "wamid.B"],
+    ]);
+  });
+
+  it("a message Tami sent from her own number is not the bot's — the bot's own line is kept", async () => {
+    const db = fakeDb({ now: new Date(t(20)) });
+    db.messages.push({ ...viaBot("r1", "מעולה!", t(0)), via_instance: "710322717146" });
+    expect(await appendBridgeMessages(db as never, "L1", [bot("מעולה!", "wamid.C", t(10))])).toBe(1);
+  });
+
+  it("long after, the same words from the bot are the bot's own", async () => {
+    const db = fakeDb({ now: new Date(Date.UTC(2026, 9, 1, 11, 0, 0)) });
+    db.messages.push(viaBot("r1", "מעולה!", t(0)));
+    const later = new Date(Date.UTC(2026, 9, 1, 11, 0, 0)).toISOString();
+    expect(await appendBridgeMessages(db as never, "L1", [bot("מעולה!", "wamid.D", later)])).toBe(1);
   });
 });
 
