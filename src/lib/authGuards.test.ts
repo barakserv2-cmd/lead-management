@@ -20,8 +20,8 @@ function walk(dir: string): string[] {
 
 const rel = (f: string) => relative(SRC, f).split("\\").join("/");
 
-/** A route is guarded when it calls one of these (session, admin, cron, bridge, API key). */
-const ROUTE_GUARD = /\b(getAuthedUser|requireAdmin|currentUser|hasCronSecret|hasMachineKey|validateApiKey)\(/;
+/** A route is guarded when it calls one of these (session, admin, cron, bridge, Meta lead key, API key). */
+const ROUTE_GUARD = /\b(getAuthedUser|requireAdmin|currentUser|hasCronSecret|hasMachineKey|hasMetaLeadKey|validateApiKey)\(/;
 
 /** Routes that are public on purpose, each with its own check. */
 const PUBLIC_ROUTES: Record<string, string> = {
