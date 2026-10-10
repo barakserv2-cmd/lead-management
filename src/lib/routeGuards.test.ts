@@ -24,6 +24,7 @@ const GUARDS: { name: string; re: RegExp }[] = [
   { name: "cron secret", re: /CRON_SECRET|hasCronSecret\(/ },
   { name: "machine bridge key", re: /MACHINE_BRIDGE_KEY|x-machine-key|hasMachineKey\(/ },
   { name: "ingest key", re: /MACHINE_INGEST_KEY|x-ingest-key/ },
+  { name: "meta lead key", re: /META_LEAD_INGEST_KEY|x-meta-lead-key|hasMetaLeadKey\(/ },
   { name: "webhook token", re: /WEBHOOK_TOKEN|webhook_token|verifyWebhookToken|X-Hub-Signature|APP_SECRET/ },
 ];
 

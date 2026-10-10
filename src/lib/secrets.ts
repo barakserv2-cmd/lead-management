@@ -32,3 +32,10 @@ export function hasMachineKey(req: Request): boolean {
   const key = req.headers.get("x-machine-key");
   return !!secret && !!key && safeEqual(key, secret);
 }
+
+/** Make → v1 (טפסי לידים של Meta): `x-meta-lead-key` must equal META_LEAD_INGEST_KEY (never passes when unset). */
+export function hasMetaLeadKey(req: Request): boolean {
+  const secret = process.env.META_LEAD_INGEST_KEY;
+  const key = req.headers.get("x-meta-lead-key");
+  return !!secret && !!key && safeEqual(key, secret);
+}
