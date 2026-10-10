@@ -39,6 +39,11 @@ describe("parseMetaLead", () => {
     expect(r.ok && r.lead.answers.weekends).toBe("לא");
   });
 
+  it("turns Meta's underscored answer keys back into text in flat answers too", () => {
+    const r = parseMetaLead({ leadgen_id: "9", phone: "0521112233", answers: { availability: "יותר_מ-3_חודשים" } });
+    expect(r.ok && r.lead.answers.availability).toBe("יותר מ-3 חודשים");
+  });
+
   it("joins first and last name when there is no full name", () => {
     const r = parseMetaLead({
       leadgen_id: "9",

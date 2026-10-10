@@ -120,7 +120,7 @@ export function parseMetaLead(body: unknown): ParseResult {
   const answers: ScreeningAnswers = {};
   for (const k of SCREENING_KEYS) {
     const v = pick(k);
-    if (v) answers[k] = v;
+    if (v) answers[k] = v.replace(/_/g, " ");
   }
 
   return {
