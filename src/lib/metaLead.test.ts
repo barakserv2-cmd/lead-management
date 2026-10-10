@@ -51,6 +51,35 @@ describe("parseMetaLead", () => {
     expect(r.ok && r.lead.name).toBe("דנה כהן");
   });
 
+  it("reads the Hebrew form, whose keys and answers Meta builds from the Hebrew text", () => {
+    // המפתחות כפי ש-Meta החזירה לטופס "פיילוט פנימי אילת עברית" (10.10)
+    const r = parseMetaLead({
+      leadgen_id: "77",
+      field_data: [
+        { name: "שם_מלא", values: ["דנה כהן"] },
+        { name: "מספר_טלפון", values: ["+972521112233"] },
+        { name: "איזה_תפקיד_מעניין_אותך?", values: ["כל_תפקיד"] },
+        { name: "האם_את/ה_בן/בת_18_ומעלה?", values: ["כן"] },
+        { name: "יכול/ה_לעבוד_בסופי_שבוע?", values: ["כן"] },
+        { name: "לכמה_זמן_את/ה_זמין/ה_לעבוד?", values: ["פחות_מחודש"] },
+        { name: "מתי_תוכל/י_להגיע_לאילת?", values: ["השבוע"] },
+        { name: "העבודה_באילת_ונדרשת_הגעה_לשם._מתאים_לך?", values: ["כן"] },
+      ],
+    });
+    if (!r.ok) throw new Error(r.error);
+    expect(r.lead.name).toBe("דנה כהן");
+    expect(r.lead.phone).toBe("0521112233");
+    expect(r.lead.answers).toEqual({
+      role: "כל תפקיד",
+      over_18: "כן",
+      weekends: "כן",
+      availability: "פחות מחודש",
+      arrival: "השבוע",
+      eilat_ok: "כן",
+    });
+    expect(evaluateScreening(r.lead.answers).failed).toEqual(["availability"]);
+  });
+
   it("rejects a lead without an id or a phone", () => {
     expect(parseMetaLead({ phone: "0501234567" }).ok).toBe(false);
     expect(parseMetaLead({ leadgen_id: "1" }).ok).toBe(false);

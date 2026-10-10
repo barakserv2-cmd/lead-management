@@ -48,6 +48,30 @@ function str(v: unknown): string | null {
   return s ? s : null;
 }
 
+/**
+ * בטופס בעברית Meta יוצרת את מפתחות השדות מהטקסט של השאלה
+ * ("האם_את/ה_בן/בת_18_ומעלה?", "מספר_טלפון"), ואת הערכים ממפתחות
+ * התשובות ("פחות_מחודש"). כאן ממפים אותם למפתחות הקבועים.
+ */
+const HEBREW_KEYS: [RegExp, string][] = [
+  [/^שם_מלא$/, "full_name"],
+  [/^שם_פרטי$/, "first_name"],
+  [/^שם_משפחה$/, "last_name"],
+  [/^מספר_טלפון$/, "phone_number"],
+  [/^(אימייל|דוא"ל|כתובת_אימייל)$/, "email"],
+  [/תפקיד/, "role"],
+  [/18/, "over_18"],
+  [/סופי_שבוע/, "weekends"],
+  [/לכמה_זמן/, "availability"],
+  [/להגיע/, "arrival"],
+  [/באילת/, "eilat_ok"],
+];
+
+function canonicalKey(name: string): string {
+  for (const [re, key] of HEBREW_KEYS) if (re.test(name)) return key;
+  return name;
+}
+
 /** field_data של Meta → מפה שם→ערך ראשון. */
 function fieldMap(fd: unknown): Map<string, string> {
   const out = new Map<string, string>();
@@ -55,7 +79,9 @@ function fieldMap(fd: unknown): Map<string, string> {
   for (const f of fd as FieldData) {
     const name = str(f?.name)?.toLowerCase();
     const first = Array.isArray(f?.values) ? str(f.values[0]) : str(f?.values);
-    if (name && first) out.set(name, first);
+    if (!name || !first) continue;
+    const key = canonicalKey(name);
+    if (!out.has(key)) out.set(key, key === "email" ? first : first.replace(/_/g, " "));
   }
   return out;
 }
